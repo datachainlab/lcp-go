@@ -1,0 +1,120 @@
+syntax = "proto3";
+package lcp.service.elc.v1;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+import "ibc/core/client/v1/client.proto";
+
+option go_package = "github.com/datachainlab/lcp/go/relay/elc";
+option (gogoproto.goproto_getters_all) = false;
+
+// Msg defines the ELC Msg service.
+service Msg {
+  // CreateClient defines a rpc handler method for MsgCreateClient.
+  rpc CreateClient(MsgCreateClient) returns (MsgCreateClientResponse);
+
+  // UpdateClient defines a rpc handler method for MsgUpdateClient.
+  rpc UpdateClient(MsgUpdateClient) returns (MsgUpdateClientResponse);
+
+  // VerifyMembership defines a rpc handler method for MsgVerifyMembership
+  rpc VerifyMembership(MsgVerifyMembership) returns (MsgVerifyMembershipResponse);
+
+  // VerifyNonMembership defines a rpc handler method for MsgVerifyNonMembership
+  rpc VerifyNonMembership(MsgVerifyNonMembership) returns (MsgVerifyNonMembershipResponse);
+}
+
+// MsgCreateClient defines a message to create an IBC client
+message MsgCreateClient {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // light client state
+  google.protobuf.Any client_state = 1 [(gogoproto.moretags) = "yaml:\"client_state\""];
+  // consensus state associated with the client that corresponds to a given
+  // height.
+  google.protobuf.Any consensus_state = 2 [(gogoproto.moretags) = "yaml:\"consensus_state\""];
+  // enclave key for signing
+  bytes signer = 3;
+}
+
+// MsgCreateClientResponse defines the Msg/CreateClient response type.
+message MsgCreateClientResponse {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+ 
+  string client_id = 1;
+  bytes commitment = 2;
+  bytes signer = 3;
+  bytes signature = 4;
+}
+
+// MsgUpdateClient defines an sdk.Msg to update a IBC client state using
+// the given header.
+message MsgUpdateClient {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // client unique identifier
+  string client_id = 1 [(gogoproto.moretags) = "yaml:\"client_id\""];
+  // header to update the light client
+  google.protobuf.Any header = 2;
+  // request to include state in a commitment
+  bool include_state = 3;
+  // enclave key for signing
+  bytes signer = 4;
+}
+
+// MsgUpdateClientResponse defines the Msg/UpdateClient response type.
+message MsgUpdateClientResponse {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  bytes commitment = 1;
+  bytes signer = 2;
+  bytes signature = 3;
+}
+
+message MsgVerifyMembership {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string client_id = 1;
+  bytes prefix = 2;
+  string path = 3;
+  bytes value = 4;
+  ibc.core.client.v1.Height proof_height = 5 [(gogoproto.nullable) = false];
+  bytes proof = 6;
+  // enclave key for signing
+  bytes signer = 7;
+}
+
+message MsgVerifyMembershipResponse {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  bytes commitment = 1;
+  bytes signer = 2;
+  bytes signature = 3;
+}
+
+message MsgVerifyNonMembership {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  string client_id = 1;
+  bytes prefix = 2;
+  string path = 3;
+  ibc.core.client.v1.Height proof_height = 4 [(gogoproto.nullable) = false];
+  bytes proof = 5;
+  // enclave key for signing
+  bytes signer = 6;
+}
+
+message MsgVerifyNonMembershipResponse {
+  option (gogoproto.equal)           = false;
+  option (gogoproto.goproto_getters) = false;
+
+  bytes commitment = 1;
+  bytes signer = 2;
+  bytes signature = 3;
+}
