@@ -1,5 +1,9 @@
 LCP_REPO ?= ./lcp
 LCP_PROTO ?= $(LCP_REPO)/proto/definitions
+
+DOCKER        ?= docker
+DOCKER_BUILD  ?= $(DOCKER) build --rm --no-cache --pull
+
 protoVer=0.13.1
 protoImageName=ghcr.io/cosmos/proto-builder:$(protoVer)
 protoImage=docker run --user 0 --rm -v $(CURDIR):/workspace --workdir /workspace $(protoImageName)
@@ -11,6 +15,11 @@ yrly:
 .PHONY: lcp
 lcp:
 	$(MAKE) -C $(LCP_REPO) -B && mv $(LCP_REPO)/bin/* ./bin/
+
+.PHONY: tendermint-images
+tendermint-images:
+	$(DOCKER_BUILD) --build-arg CHAINID=ibc0 --tag tendermint-chain0 -f ./simapp/Dockerfile .
+	$(DOCKER_BUILD) --build-arg CHAINID=ibc1 --tag tendermint-chain1 -f ./simapp/Dockerfile .
 
 .PHONY: e2e-test
 e2e-test: yrly lcp

@@ -1,12 +1,12 @@
 FROM golang:1.20.5-bullseye
 
 COPY . /root/
-WORKDIR /root/go/simapp
+WORKDIR /root/simapp
 
 RUN go build -tags customcert -mod readonly -o /usr/bin/simd ./simd
 RUN apt-get update -y && apt-get install -y jq
 
-WORKDIR /root/go/simapp
+WORKDIR /root/simapp
 
 ARG CHAINID
 ARG CHAINDIR=/root/data
