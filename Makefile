@@ -10,6 +10,10 @@ yrly:
 lcp:
 	$(MAKE) -C ./lcp -B && mv ./lcp/bin/* ./bin/
 
+.PHONY: e2e-test
+e2e-test: yrly lcp
+	./scripts/run_e2e_test.sh
+
 .PHONY: proto-gen proto-update-deps
 proto-gen:
 	@echo "Generating Protobuf files"
