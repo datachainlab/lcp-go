@@ -1,3 +1,5 @@
+LCP_REPO ?= ./lcp
+LCP_PROTO ?= $(LCP_REPO)/proto/definitions
 protoVer=0.13.1
 protoImageName=ghcr.io/cosmos/proto-builder:$(protoVer)
 protoImage=docker run --user 0 --rm -v $(CURDIR):/workspace --workdir /workspace $(protoImageName)
@@ -8,7 +10,7 @@ yrly:
 
 .PHONY: lcp
 lcp:
-	$(MAKE) -C ./lcp -B && mv ./lcp/bin/* ./bin/
+	$(MAKE) -C $(LCP_REPO) -B && mv $(LCP_REPO)/bin/* ./bin/
 
 .PHONY: e2e-test
 e2e-test: yrly lcp
@@ -17,6 +19,14 @@ e2e-test: yrly lcp
 .PHONY: proto-gen proto-update-deps
 proto-gen:
 	@echo "Generating Protobuf files"
+	@rm -rf ./proto/ibc && rm -rf ./proto/lcp
+	@mkdir -p ./proto/ibc/lightclients/lcp/v1 && mkdir -p ./proto/lcp/service/elc/v1
+	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/light-clients\/lcp\/types\";/g"\
+		$(LCP_PROTO)/ibc/lightclients/lcp/v1/lcp.proto > ./proto/ibc/lightclients/lcp/v1/lcp.proto
+	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/relay\/elc\";/g"\
+		$(LCP_PROTO)/lcp/service/elc/v1/query.proto > ./proto/lcp/service/elc/v1/query.proto
+	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/relay\/elc\";/g"\
+		$(LCP_PROTO)/lcp/service/elc/v1/tx.proto > ./proto/lcp/service/elc/v1/tx.proto
 	@$(protoImage) sh ./scripts/protocgen.sh
 
 proto-update-deps:
