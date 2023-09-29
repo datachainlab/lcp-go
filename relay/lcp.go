@@ -350,8 +350,13 @@ func (q LCPQuerier) ChainID() string {
 }
 
 // LatestHeight returns the latest height of the chain
-func (q LCPQuerier) LatestHeight() (ibcexported.Height, error) {
+func (LCPQuerier) LatestHeight() (ibcexported.Height, error) {
 	return clienttypes.ZeroHeight(), nil
+}
+
+// Timestamp returns the timestamp corresponding to the height
+func (LCPQuerier) Timestamp(ibcexported.Height) (time.Time, error) {
+	return time.Time{}, nil
 }
 
 // QueryClientState returns the client state of dst chain
