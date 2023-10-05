@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,13 +14,14 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
+	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/hyperledger-labs/yui-relayer/core"
+	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
+
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx/ias"
-	mapset "github.com/deckarep/golang-set/v2"
-	"github.com/hyperledger-labs/yui-relayer/core"
-	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 )
 
 const lastEnclaveKeyInfoFile = "last_eki"
@@ -46,26 +48,35 @@ func (pr *Prover) loadLastEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyIn
 }
 
 func (pr *Prover) saveLastEnclaveKey(ctx context.Context, eki *enclave.EnclaveKeyInfo) error {
-	path, err := pr.lastEnclaveKeyInfoFilePath()
+	src, err := os.CreateTemp(os.TempDir(), lastEnclaveKeyInfoFile)
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(os.TempDir(), lastEnclaveKeyInfoFile)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
+	defer src.Close()
 
 	bz, err := json.Marshal(eki)
 	if err != nil {
 		return err
 	}
-	if _, err := f.Write(bz); err != nil {
+
+	if err = os.WriteFile(src.Name(), bz, 0600); err != nil {
 		return err
 	}
-	if err := os.Rename(f.Name(), path); err != nil {
+
+	path, err := pr.lastEnclaveKeyInfoFilePath()
+	if err != nil {
 		return err
 	}
+	dst, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	if _, err = io.Copy(dst, src); err != nil {
+		return err
+	}
+
 	return nil
 }
 
