@@ -156,11 +156,12 @@ func (pr *Prover) updateActiveEnclaveKeyIfNeeded(ctx context.Context) (bool, err
 		return false, err
 	}
 	log.Printf("selected available enclave key: %#v", eki)
-	if err := pr.registerEnclaveKey(eki); err != nil {
+	msgID, err := pr.registerEnclaveKey(eki)
+	if err != nil {
 		return false, err
 	}
 	// TODO should we wait for the block that contains a tx to be finalized?
-	log.Printf("enclave key successfully registered: %#v", eki)
+	log.Printf("enclave key successfully registered: msgID=%v eki=%#v", msgID.String(), eki)
 	if err := pr.saveLastEnclaveKey(ctx, eki); err != nil {
 		return false, err
 	}
@@ -274,12 +275,12 @@ func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientR
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) error {
+func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := ias.ParseAndValidateAVR(eki.Report); err != nil {
-		return err
+		return nil, err
 	}
 	message := &lcptypes.RegisterEnclaveKeyMessage{
 		Report:      eki.Report,
@@ -288,16 +289,20 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) error {
 	}
 	signer, err := pr.originChain.GetAddress()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	msg, err := clienttypes.NewMsgUpdateClient(pr.path.ClientID, message, signer.String())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := pr.originChain.SendMsgs([]sdk.Msg{msg}); err != nil {
-		return err
+	ids, err := pr.originChain.SendMsgs([]sdk.Msg{msg})
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if len(ids) != 1 {
+		return nil, fmt.Errorf("unexpected number of msgIDs: %v", ids)
+	}
+	return ids[0], nil
 }
 
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
@@ -368,6 +373,11 @@ func (LCPQuerier) LatestHeight() (ibcexported.Height, error) {
 // Timestamp returns the timestamp corresponding to the height
 func (LCPQuerier) Timestamp(ibcexported.Height) (time.Time, error) {
 	return time.Time{}, nil
+}
+
+// AverageBlockTime returns the average time required for each new block to be committed
+func (LCPQuerier) AverageBlockTime() time.Duration {
+	return 0
 }
 
 // QueryClientState returns the client state of dst chain
