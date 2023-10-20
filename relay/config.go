@@ -44,6 +44,12 @@ func (pc ProverConfig) GetMrenclave() []byte {
 }
 
 func (pc ProverConfig) Validate() error {
+	// origin prover config validation
+	if err := pc.OriginProver.GetCachedValue().(core.ProverConfig).Validate(); err != nil {
+		return fmt.Errorf("failed to validate the origin prover's config: %v", err)
+	}
+
+	// lcp prover config validation
 	mrenclave, err := decodeMrenclaveHex(pc.Mrenclave)
 	if err != nil {
 		return err
@@ -54,6 +60,7 @@ func (pc ProverConfig) Validate() error {
 	if pc.KeyExpiration == 0 {
 		return fmt.Errorf("KeyExpiration must be greater than 0")
 	}
+
 	return nil
 }
 
