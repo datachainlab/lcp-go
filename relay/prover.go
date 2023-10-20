@@ -192,6 +192,10 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.ChainInfoICS02Querier, lat
 	return updates, nil
 }
 
+func (pr *Prover) CheckRefreshRequired(counterparty core.ChainInfoICS02Querier) (bool, error) {
+	return pr.originProver.CheckRefreshRequired(counterparty)
+}
+
 func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) ([]byte, clienttypes.Height, error) {
 	proof, proofHeight, err := pr.originProver.ProveState(ctx, path, value)
 	if err != nil {

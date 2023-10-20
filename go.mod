@@ -2,6 +2,8 @@ module github.com/datachainlab/lcp-go
 
 go 1.20
 
+replace github.com/hyperledger-labs/yui-relayer => github.com/siburu/yui-relayer v0.0.0-20231020034738-c710b24558dd
+
 require (
 	github.com/cosmos/cosmos-sdk v0.47.3
 	github.com/cosmos/gogoproto v1.4.10
