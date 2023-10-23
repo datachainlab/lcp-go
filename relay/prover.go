@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -29,7 +30,13 @@ type Prover struct {
 	path     *core.PathEnd
 
 	lcpServiceClient LCPServiceClient
+
+	// state
+	// registered key info for requesting lcp to generate proof.
 	activeEnclaveKey *enclave.EnclaveKeyInfo
+	// if not nil, the key is finalized.
+	// if nil, the key is not finalized yet.
+	unfinalizedMsgID core.MsgID
 }
 
 var (
@@ -66,6 +73,9 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 		return err
 	}
 	if err := pr.originProver.Init(homePath, timeout, codec, debug); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(pr.dbPath(), os.ModePerm); err != nil {
 		return err
 	}
 	pr.homePath = homePath
@@ -153,7 +163,7 @@ func (pr *Prover) GetLatestFinalizedHeader() (latestFinalizedHeader core.Header,
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skips the update-client
 func (pr *Prover) SetupHeadersForUpdate(dstChain core.ChainInfoICS02Querier, latestFinalizedHeader core.Header) ([]core.Header, error) {
-	if err := pr.ensureAvailableEnclaveKeyExists(context.TODO()); err != nil {
+	if err := pr.UpdateEKIfNeeded(context.TODO()); err != nil {
 		return nil, err
 	}
 
