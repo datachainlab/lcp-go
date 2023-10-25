@@ -80,8 +80,11 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time,
 	attestationTime := time.Unix(int64(eki.AttestationTime), 0)
 
 	// TODO consider appropriate buffer time
+	updateTime := attestationTime.Add(time.Duration(pr.config.KeyExpiration) * time.Second / 2)
+	log.Printf("checkEKIUpdateNeeded: enclave_key=%x now=%v attestation_time=%v expiration=%v update_time=%v", eki.EnclaveKeyAddress, timestamp.Unix(), attestationTime.Unix(), pr.config.KeyExpiration, updateTime.Unix())
+
 	// For now, a half of expiration is used as a buffer time
-	if timestamp.After(attestationTime.Add(time.Duration(pr.config.KeyExpiration) * time.Second / 2)) {
+	if timestamp.After(updateTime) {
 		log.Printf("checkEKIUpdateNeeded: enclave key '%x' is expired", eki.EnclaveKeyAddress)
 		return true
 	}
@@ -222,6 +225,10 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 		avr, err := ias.ParseAndValidateAVR(eki.Report)
 		if err != nil {
 			return nil, err
+		}
+		if pr.checkEKIUpdateNeeded(ctx, time.Now(), eki) {
+			log.Printf("key '%x' is not allowed to use because of expiration", eki.EnclaveKeyAddress)
+			continue
 		}
 		if !pr.validateISVEnclaveQuoteStatus(avr.ISVEnclaveQuoteStatus) {
 			log.Printf("key '%x' is not allowed to use because of ISVEnclaveQuoteStatus: %v", eki.EnclaveKeyAddress, avr.ISVEnclaveQuoteStatus)
