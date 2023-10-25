@@ -38,15 +38,18 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target *core.ProvableChain
+				target   *core.ProvableChain
+				verifier *core.ProvableChain
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				verifier = c[dst]
 			} else {
 				target = c[dst]
+				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.UpdateEKIfNeeded(context.TODO())
+			return prover.UpdateEKIfNeeded(context.TODO(), verifier)
 		},
 	}
 	return srcFlag(cmd)
