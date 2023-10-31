@@ -2,13 +2,9 @@ package relay
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
-	"os"
-	"path/filepath"
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -24,149 +20,193 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 )
 
-const lastEnclaveKeyInfoFile = "last_eki"
-
-var ErrLastEnclaveKeyInfoNotFound = errors.New("last enclave key info not found")
-
-func (pr *Prover) loadLastEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyInfo, error) {
-	path, err := pr.lastEnclaveKeyInfoFilePath()
+// UpdateEKIIfNeeded checks if the enclave key needs to be updated
+func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAwareChain) error {
+	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, verifier)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	bz, err := os.ReadFile(path)
+	log.Printf("loadEKIAndCheckUpdateNeeded: updateNeeded=%v", updateNeeded)
+	if !updateNeeded {
+		return nil
+	}
+
+	// if updateNeeded is true,
+	// query new key and register key and set it to memory and save it to file
+
+	pr.activeEnclaveKey, pr.unfinalizedMsgID = nil, nil
+
+	log.Println("need to get a new enclave key")
+
+	eki, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%v not found: %w", path, ErrLastEnclaveKeyInfoNotFound)
+		return err
+	}
+	log.Printf("selected available enclave key: %#v", eki)
+
+	msgID, err := pr.registerEnclaveKey(verifier, eki)
+	if err != nil {
+		return err
+	}
+	finalized, success, err := checkMsgStatus(verifier, msgID)
+	if err != nil {
+		return err
+	} else if !success {
+		return fmt.Errorf("msg(id=%v) execution failed", msgID)
+	}
+
+	if finalized {
+		// this path is for chans have instant finality
+		// if the msg is finalized, save the enclave key info as finalized
+		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, eki); err != nil {
+			return err
 		}
-		return nil, err
-	}
-	var eki enclave.EnclaveKeyInfo
-	if err := json.Unmarshal(bz, &eki); err != nil {
-		return nil, err
-	}
-	return &eki, nil
-}
-
-func (pr *Prover) saveLastEnclaveKey(ctx context.Context, eki *enclave.EnclaveKeyInfo) error {
-	src, err := os.CreateTemp(os.TempDir(), lastEnclaveKeyInfoFile)
-	if err != nil {
-		return err
-	}
-	defer src.Close()
-
-	bz, err := json.Marshal(eki)
-	if err != nil {
-		return err
-	}
-
-	if err = os.WriteFile(src.Name(), bz, 0600); err != nil {
-		return err
-	}
-
-	path, err := pr.lastEnclaveKeyInfoFilePath()
-	if err != nil {
-		return err
-	}
-	dst, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer dst.Close()
-
-	if _, err = io.Copy(dst, src); err != nil {
-		return err
+		pr.activeEnclaveKey = eki
+	} else {
+		// if the msg is not finalized, save the enclave key info as unfinalized
+		if err := pr.saveUnfinalizedEnclaveKeyInfo(ctx, eki, msgID); err != nil {
+			return err
+		}
+		pr.activeEnclaveKey = eki
+		pr.unfinalizedMsgID = msgID
 	}
 
 	return nil
 }
 
-func (pr *Prover) lastEnclaveKeyInfoFilePath() (string, error) {
-	path := filepath.Join(pr.homePath, "lcp", pr.originChain.ChainID())
-	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		return "", err
-	}
-	return filepath.Join(path, lastEnclaveKeyInfoFile), nil
-}
-
-// checkUpdateNeeded checks if the enclave key needs to be updated
+// checkEKIUpdateNeeded checks if the enclave key needs to be updated
 // if the enclave key is missing or expired, it returns true
-func (pr *Prover) checkUpdateNeeded(ctx context.Context, timestamp time.Time, eki *enclave.EnclaveKeyInfo) bool {
+func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time, eki *enclave.EnclaveKeyInfo) bool {
 	attestationTime := time.Unix(int64(eki.AttestationTime), 0)
 
 	// TODO consider appropriate buffer time
+	updateTime := attestationTime.Add(time.Duration(pr.config.KeyExpiration) * time.Second / 2)
+	log.Printf("checkEKIUpdateNeeded: enclave_key=%x now=%v attestation_time=%v expiration=%v update_time=%v", eki.EnclaveKeyAddress, timestamp.Unix(), attestationTime.Unix(), pr.config.KeyExpiration, updateTime.Unix())
+
 	// For now, a half of expiration is used as a buffer time
-	if timestamp.After(attestationTime.Add(time.Duration(pr.config.KeyExpiration) * time.Second / 2)) {
+	if timestamp.After(updateTime) {
+		log.Printf("checkEKIUpdateNeeded: enclave key '%x' is expired", eki.EnclaveKeyAddress)
 		return true
 	}
 	// check if the enclave key is still available in the LCP service
 	_, err := pr.lcpServiceClient.EnclaveKey(ctx, &enclave.QueryEnclaveKeyRequest{EnclaveKeyAddress: eki.EnclaveKeyAddress})
 	if err != nil {
-		log.Printf("checkUpdateNeeded: enclave key '%x' not found: error=%v", eki.EnclaveKeyAddress, err)
+		log.Printf("checkEKIUpdateNeeded: enclave key '%x' not found: error=%v", eki.EnclaveKeyAddress, err)
 		return true
 	}
 	return false
 }
 
-// ensureAvailableEnclaveKeyExists ensures that the active enclave key exists
-// otherwise it tries to get a new enclave key
-func (pr *Prover) ensureAvailableEnclaveKeyExists(ctx context.Context) error {
-	updated, err := pr.updateActiveEnclaveKeyIfNeeded(ctx)
+// isFinalizedMsg checks if the given msg is finalized in the origin chain
+// and returns (finalized, success, error)
+// finalized: true if the msg is finalized
+// success: true if the msg is successfully executed in the origin chain
+// error: non-nil if the msg may not exist in the origin chain
+func checkMsgStatus(verifier core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
+	lfHeader, err := verifier.GetLatestFinalizedHeader()
 	if err != nil {
-		return err
+		return false, false, err
 	}
-	log.Printf("updateActiveEnclaveKeyIfNeeded: updated=%v", updated)
-	return nil
+	msgRes, err := verifier.GetMsgResult(msgID)
+	if err != nil {
+		return false, false, err
+	} else if ok, failureReason := msgRes.Status(); !ok {
+		log.Printf("msg(%s) execution failed: %v", msgID.String(), failureReason)
+		return false, false, nil
+	}
+	return msgRes.BlockHeight().LTE(lfHeader.GetHeight()), true, nil
 }
 
-// updateActiveEnclaveKeyIfNeeded updates a key if key is missing or expired
-func (pr *Prover) updateActiveEnclaveKeyIfNeeded(ctx context.Context) (bool, error) {
+// if returns true, query new key and register key and set it to memory
+func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core.FinalityAwareChain) (bool, error) {
 	if err := pr.initServiceClient(); err != nil {
 		return false, err
 	}
 
 	now := time.Now()
 
-	// 1. check if the active enclave key is missing or expired
-
+	// no active enclave key in memory
 	if pr.activeEnclaveKey == nil {
-		// load last key if exists
-		lastEnclaveKey, err := pr.loadLastEnclaveKey(ctx)
-		if err == nil {
-			if !pr.checkUpdateNeeded(ctx, now, lastEnclaveKey) {
-				pr.activeEnclaveKey = lastEnclaveKey
-				return false, nil
-			} else {
-				log.Printf("last enclave key '0x%x' is found, but needs to be updated", lastEnclaveKey.EnclaveKeyAddress)
+		// 1: load the last unfinalized enclave key if exists
+		// 2: load the last finalized enclave key if exists
+		// 3: select a new enclave key from the LCP service (i.e. return true)
+
+		log.Println("no active enclave key in memory")
+
+		if eki, msgID, err := pr.loadLastUnfinalizedEnclaveKey(ctx); err == nil {
+			log.Println("load last unfinalized enclave key into memory")
+			pr.activeEnclaveKey = eki
+			pr.unfinalizedMsgID = msgID
+		} else if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
+			log.Println("no unfinalized enclave key info found")
+			eki, err := pr.loadLastFinalizedEnclaveKey(ctx)
+			if err != nil {
+				if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
+					log.Println("no enclave key info found")
+					return true, nil
+				}
+				return false, err
 			}
-		} else if errors.Is(err, ErrLastEnclaveKeyInfoNotFound) {
-			log.Printf("last enclave key not found: error=%v", err)
+			log.Println("load last finalized enclave key into memory")
+			pr.activeEnclaveKey = eki
+			pr.unfinalizedMsgID = nil
 		} else {
 			return false, err
 		}
-	} else if !pr.checkUpdateNeeded(ctx, now, pr.activeEnclaveKey) {
+	}
+
+	// finalized enclave key
+	if pr.unfinalizedMsgID == nil {
+		log.Println("active enclave key is finalized")
+		// check if the enclave key is still available in the LCP service and not expired
+		return pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey), nil
+	}
+
+	// unfinalized enclave key
+
+	log.Println("active enclave key is unfinalized")
+
+	if _, err := verifier.GetMsgResult(pr.unfinalizedMsgID); err != nil {
+		// err means that the msg is not included in the latest block
+		log.Printf("msg(%s) is not included in the latest block: error=%v", pr.unfinalizedMsgID.String(), err)
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	finalized, success, err := checkMsgStatus(verifier, pr.unfinalizedMsgID)
+	log.Printf("check unfinalized msg(%s) status: finalized=%v success=%v error=%v", pr.unfinalizedMsgID.String(), finalized, success, err)
+	if err != nil {
+		return false, err
+	} else if !success {
+		// tx is failed, so remove the unfinalized enclave key info
+		log.Printf("msg(%s) execution failed", pr.unfinalizedMsgID.String())
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+			return false, err
+		}
+		return true, nil
+	} else if finalized {
+		// tx is successfully executed and finalized
+		log.Printf("msg(%s) is finalized", pr.unfinalizedMsgID.String())
+		if pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey) {
+			return true, nil
+		}
+		log.Printf("save enclave key info as finalized: enclave key address=%x", pr.activeEnclaveKey.EnclaveKeyAddress)
+		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, pr.activeEnclaveKey); err != nil {
+			return false, err
+		}
+		log.Printf("remove old unfinalized enclave key info: enclave key address=%x", pr.activeEnclaveKey.EnclaveKeyAddress)
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+			return false, err
+		}
+		pr.unfinalizedMsgID = nil
 		return false, nil
+	} else {
+		// tx is successfully executed but not finalized yet
+		log.Printf("msg(%s) is not finalized yet", pr.unfinalizedMsgID.String())
+		return pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey), nil
 	}
-
-	// 2. query the active enclave key from the LCP service
-
-	log.Println("need to get a new enclave key")
-
-	eki, err := pr.selectNewEnclaveKey(ctx)
-	if err != nil {
-		return false, err
-	}
-	log.Printf("selected available enclave key: %#v", eki)
-	msgID, err := pr.registerEnclaveKey(eki)
-	if err != nil {
-		return false, err
-	}
-	// TODO should we wait for the block that contains a tx to be finalized?
-	log.Printf("enclave key successfully registered: msgID=%v eki=%#v", msgID.String(), eki)
-	if err := pr.saveLastEnclaveKey(ctx, eki); err != nil {
-		return false, err
-	}
-	pr.activeEnclaveKey = eki
-	return true, nil
 }
 
 // selectNewEnclaveKey selects a new enclave key from the LCP service
@@ -185,6 +225,10 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 		avr, err := ias.ParseAndValidateAVR(eki.Report)
 		if err != nil {
 			return nil, err
+		}
+		if pr.checkEKIUpdateNeeded(ctx, time.Now(), eki) {
+			log.Printf("key '%x' is not allowed to use because of expiration", eki.EnclaveKeyAddress)
+			continue
 		}
 		if !pr.validateISVEnclaveQuoteStatus(avr.ISVEnclaveQuoteStatus) {
 			log.Printf("key '%x' is not allowed to use because of ISVEnclaveQuoteStatus: %v", eki.EnclaveKeyAddress, avr.ISVEnclaveQuoteStatus)
@@ -275,7 +319,7 @@ func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientR
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, err
 	}
@@ -287,7 +331,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 		Signature:   eki.Signature,
 		SigningCert: eki.SigningCert,
 	}
-	signer, err := pr.originChain.GetAddress()
+	signer, err := verifier.GetAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +339,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 	if err != nil {
 		return nil, err
 	}
-	ids, err := pr.originChain.SendMsgs([]sdk.Msg{msg})
+	ids, err := verifier.SendMsgs([]sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +351,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	srcProver := src.Prover.(*Prover)
-	if err := srcProver.ensureAvailableEnclaveKeyExists(context.TODO()); err != nil {
+	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
 		return err
 	}
 
@@ -350,9 +394,10 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 type LCPQuerier struct {
 	serviceClient LCPServiceClient
 	clientID      string
+	core.FinalityAwareChain
 }
 
-var _ core.ChainInfoICS02Querier = (*LCPQuerier)(nil)
+var _ core.FinalityAwareChain = (*LCPQuerier)(nil)
 
 func NewLCPQuerier(serviceClient LCPServiceClient, clientID string) LCPQuerier {
 	return LCPQuerier{

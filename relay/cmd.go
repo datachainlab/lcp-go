@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"log"
 
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -39,24 +38,18 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target *core.ProvableChain
+				target   *core.ProvableChain
+				verifier *core.ProvableChain
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				verifier = c[dst]
 			} else {
 				target = c[dst]
+				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			updated, err := prover.updateActiveEnclaveKeyIfNeeded(context.TODO())
-			if err != nil {
-				return err
-			}
-			if updated {
-				log.Println("Active enclave key is updated")
-			} else {
-				log.Println("No need to update the active enclave key")
-			}
-			return nil
+			return prover.UpdateEKIfNeeded(context.TODO(), verifier)
 		},
 	}
 	return srcFlag(cmd)
