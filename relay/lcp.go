@@ -21,8 +21,8 @@ import (
 )
 
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
-func (pr *Prover) UpdateEKIfNeeded(ctx context.Context) error {
-	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx)
+func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAwareChain) error {
+	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, verifier)
 	if err != nil {
 		return err
 	}
@@ -44,11 +44,11 @@ func (pr *Prover) UpdateEKIfNeeded(ctx context.Context) error {
 	}
 	log.Printf("selected available enclave key: %#v", eki)
 
-	msgID, err := pr.registerEnclaveKey(eki)
+	msgID, err := pr.registerEnclaveKey(verifier, eki)
 	if err != nil {
 		return err
 	}
-	finalized, success, err := pr.checkMsgStatus(msgID)
+	finalized, success, err := checkMsgStatus(verifier, msgID)
 	if err != nil {
 		return err
 	} else if !success {
@@ -102,12 +102,12 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time,
 // finalized: true if the msg is finalized
 // success: true if the msg is successfully executed in the origin chain
 // error: non-nil if the msg may not exist in the origin chain
-func (pr *Prover) checkMsgStatus(msgID core.MsgID) (bool, bool, error) {
-	lfHeader, err := pr.originProver.GetLatestFinalizedHeader()
+func checkMsgStatus(verifier core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
+	lfHeader, err := verifier.GetLatestFinalizedHeader()
 	if err != nil {
 		return false, false, err
 	}
-	msgRes, err := pr.originChain.GetMsgResult(msgID)
+	msgRes, err := verifier.GetMsgResult(msgID)
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
@@ -118,7 +118,7 @@ func (pr *Prover) checkMsgStatus(msgID core.MsgID) (bool, bool, error) {
 }
 
 // if returns true, query new key and register key and set it to memory
-func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context) (bool, error) {
+func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core.FinalityAwareChain) (bool, error) {
 	if err := pr.initServiceClient(); err != nil {
 		return false, err
 	}
@@ -166,7 +166,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context) (bool, error)
 
 	log.Println("active enclave key is unfinalized")
 
-	if _, err := pr.originChain.GetMsgResult(pr.unfinalizedMsgID); err != nil {
+	if _, err := verifier.GetMsgResult(pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		log.Printf("msg(%s) is not included in the latest block: error=%v", pr.unfinalizedMsgID.String(), err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
@@ -175,7 +175,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context) (bool, error)
 		return true, nil
 	}
 
-	finalized, success, err := pr.checkMsgStatus(pr.unfinalizedMsgID)
+	finalized, success, err := checkMsgStatus(verifier, pr.unfinalizedMsgID)
 	log.Printf("check unfinalized msg(%s) status: finalized=%v success=%v error=%v", pr.unfinalizedMsgID.String(), finalized, success, err)
 	if err != nil {
 		return false, err
@@ -319,7 +319,7 @@ func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientR
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 		Signature:   eki.Signature,
 		SigningCert: eki.SigningCert,
 	}
-	signer, err := pr.originChain.GetAddress()
+	signer, err := verifier.GetAddress()
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +339,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 	if err != nil {
 		return nil, err
 	}
-	ids, err := pr.originChain.SendMsgs([]sdk.Msg{msg})
+	ids, err := verifier.SendMsgs([]sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +351,7 @@ func (pr *Prover) registerEnclaveKey(eki *enclave.EnclaveKeyInfo) (core.MsgID, e
 
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	srcProver := src.Prover.(*Prover)
-	if err := srcProver.UpdateEKIfNeeded(context.TODO()); err != nil {
+	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
 		return err
 	}
 
@@ -394,9 +394,10 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 type LCPQuerier struct {
 	serviceClient LCPServiceClient
 	clientID      string
+	core.FinalityAwareChain
 }
 
-var _ core.ChainInfoICS02Querier = (*LCPQuerier)(nil)
+var _ core.FinalityAwareChain = (*LCPQuerier)(nil)
 
 func NewLCPQuerier(serviceClient LCPServiceClient, clientID string) LCPQuerier {
 	return LCPQuerier{

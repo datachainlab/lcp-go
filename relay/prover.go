@@ -162,8 +162,8 @@ func (pr *Prover) GetLatestFinalizedHeader() (latestFinalizedHeader core.Header,
 // SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterpaty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skips the update-client
-func (pr *Prover) SetupHeadersForUpdate(dstChain core.ChainInfoICS02Querier, latestFinalizedHeader core.Header) ([]core.Header, error) {
-	if err := pr.UpdateEKIfNeeded(context.TODO()); err != nil {
+func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]core.Header, error) {
+	if err := pr.UpdateEKIfNeeded(context.TODO(), dstChain); err != nil {
 		return nil, err
 	}
 
