@@ -22,6 +22,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	cmd.AddCommand(
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
+		restoreELCStateCmd(ctx),
 	)
 
 	return cmd

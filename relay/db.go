@@ -98,7 +98,26 @@ func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(ctx context.Context, eki *enclav
 	return os.WriteFile(pr.lastEnclaveKeyInfoFilePath(false), bz, 0600)
 }
 
+func (pr *Prover) removeFinalizedEnclaveKeyInfo(ctx context.Context) error {
+	path := pr.lastEnclaveKeyInfoFilePath(true)
+	log.Printf("remove finalized enclave key info: %v", path)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Remove(path)
+}
+
 func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(ctx context.Context) error {
-	log.Println("remove unfinalized enclave key info")
-	return os.Remove(pr.lastEnclaveKeyInfoFilePath(false))
+	path := pr.lastEnclaveKeyInfoFilePath(false)
+	log.Printf("remove unfinalized enclave key info: %v", path)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.Remove(path)
 }
