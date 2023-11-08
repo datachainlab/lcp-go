@@ -98,8 +98,11 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 	if err != nil {
 		return err
 	}
-	if cs.Contains(store, addr) {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' already exists", addr.String())
+	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
+	if e, found := cs.GetEnclaveKeyExpiredAt(store, addr); found {
+		if !e.Equal(expiredAt) {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "enclave key '%v' already exists: expected=%v actual=%v", addr, e, expiredAt)
+		}
 	}
 	return nil
 }
@@ -143,8 +146,27 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec,
 	if err != nil {
 		panic(err)
 	}
-	cs.AddEnclaveKey(clientStore, addr, avr.GetTimestamp().Add(cs.getKeyExpiration()))
+	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
+	if cs.Contains(clientStore, addr) {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				EventTypeRegisteredEnclaveKey,
+				sdk.NewAttribute(AttributeKeyEnclaveKey, addr.Hex()),
+				sdk.NewAttribute(AttributeExpiredAt, expiredAt.String()),
+			),
+		)
+		return nil
+	}
+	cs.AddEnclaveKey(clientStore, addr, expiredAt)
 	return nil
+}
+
+func (cs ClientState) GetEnclaveKeyExpiredAt(clientStore sdk.KVStore, key common.Address) (time.Time, bool) {
+	if !cs.Contains(clientStore, key) {
+		return time.Time{}, false
+	}
+	expiredAt := sdk.BigEndianToUint64(clientStore.Get(enclaveKeyPath(key)))
+	return time.Unix(int64(expiredAt), 0), true
 }
 
 func (cs ClientState) Contains(clientStore sdk.KVStore, key common.Address) bool {
