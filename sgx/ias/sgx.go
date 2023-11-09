@@ -13,12 +13,14 @@ type AttestationVerificationReport struct {
 	ias.AttestationVerificationReport
 }
 
+// GetTimestamp returns the timestamp of attestation.
+// The timestamp is truncated to seconds.
 func (avr AttestationVerificationReport) GetTimestamp() time.Time {
 	tm, err := time.Parse(ias.TimestampFormat, avr.Timestamp)
 	if err != nil {
 		panic(err)
 	}
-	return tm
+	return tm.Truncate(time.Second)
 }
 
 func VerifyReport(report string, signature []byte, signingCertDer []byte, currentTime time.Time) error {
