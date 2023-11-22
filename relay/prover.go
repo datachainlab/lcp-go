@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
@@ -99,32 +98,42 @@ func (pr *Prover) GetChainID() string {
 	return pr.originChain.ChainID()
 }
 
-// CreateMsgCreateClient creates a CreateClientMsg to this chain
-func (pr *Prover) CreateMsgCreateClient(clientID string, dstHeader core.Header, signer sdk.AccAddress) (*clienttypes.MsgCreateClient, error) {
+// CreateInitialLightClientState returns a pair of ClientState and ConsensusState based on the state of the self chain at `height`.
+// These states will be submitted to the counterparty chain as MsgCreateClient.
+// If `height` is nil, the latest finalized height is selected automatically.
+func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
 	if err := pr.initServiceClient(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
 	eki, err := pr.selectNewEnclaveKey(context.TODO())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	msg, err := pr.originProver.CreateMsgCreateClient(clientID, dstHeader, signer)
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(height)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	anyOriginClientState, err := clienttypes.PackClientState(originClientState)
+	if err != nil {
+		return nil, nil, err
+	}
+	anyOriginConsensusState, err := clienttypes.PackConsensusState(originConsensusState)
+	if err != nil {
+		return nil, nil, err
 	}
 	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
-		ClientState:    msg.ClientState,
-		ConsensusState: msg.ConsensusState,
+		ClientState:    anyOriginClientState,
+		ConsensusState: anyOriginConsensusState,
 		Signer:         eki.EnclaveKeyAddress,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// TODO relayer should persist res.ClientId
 	if pr.config.ElcClientId != res.ClientId {
-		return nil, fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
+		return nil, nil, fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
 	}
 
 	clientState := &lcptypes.ClientState{
@@ -135,27 +144,13 @@ func (pr *Prover) CreateMsgCreateClient(clientID string, dstHeader core.Header, 
 		AllowedAdvisoryIds:   pr.config.AllowedAdvisoryIds,
 	}
 	consensusState := &lcptypes.ConsensusState{}
-
-	anyClientState, err := clienttypes.PackClientState(clientState)
-	if err != nil {
-		return nil, err
-	}
-	anyConsensusState, err := clienttypes.PackConsensusState(consensusState)
-	if err != nil {
-		return nil, err
-	}
-
 	// NOTE after creates client, register an enclave key into the client state
-	return &clienttypes.MsgCreateClient{
-		ClientState:    anyClientState,
-		ConsensusState: anyConsensusState,
-		Signer:         signer.String(),
-	}, nil
+	return clientState, consensusState, nil
 }
 
 // GetLatestFinalizedHeader returns the latest finalized header on this chain
 // The returned header is expected to be the latest one of headers that can be verified by the light client
-func (pr *Prover) GetLatestFinalizedHeader() (latestFinalizedHeader core.Header, err error) {
+func (pr *Prover) GetLatestFinalizedHeader() (core.Header, error) {
 	return pr.originProver.GetLatestFinalizedHeader()
 }
 
