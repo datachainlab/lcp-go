@@ -106,7 +106,7 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 		return nil, nil, err
 	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
-	eki, err := pr.selectNewEnclaveKey(context.TODO())
+	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -125,7 +125,7 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
 		ClientState:    anyOriginClientState,
 		ConsensusState: anyOriginConsensusState,
-		Signer:         eki.EnclaveKeyAddress,
+		Signer:         tmpEKI.EnclaveKeyAddress,
 	})
 	if err != nil {
 		return nil, nil, err

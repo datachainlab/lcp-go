@@ -22,6 +22,8 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	cmd.AddCommand(
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
+		restoreELCStateCmd(ctx),
+		removeEnclaveKeyInfoCmd(ctx),
 	)
 
 	return cmd
@@ -82,6 +84,63 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				target, counterparty = c[dst], c[src]
 			}
 			return activateClient(pathEnd, target, counterparty)
+		},
+	}
+	return srcFlag(cmd)
+}
+
+func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restore-elc-state [path]",
+		Short: "Restore ELC state on LCP",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var (
+				target   *core.ProvableChain
+				verifier *core.ProvableChain
+			)
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+				verifier = c[dst]
+			} else {
+				target = c[dst]
+				verifier = c[src]
+			}
+			prover := target.Prover.(*Prover)
+			if err := prover.restoreELCState(context.TODO(), verifier); err != nil {
+				return err
+			}
+			if err := prover.removeEnclaveKeyInfos(context.TODO()); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	return srcFlag(cmd)
+}
+
+func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "remove-eki [path]",
+		Short: "Remove finalized and unfinalized EKIs in the relayer home directory",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var target *core.ProvableChain
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+			} else {
+				target = c[dst]
+			}
+			prover := target.Prover.(*Prover)
+			return prover.removeEnclaveKeyInfos(context.TODO())
 		},
 	}
 	return srcFlag(cmd)
