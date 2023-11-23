@@ -121,3 +121,13 @@ func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(ctx context.Context) error {
 	}
 	return os.Remove(path)
 }
+
+func (pr *Prover) removeEnclaveKeyInfos(ctx context.Context) error {
+	if err := pr.removeFinalizedEnclaveKeyInfo(ctx); err != nil {
+		return err
+	}
+	if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+		return err
+	}
+	return nil
+}

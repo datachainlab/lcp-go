@@ -11,58 +11,10 @@ import (
 	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
-	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
-func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "restore-elc-state [path]",
-		Short: "Restore ELC state",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
-			if err != nil {
-				return err
-			}
-			var (
-				target   *core.ProvableChain
-				verifier *core.ProvableChain
-			)
-			if viper.GetBool(flagSrc) {
-				target = c[src]
-				verifier = c[dst]
-			} else {
-				target = c[dst]
-				verifier = c[src]
-			}
-			prover := target.Prover.(*Prover)
-			if err := prover.RestoreELCState(context.TODO(), verifier); err != nil {
-				return err
-			}
-			// TODO make this optional?
-			if err := prover.RemoveEnclaveKeyInfos(context.TODO()); err != nil {
-				return err
-			}
-			return nil
-		},
-	}
-	return srcFlag(cmd)
-}
-
-func (pr *Prover) RemoveEnclaveKeyInfos(ctx context.Context) error {
-	if err := pr.removeFinalizedEnclaveKeyInfo(ctx); err != nil {
-		return err
-	}
-	if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (pr *Prover) RestoreELCState(ctx context.Context, counterparty core.FinalityAwareChain) error {
+func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain) error {
 	if err := pr.initServiceClient(); err != nil {
 		return err
 	}
@@ -144,7 +96,7 @@ func (pr *Prover) RestoreELCState(ctx context.Context, counterparty core.Finalit
 		return err
 	}
 
-	// Validate the restored state is expected
+	// Ensure the restored state is correct
 
 	commitment, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment)
 	if err != nil {
@@ -169,8 +121,4 @@ func (pr *Prover) RestoreELCState(ctx context.Context, counterparty core.Finalit
 	log.Printf("successfully restored ELC state: client_id=%v, state_id=%v, height=%v", res.ClientId, ucc.NewStateID, ucc.NewHeight)
 
 	return nil
-}
-
-func getOriginFinalizedHeader(prover core.Prover, height ibcexported.Height) (core.Header, error) {
-	panic("not implemented")
 }
