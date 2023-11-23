@@ -14,7 +14,7 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
-func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain) error {
+func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain, height uint64) error {
 	if err := pr.initServiceClient(); err != nil {
 		return err
 	}
@@ -31,7 +31,6 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 	if err != nil {
 		return err
 	}
-
 	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
 	if err != nil {
 		return err
@@ -41,7 +40,16 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		return err
 	}
 
-	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(context.TODO(), cplatestHeight), cs.GetLatestHeight())
+	var restoreHeight ibcexported.Height
+	if height == 0 {
+		restoreHeight = cs.GetLatestHeight()
+	} else {
+		restoreHeight = clienttypes.NewHeight(cs.GetLatestHeight().GetRevisionNumber(), height)
+	}
+
+	log.Printf("try to restore ELC state: height=%v", restoreHeight)
+
+	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(context.TODO(), cplatestHeight), restoreHeight)
 	if err != nil {
 		return err
 	}
@@ -109,8 +117,8 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 	if !ucc.NewStateID.EqualBytes(consensusState.StateId) {
 		return fmt.Errorf("unexpected state id: expected %v, but got %v", ucc.NewStateID, consensusState.StateId)
 	}
-	if !ucc.NewHeight.EQ(clientState.LatestHeight) {
-		return fmt.Errorf("unexpected height: expected %v, but got %v", ucc.NewHeight, clientState.LatestHeight)
+	if !ucc.NewHeight.EQ(restoreHeight) {
+		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, ucc.NewHeight)
 	}
 
 	// TODO relayer should update res.ClientId in the config

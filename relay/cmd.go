@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	flagSrc = "src"
+	flagSrc    = "src"
+	flagHeight = "height"
 )
 
 func LCPCmd(ctx *config.Context) *cobra.Command {
@@ -111,7 +112,7 @@ func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
 				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			if err := prover.restoreELCState(context.TODO(), verifier); err != nil {
+			if err := prover.restoreELCState(context.TODO(), verifier, viper.GetUint64(flagHeight)); err != nil {
 				return err
 			}
 			if err := prover.removeEnclaveKeyInfos(context.TODO()); err != nil {
@@ -120,7 +121,7 @@ func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
 			return nil
 		},
 	}
-	return srcFlag(cmd)
+	return heightFlag(srcFlag(cmd))
 }
 
 func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
@@ -149,6 +150,14 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 func srcFlag(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().BoolP(flagSrc, "", true, "a boolean value whether src is the target chain")
 	if err := viper.BindPFlag(flagSrc, cmd.Flags().Lookup(flagSrc)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func heightFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().Uint64P(flagHeight, "", 0, "a height to restore")
+	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
 		panic(err)
 	}
 	return cmd
