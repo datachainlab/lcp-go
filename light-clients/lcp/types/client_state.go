@@ -157,11 +157,11 @@ func (cs ClientState) VerifyMembership(
 	if err != nil {
 		return err
 	}
-	c, err := commitmentProof.GetCommitment()
+	c, err := commitmentProof.GetMessage()
 	if err != nil {
 		return err
 	}
-	commitment, err := c.GetStateCommitment()
+	commitment, err := c.GetVerifyMembershipMessage()
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func (cs ClientState) VerifyMembership(
 	if !commitment.StateID.EqualBytes(consensusState.StateId) {
 		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid state ID: expected=%v got=%v", consensusState.StateId, commitment.StateID)
 	}
-	if err := VerifySignatureWithSignBytes(commitmentProof.CommitmentBytes, commitmentProof.Signature, commitmentProof.Signer); err != nil {
+	if err := VerifySignatureWithSignBytes(commitmentProof.Message, commitmentProof.Signature, commitmentProof.Signer); err != nil {
 		return sdkerrors.Wrapf(ErrInvalidStateCommitmentProof, "failed to verify state commitment proof: %v", err)
 	}
 	if !cs.IsActiveKey(ctx.BlockTime(), clientStore, commitmentProof.Signer) {

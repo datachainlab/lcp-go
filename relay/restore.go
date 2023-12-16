@@ -103,19 +103,19 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 
 	// Ensure the restored state is correct
 
-	commitment, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment)
+	commitment, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message)
 	if err != nil {
 		return err
 	}
-	ucc, err := commitment.GetUpdateClientCommitment()
+	ucm, err := commitment.GetUpdateClientMessage()
 	if err != nil {
 		return err
 	}
-	if !ucc.NewStateID.EqualBytes(consensusState.StateId) {
-		return fmt.Errorf("unexpected state id: expected %v, but got %v", ucc.NewStateID, consensusState.StateId)
+	if !ucm.PostStateID.EqualBytes(consensusState.StateId) {
+		return fmt.Errorf("unexpected state id: expected %v, but got %v", ucm.PostStateID, consensusState.StateId)
 	}
-	if !ucc.NewHeight.EQ(restoreHeight) {
-		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, ucc.NewHeight)
+	if !ucm.PostHeight.EQ(restoreHeight) {
+		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, ucm.PostHeight)
 	}
 
 	// TODO relayer should update res.ClientId in the config
@@ -123,7 +123,7 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		return fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
 	}
 
-	log.Printf("successfully restored ELC state: client_id=%v, state_id=%v, height=%v", res.ClientId, ucc.NewStateID, ucc.NewHeight)
+	log.Printf("successfully restored ELC state: client_id=%v, state_id=%v, height=%v", res.ClientId, ucm.PostStateID, ucm.PostHeight)
 
 	return nil
 }

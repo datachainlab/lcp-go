@@ -12,26 +12,26 @@ func (UpdateClientMessage) ClientType() string {
 }
 
 func (m UpdateClientMessage) GetHeight() exported.Height {
-	c, err := m.GetCommitment()
+	c, err := m.GetMessage()
 	if err != nil {
 		panic(err)
 	}
-	return c.NewHeight
+	return c.PostHeight
 }
 
 func (m UpdateClientMessage) ValidateBasic() error {
-	if _, err := m.GetCommitment(); err != nil {
+	if _, err := m.GetMessage(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (h UpdateClientMessage) GetCommitment() (*UpdateClientCommitment, error) {
-	c, err := EthABIDecodeHeaderedCommitment(h.Commitment)
+func (h UpdateClientMessage) GetMessage() (*ELCUpdateClientMessage, error) {
+	c, err := EthABIDecodeHeaderedMessage(h.ElcMessage)
 	if err != nil {
 		return nil, err
 	}
-	return c.GetUpdateClientCommitment()
+	return c.GetUpdateClientMessage()
 }
 
 var _ exported.ClientMessage = (*RegisterEnclaveKeyMessage)(nil)

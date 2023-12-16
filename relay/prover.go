@@ -176,12 +176,12 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 		if err != nil {
 			return nil, err
 		}
-		// ensure the commitment is valid
-		if _, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment); err != nil {
+		// ensure the message is valid
+		if _, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message); err != nil {
 			return nil, err
 		}
 		updates = append(updates, &lcptypes.UpdateClientMessage{
-			Commitment: res.Commitment,
+			ElcMessage: res.Message,
 			Signer:     res.Signer,
 			Signature:  res.Signature,
 		})
@@ -210,18 +210,18 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	commitment, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment)
+	message, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message)
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	sc, err := commitment.GetStateCommitment()
+	sc, err := message.GetVerifyMembershipMessage()
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
 	cp, err := lcptypes.EthABIEncodeCommitmentProof(&lcptypes.CommitmentProof{
-		CommitmentBytes: res.Commitment,
-		Signer:          common.BytesToAddress(res.Signer),
-		Signature:       res.Signature,
+		Message:   res.Message,
+		Signer:    common.BytesToAddress(res.Signer),
+		Signature: res.Signature,
 	})
 	if err != nil {
 		return nil, clienttypes.Height{}, err

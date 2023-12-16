@@ -26,18 +26,18 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 }
 
 func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, message *UpdateClientMessage) error {
-	commitment, err := message.GetCommitment()
+	commitment, err := message.GetMessage()
 	if err != nil {
 		return err
 	}
 
 	if cs.LatestHeight.IsZero() {
-		if len(commitment.NewState) == 0 {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: the commitment's `NewState` must be non-nil", message)
+		if len(commitment.EmittedStates) == 0 {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", message)
 		}
 	} else {
 		if commitment.PrevHeight == nil || commitment.PrevStateID == nil {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: the commitment's `PrevHeight` and `PrevStateID` must be non-nil", message)
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", message)
 		}
 		prevConsensusState, err := GetConsensusState(store, cdc, commitment.PrevHeight)
 		if err != nil {
@@ -53,7 +53,7 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' not found", signer)
 	}
 
-	if err := VerifySignatureWithSignBytes(message.Commitment, message.Signature, signer); err != nil {
+	if err := VerifySignatureWithSignBytes(message.ElcMessage, message.Signature, signer); err != nil {
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 	}
 
@@ -119,17 +119,17 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 }
 
 func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, message *UpdateClientMessage) []exported.Height {
-	commitment, err := message.GetCommitment()
+	commitment, err := message.GetMessage()
 	if err != nil {
 		panic(err)
 	}
-	if cs.LatestHeight.LT(commitment.NewHeight) {
-		cs.LatestHeight = commitment.NewHeight
+	if cs.LatestHeight.LT(commitment.PostHeight) {
+		cs.LatestHeight = commitment.PostHeight
 	}
-	consensusState := ConsensusState{StateId: commitment.NewStateID[:], Timestamp: commitment.Timestamp.Uint64()}
+	consensusState := ConsensusState{StateId: commitment.PostStateID[:], Timestamp: commitment.Timestamp.Uint64()}
 
 	setClientState(clientStore, cdc, &cs)
-	setConsensusState(clientStore, cdc, &consensusState, commitment.NewHeight)
+	setConsensusState(clientStore, cdc, &consensusState, commitment.PostHeight)
 	return nil
 }
 
