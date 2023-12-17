@@ -26,25 +26,25 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 }
 
 func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, message *UpdateClientMessage) error {
-	commitment, err := message.GetMessage()
+	emsg, err := message.GetELCMessage()
 	if err != nil {
 		return err
 	}
 
 	if cs.LatestHeight.IsZero() {
-		if len(commitment.EmittedStates) == 0 {
+		if len(emsg.EmittedStates) == 0 {
 			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", message)
 		}
 	} else {
-		if commitment.PrevHeight == nil || commitment.PrevStateID == nil {
+		if emsg.PrevHeight == nil || emsg.PrevStateID == nil {
 			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", message)
 		}
-		prevConsensusState, err := GetConsensusState(store, cdc, commitment.PrevHeight)
+		prevConsensusState, err := GetConsensusState(store, cdc, emsg.PrevHeight)
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(prevConsensusState.StateId, commitment.PrevStateID[:]) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, commitment.PrevStateID[:])
+		if !bytes.Equal(prevConsensusState.StateId, emsg.PrevStateID[:]) {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, emsg.PrevStateID[:])
 		}
 	}
 
@@ -57,7 +57,7 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 	}
 
-	if err := commitment.Context.Validate(ctx.BlockTime()); err != nil {
+	if err := emsg.Context.Validate(ctx.BlockTime()); err != nil {
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid context: %v", err)
 	}
 
@@ -119,17 +119,17 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 }
 
 func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, message *UpdateClientMessage) []exported.Height {
-	commitment, err := message.GetMessage()
+	emsg, err := message.GetELCMessage()
 	if err != nil {
 		panic(err)
 	}
-	if cs.LatestHeight.LT(commitment.PostHeight) {
-		cs.LatestHeight = commitment.PostHeight
+	if cs.LatestHeight.LT(emsg.PostHeight) {
+		cs.LatestHeight = emsg.PostHeight
 	}
-	consensusState := ConsensusState{StateId: commitment.PostStateID[:], Timestamp: commitment.Timestamp.Uint64()}
+	consensusState := ConsensusState{StateId: emsg.PostStateID[:], Timestamp: emsg.Timestamp.Uint64()}
 
 	setClientState(clientStore, cdc, &cs)
-	setConsensusState(clientStore, cdc, &consensusState, commitment.PostHeight)
+	setConsensusState(clientStore, cdc, &consensusState, emsg.PostHeight)
 	return nil
 }
 

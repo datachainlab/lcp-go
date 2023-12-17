@@ -60,7 +60,9 @@ func (pc ProverConfig) Validate() error {
 	if pc.KeyExpiration == 0 {
 		return fmt.Errorf("KeyExpiration must be greater than 0")
 	}
-
+	if pc.MessageAggregation && pc.MessageAggregationBatchSize < 2 {
+		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true")
+	}
 	return nil
 }
 

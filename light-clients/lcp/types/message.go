@@ -218,7 +218,7 @@ type CommitmentProof struct {
 	Signature []byte
 }
 
-func (p CommitmentProof) GetMessage() (*HeaderedELCMessage, error) {
+func (p CommitmentProof) GetELCMessage() (*HeaderedELCMessage, error) {
 	return EthABIDecodeHeaderedMessage(p.Message)
 }
 

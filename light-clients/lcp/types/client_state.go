@@ -157,30 +157,30 @@ func (cs ClientState) VerifyMembership(
 	if err != nil {
 		return err
 	}
-	c, err := commitmentProof.GetMessage()
+	m, err := commitmentProof.GetELCMessage()
 	if err != nil {
 		return err
 	}
-	commitment, err := c.GetVerifyMembershipMessage()
+	msg, err := m.GetVerifyMembershipMessage()
 	if err != nil {
 		return err
 	}
-	commitmentValue := crypto.Keccak256Hash(value)
+	hashedValue := crypto.Keccak256Hash(value)
 
-	if !height.EQ(commitment.Height) {
-		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid height: expected=%v got=%v", height, commitment.Height)
+	if !height.EQ(msg.Height) {
+		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid height: expected=%v got=%v", height, msg.Height)
 	}
-	if !bytes.Equal(prefixBytes, commitment.Prefix) {
-		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid prefix: expected=%v got=%v", prefixBytes, commitment.Prefix)
+	if !bytes.Equal(prefixBytes, msg.Prefix) {
+		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid prefix: expected=%v got=%v", prefixBytes, msg.Prefix)
 	}
-	if !bytes.Equal(commitmentPath, commitment.Path) {
-		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid path: expected=%v got=%v", string(commitmentPath), string(commitment.Path))
+	if !bytes.Equal(commitmentPath, msg.Path) {
+		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid path: expected=%v got=%v", string(commitmentPath), string(msg.Path))
 	}
-	if commitmentValue != commitment.Value {
-		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X", commitmentValue[:], commitment.Value)
+	if hashedValue != msg.Value {
+		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X", hashedValue[:], msg.Value)
 	}
-	if !commitment.StateID.EqualBytes(consensusState.StateId) {
-		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid state ID: expected=%v got=%v", consensusState.StateId, commitment.StateID)
+	if !msg.StateID.EqualBytes(consensusState.StateId) {
+		return sdkerrors.Wrapf(ErrInvalidStateCommitment, "invalid state ID: expected=%v got=%v", consensusState.StateId, msg.StateID)
 	}
 	if err := VerifySignatureWithSignBytes(commitmentProof.Message, commitmentProof.Signature, commitmentProof.Signer); err != nil {
 		return sdkerrors.Wrapf(ErrInvalidStateCommitmentProof, "failed to verify state commitment proof: %v", err)
