@@ -15,9 +15,6 @@ import (
 )
 
 func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain, height uint64) error {
-	if err := pr.initServiceClient(); err != nil {
-		return err
-	}
 
 	// ensure the client does not exist in the LCP service
 	_, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
