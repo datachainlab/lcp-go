@@ -119,10 +119,6 @@ func checkMsgStatus(verifier core.FinalityAwareChain, msgID core.MsgID) (bool, b
 
 // if returns true, query new key and register key and set it to memory
 func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core.FinalityAwareChain) (bool, error) {
-	if err := pr.initServiceClient(); err != nil {
-		return false, err
-	}
-
 	now := time.Now()
 
 	// no active enclave key in memory

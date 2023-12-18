@@ -44,24 +44,19 @@ var (
 )
 
 func NewProver(config ProverConfig, originChain core.Chain, originProver core.Prover) (*Prover, error) {
-	return &Prover{config: config, originChain: originChain, originProver: originProver}, nil
-}
-
-func (pr *Prover) GetOriginProver() core.Prover {
-	return pr.originProver
-}
-
-func (pr *Prover) initServiceClient() error {
 	conn, err := grpc.Dial(
-		pr.config.LcpServiceAddress,
+		config.LcpServiceAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	pr.lcpServiceClient = NewLCPServiceClient(conn, pr.codec)
-	return nil
+	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn)}, nil
+}
+
+func (pr *Prover) GetOriginProver() core.Prover {
+	return pr.originProver
 }
 
 // Init initializes the chain
@@ -91,7 +86,7 @@ func (pr *Prover) SetRelayInfo(path *core.PathEnd, counterparty *core.ProvableCh
 
 // SetupForRelay performs chain-specific setup before starting the relay
 func (pr *Prover) SetupForRelay(ctx context.Context) error {
-	return pr.initServiceClient()
+	return nil
 }
 
 // GetChainID returns the chain ID
@@ -101,9 +96,6 @@ func (pr *Prover) GetChainID() string {
 
 // CreateMsgCreateClient creates a CreateClientMsg to this chain
 func (pr *Prover) CreateMsgCreateClient(clientID string, dstHeader core.Header, signer sdk.AccAddress) (*clienttypes.MsgCreateClient, error) {
-	if err := pr.initServiceClient(); err != nil {
-		return nil, err
-	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
 	eki, err := pr.selectNewEnclaveKey(context.TODO())
 	if err != nil {
