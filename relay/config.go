@@ -10,6 +10,8 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
+const DefaultMessageAggregationBatchSize = 8
+
 var _ core.ProverConfig = (*ProverConfig)(nil)
 
 var _ codectypes.UnpackInterfacesMessage = (*ProverConfig)(nil)
@@ -43,6 +45,14 @@ func (pc ProverConfig) GetMrenclave() []byte {
 	return mrenclave
 }
 
+func (pc ProverConfig) GetMessageAggregationBatchSize() uint64 {
+	if pc.MessageAggregationBatchSize == 0 {
+		return DefaultMessageAggregationBatchSize
+	} else {
+		return pc.MessageAggregationBatchSize
+	}
+}
+
 func (pc ProverConfig) Validate() error {
 	// origin prover config validation
 	if err := pc.OriginProver.GetCachedValue().(core.ProverConfig).Validate(); err != nil {
@@ -60,8 +70,8 @@ func (pc ProverConfig) Validate() error {
 	if pc.KeyExpiration == 0 {
 		return fmt.Errorf("KeyExpiration must be greater than 0")
 	}
-	if pc.MessageAggregation && pc.MessageAggregationBatchSize < 2 {
-		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true")
+	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
+		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
 	return nil
 }

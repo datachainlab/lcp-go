@@ -217,7 +217,7 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 		return nil, fmt.Errorf("aggregateMessages: messages and signatures must have the same length: messages=%v signatures=%v", len(messages), len(signatures))
 	}
 	for {
-		batches, err := splitIntoMultiBatch(messages, signatures, signer, pr.config.MessageAggregationBatchSize)
+		batches, err := splitIntoMultiBatch(messages, signatures, signer, pr.config.GetMessageAggregationBatchSize())
 		if err != nil {
 			return nil, err
 		}
@@ -271,6 +271,9 @@ func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, 
 	var res []*elc.MsgAggregateMessages
 	var currentMessages [][]byte
 	var currentBatchStartIndex uint64 = 0
+	if messageBatchSize < 2 {
+		return nil, fmt.Errorf("messageBatchSize must be greater than 1")
+	}
 	for i := 0; i < len(messages); i++ {
 		currentMessages = append(currentMessages, messages[i])
 		if uint64(len(currentMessages)) == messageBatchSize {
