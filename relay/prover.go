@@ -15,6 +15,7 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -188,13 +189,16 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	}
 
 	var updates []core.Header
+	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
+		log.GetLogger().Info("aggregateMessages", "num_messages", len(messages))
 		update, err := pr.aggregateMessages(messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
 		if err != nil {
 			return nil, err
 		}
 		updates = append(updates, update)
 	} else {
+		log.GetLogger().Info("updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
 			updates = append(updates, &lcptypes.UpdateClientMessage{
 				ElcMessage: messages[i],
@@ -208,21 +212,25 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 
 func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, signer []byte) (*lcptypes.UpdateClientMessage, error) {
 	if len(messages) == 0 {
-		return nil, fmt.Errorf("messages must not be empty")
+		return nil, fmt.Errorf("aggregateMessages: messages must not be empty")
+	} else if len(messages) != len(signatures) {
+		return nil, fmt.Errorf("aggregateMessages: messages and signatures must have the same length: messages=%v signatures=%v", len(messages), len(signatures))
 	}
 	for {
 		batches, err := splitIntoMultiBatch(messages, signatures, signer, pr.config.MessageAggregationBatchSize)
 		if err != nil {
 			return nil, err
 		}
-		if len(batches) == 1 {
+		if n := len(batches); n == 1 {
 			return &lcptypes.UpdateClientMessage{
 				ElcMessage: batches[0].Messages[0],
 				Signer:     batches[0].Signer,
 				Signature:  batches[0].Signatures[0],
 			}, nil
-		} else if len(batches) == 0 {
+		} else if n == 0 {
 			return nil, fmt.Errorf("unexpected error: batches must not be empty")
+		} else {
+			log.GetLogger().Info("aggregateMessages", "num_batches", n)
 		}
 		messages = nil
 		signatures = nil
