@@ -222,11 +222,29 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 			return nil, err
 		}
 		if n := len(batches); n == 1 {
-			return &lcptypes.UpdateClientMessage{
-				ElcMessage: batches[0].Messages[0],
-				Signer:     batches[0].Signer,
-				Signature:  batches[0].Signatures[0],
-			}, nil
+			if mn := len(batches[0].Messages); mn == 0 {
+				return nil, fmt.Errorf("unexpected error: messages must not be empty")
+			} else if mn == 1 {
+				return &lcptypes.UpdateClientMessage{
+					ElcMessage: batches[0].Messages[0],
+					Signer:     batches[0].Signer,
+					Signature:  batches[0].Signatures[0],
+				}, nil
+			} else {
+				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
+					Signer:     batches[0].Signer,
+					Messages:   batches[0].Messages,
+					Signatures: batches[0].Signatures,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &lcptypes.UpdateClientMessage{
+					ElcMessage: resp.Message,
+					Signer:     resp.Signer,
+					Signature:  resp.Signature,
+				}, nil
+			}
 		} else if n == 0 {
 			return nil, fmt.Errorf("unexpected error: batches must not be empty")
 		} else {
