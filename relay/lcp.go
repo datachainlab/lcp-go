@@ -366,7 +366,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	var msgs []sdk.Msg
 	for _, update := range updates {
 		message := &lcptypes.UpdateClientMessage{
-			Commitment: update.Commitment,
+			ElcMessage: update.Message,
 			Signer:     update.Signer,
 			Signature:  update.Signature,
 		}

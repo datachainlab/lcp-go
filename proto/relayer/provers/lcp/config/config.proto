@@ -18,4 +18,6 @@ message ProverConfig {
     // unit: seconds
     uint64 key_expiration = 6;
     string elc_client_id = 7;
+    bool message_aggregation = 8;
+    uint64 message_aggregation_batch_size = 9;
 }

@@ -11,27 +11,27 @@ func (UpdateClientMessage) ClientType() string {
 	return ClientTypeLCP
 }
 
-func (m UpdateClientMessage) GetHeight() exported.Height {
-	c, err := m.GetCommitment()
+func (ucm UpdateClientMessage) GetHeight() exported.Height {
+	m, err := ucm.GetELCMessage()
 	if err != nil {
 		panic(err)
 	}
-	return c.NewHeight
+	return m.PostHeight
 }
 
-func (m UpdateClientMessage) ValidateBasic() error {
-	if _, err := m.GetCommitment(); err != nil {
+func (ucm UpdateClientMessage) ValidateBasic() error {
+	if _, err := ucm.GetELCMessage(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (h UpdateClientMessage) GetCommitment() (*UpdateClientCommitment, error) {
-	c, err := EthABIDecodeHeaderedCommitment(h.Commitment)
+func (ucm UpdateClientMessage) GetELCMessage() (*ELCUpdateClientMessage, error) {
+	m, err := EthABIDecodeHeaderedMessage(ucm.ElcMessage)
 	if err != nil {
 		return nil, err
 	}
-	return c.GetUpdateClientCommitment()
+	return m.GetUpdateClientMessage()
 }
 
 var _ exported.ClientMessage = (*RegisterEnclaveKeyMessage)(nil)

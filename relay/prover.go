@@ -15,6 +15,7 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -161,7 +162,10 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	if len(headers) == 0 {
 		return nil, nil
 	}
-	var updates []core.Header
+	var (
+		messages   [][]byte
+		signatures [][]byte
+	)
 	for _, h := range headers {
 		anyHeader, err := clienttypes.PackClientMessage(h)
 		if err != nil {
@@ -176,17 +180,120 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 		if err != nil {
 			return nil, err
 		}
-		// ensure the commitment is valid
-		if _, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment); err != nil {
+		// ensure the message is valid
+		if _, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message); err != nil {
 			return nil, err
 		}
-		updates = append(updates, &lcptypes.UpdateClientMessage{
-			Commitment: res.Commitment,
-			Signer:     res.Signer,
-			Signature:  res.Signature,
-		})
+		messages = append(messages, res.Message)
+		signatures = append(signatures, res.Signature)
+	}
+
+	var updates []core.Header
+	// NOTE: assume that the messages length and the signatures length are the same
+	if pr.config.MessageAggregation {
+		log.GetLogger().Info("aggregateMessages", "num_messages", len(messages))
+		update, err := pr.aggregateMessages(messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
+		if err != nil {
+			return nil, err
+		}
+		updates = append(updates, update)
+	} else {
+		log.GetLogger().Info("updateClient", "num_messages", len(messages))
+		for i := 0; i < len(messages); i++ {
+			updates = append(updates, &lcptypes.UpdateClientMessage{
+				ElcMessage: messages[i],
+				Signer:     pr.activeEnclaveKey.EnclaveKeyAddress,
+				Signature:  signatures[i],
+			})
+		}
 	}
 	return updates, nil
+}
+
+func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, signer []byte) (*lcptypes.UpdateClientMessage, error) {
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("aggregateMessages: messages must not be empty")
+	} else if len(messages) != len(signatures) {
+		return nil, fmt.Errorf("aggregateMessages: messages and signatures must have the same length: messages=%v signatures=%v", len(messages), len(signatures))
+	}
+	for {
+		batches, err := splitIntoMultiBatch(messages, signatures, signer, pr.config.GetMessageAggregationBatchSize())
+		if err != nil {
+			return nil, err
+		}
+		if n := len(batches); n == 1 {
+			if mn := len(batches[0].Messages); mn == 0 {
+				return nil, fmt.Errorf("unexpected error: messages must not be empty")
+			} else if mn == 1 {
+				return &lcptypes.UpdateClientMessage{
+					ElcMessage: batches[0].Messages[0],
+					Signer:     batches[0].Signer,
+					Signature:  batches[0].Signatures[0],
+				}, nil
+			} else {
+				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
+					Signer:     batches[0].Signer,
+					Messages:   batches[0].Messages,
+					Signatures: batches[0].Signatures,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return &lcptypes.UpdateClientMessage{
+					ElcMessage: resp.Message,
+					Signer:     resp.Signer,
+					Signature:  resp.Signature,
+				}, nil
+			}
+		} else if n == 0 {
+			return nil, fmt.Errorf("unexpected error: batches must not be empty")
+		} else {
+			log.GetLogger().Info("aggregateMessages", "num_batches", n)
+		}
+		messages = nil
+		signatures = nil
+		for _, b := range batches {
+			resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
+				Signer:     b.Signer,
+				Messages:   b.Messages,
+				Signatures: b.Signatures,
+			})
+			if err != nil {
+				return nil, err
+			}
+			messages = append(messages, resp.Message)
+			signatures = append(signatures, resp.Signature)
+		}
+	}
+}
+
+func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, messageBatchSize uint64) ([]*elc.MsgAggregateMessages, error) {
+	var res []*elc.MsgAggregateMessages
+	var currentMessages [][]byte
+	var currentBatchStartIndex uint64 = 0
+	if messageBatchSize < 2 {
+		return nil, fmt.Errorf("messageBatchSize must be greater than 1")
+	}
+	for i := 0; i < len(messages); i++ {
+		currentMessages = append(currentMessages, messages[i])
+		if uint64(len(currentMessages)) == messageBatchSize {
+			res = append(res, &elc.MsgAggregateMessages{
+				Signer:     signer,
+				Messages:   currentMessages,
+				Signatures: signatures[currentBatchStartIndex : currentBatchStartIndex+messageBatchSize],
+			})
+			currentMessages = nil
+			currentBatchStartIndex = uint64(i + 1)
+		}
+	}
+	if len(currentMessages) > 0 {
+		res = append(res, &elc.MsgAggregateMessages{
+			Signer:     signer,
+			Messages:   currentMessages,
+			Signatures: signatures[currentBatchStartIndex:],
+		})
+	}
+	return res, nil
 }
 
 func (pr *Prover) CheckRefreshRequired(counterparty core.ChainInfoICS02Querier) (bool, error) {
@@ -210,18 +317,18 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	commitment, err := lcptypes.EthABIDecodeHeaderedCommitment(res.Commitment)
+	message, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message)
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	sc, err := commitment.GetStateCommitment()
+	sc, err := message.GetVerifyMembershipMessage()
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
 	cp, err := lcptypes.EthABIEncodeCommitmentProof(&lcptypes.CommitmentProof{
-		CommitmentBytes: res.Commitment,
-		Signer:          common.BytesToAddress(res.Signer),
-		Signature:       res.Signature,
+		Message:   res.Message,
+		Signer:    common.BytesToAddress(res.Signer),
+		Signature: res.Signature,
 	})
 	if err != nil {
 		return nil, clienttypes.Height{}, err

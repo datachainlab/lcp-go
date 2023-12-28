@@ -7,61 +7,68 @@ import (
 	"math/big"
 	"time"
 
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 )
 
 const (
-	LCPCommitmentVersion          = 1
-	LCPCommitmentTypeUpdateClient = 1
-	LCPCommitmentTypeState        = 2
+	LCPMessageVersion          = 1
+	LCPMessageTypeUpdateClient = 1
+	LCPMessageTypeState        = 2
 )
 
 const (
-	LCPCommitmentContextTypeEmpty          = 0
-	LCPCommitmentContextTypeTrustingPeriod = 1
+	LCPMessageContextTypeEmpty          = 0
+	LCPMessageContextTypeTrustingPeriod = 1
 )
 
 var (
 	commitmentProofABI, _ = abi.NewType("tuple", "struct CommitmentProof", []abi.ArgumentMarshaling{
-		{Name: "commitment_bytes", Type: "bytes"},
+		{Name: "message", Type: "bytes"},
 		{Name: "signer", Type: "address"},
 		{Name: "signature", Type: "bytes"},
 	})
 
-	headeredCommitmentABI, _ = abi.NewType("tuple", "struct HeaderedCommitment", []abi.ArgumentMarshaling{
+	headeredMessageABI, _ = abi.NewType("tuple", "struct HeaderedMessage", []abi.ArgumentMarshaling{
 		{Name: "header", Type: "bytes32"},
-		{Name: "commitment", Type: "bytes"},
+		{Name: "message", Type: "bytes"},
 	})
 
-	updateClientCommitmentABI, _ = abi.NewType("tuple", "struct UpdateClientCommitment", []abi.ArgumentMarshaling{
-		{Name: "prev_state_id", Type: "bytes32"},
-		{Name: "new_state_id", Type: "bytes32"},
-		{Name: "new_state", Type: "bytes"},
+	updateClientMessageABI, _ = abi.NewType("tuple", "struct UpdateClientMessage", []abi.ArgumentMarshaling{
 		{Name: "prev_height", Type: "tuple", Components: []abi.ArgumentMarshaling{
 			{Name: "revision_number", Type: "uint64"},
 			{Name: "revision_height", Type: "uint64"},
 		}},
-		{Name: "new_height", Type: "tuple", Components: []abi.ArgumentMarshaling{
+		{Name: "prev_state_id", Type: "bytes32"},
+		{Name: "post_height", Type: "tuple", Components: []abi.ArgumentMarshaling{
 			{Name: "revision_number", Type: "uint64"},
 			{Name: "revision_height", Type: "uint64"},
 		}},
+		{Name: "post_state_id", Type: "bytes32"},
 		{Name: "timestamp", Type: "uint128"},
 		{Name: "context", Type: "bytes"},
+		{Name: "emitted_states", Type: "tuple[]", Components: []abi.ArgumentMarshaling{
+			{Name: "height", Type: "tuple", Components: []abi.ArgumentMarshaling{
+				{Name: "revision_number", Type: "uint64"},
+				{Name: "revision_height", Type: "uint64"},
+			}},
+			{Name: "state", Type: "bytes"},
+		}},
 	})
 
-	headeredCommitmentContextABI, _ = abi.NewType("tuple", "struct HeaderedCommitmentContext", []abi.ArgumentMarshaling{
+	headeredMessageContextABI, _ = abi.NewType("tuple", "struct HeaderedMessageContext", []abi.ArgumentMarshaling{
 		{Name: "header", Type: "bytes32"},
 		{Name: "context_bytes", Type: "bytes"},
 	})
 
-	trustingPeriodContextABI, _ = abi.NewType("tuple", "struct TrustingPeriodCommitmentContext", []abi.ArgumentMarshaling{
+	trustingPeriodContextABI, _ = abi.NewType("tuple", "struct TrustingPeriodValidationContext", []abi.ArgumentMarshaling{
 		{Name: "timestamps", Type: "bytes32"},
 		{Name: "params", Type: "bytes32"},
 	})
 
-	stateCommitmentABI, _ = abi.NewType("tuple", "struct StateCommitment", []abi.ArgumentMarshaling{
+	verifyMembershipMessageABI, _ = abi.NewType("tuple", "struct VerifyMembershipMessage", []abi.ArgumentMarshaling{
 		{Name: "prefix", Type: "bytes"},
 		{Name: "path", Type: "bytes"},
 		{Name: "value", Type: "bytes32"},
@@ -79,39 +86,44 @@ func (id StateID) EqualBytes(bz []byte) bool {
 	return bytes.Equal(id[:], bz)
 }
 
-type UpdateClientCommitment struct {
-	PrevStateID *StateID
-	NewStateID  StateID
-	NewState    []byte
-	PrevHeight  *clienttypes.Height
-	NewHeight   clienttypes.Height
-	Timestamp   *big.Int
-	Context     CommitmentContext
+type ELCUpdateClientMessage struct {
+	PrevHeight    *clienttypes.Height
+	PrevStateID   *StateID
+	PostHeight    clienttypes.Height
+	PostStateID   StateID
+	Timestamp     *big.Int
+	Context       ValidationContext
+	EmittedStates []EmittedState
 }
 
-// CommitmentContext is the interface for the context of a commitment.
-type CommitmentContext interface {
+type EmittedState struct {
+	Height clienttypes.Height
+	State  codectypes.Any
+}
+
+// ValidationContext is the interface of validation context.
+type ValidationContext interface {
 	Validate(time.Time) error
 }
 
-// NoneCommitmentContext is the commitment context for a commitment that does not require any validation.
-type NoneCommitmentContext struct{}
+// EmptyValidationContext is the validation context for a commitment that does not require any validation.
+type EmptyValidationContext struct{}
 
-var _ CommitmentContext = NoneCommitmentContext{}
+var _ ValidationContext = EmptyValidationContext{}
 
-func (NoneCommitmentContext) Validate(time.Time) error {
+func (EmptyValidationContext) Validate(time.Time) error {
 	return nil
 }
 
-// TrustingPeriodCommitmentContext is the commitment context for a commitment that requires the current time to be within the trusting period.
-type TrustingPeriodCommitmentContext struct {
+// TrustingPeriodValidationContext is the commitment context for a commitment that requires the current time to be within the trusting period.
+type TrustingPeriodValidationContext struct {
 	UntrustedHeaderTimestamp time.Time
 	TrustedStateTimestamp    time.Time
 	TrustingPeriod           big.Int
 	ClockDrift               big.Int
 }
 
-func DecodeTrustingPeriodCommitmentContext(timestamps, params [32]byte) *TrustingPeriodCommitmentContext {
+func DecodeTrustingPeriodValidationContext(timestamps, params [32]byte) *TrustingPeriodValidationContext {
 	// 0-15: untrusted_header_timestamp
 	// 16-31: trusted_state_timestamp
 	untrustedHeaderTimestamp := timestampNanosBytesToTime(timestamps[:16])
@@ -122,7 +134,7 @@ func DecodeTrustingPeriodCommitmentContext(timestamps, params [32]byte) *Trustin
 	trustingPeriod := uint128BytesToBigInt(params[:16])
 	clockDrift := uint128BytesToBigInt(params[16:32])
 
-	return &TrustingPeriodCommitmentContext{
+	return &TrustingPeriodValidationContext{
 		UntrustedHeaderTimestamp: untrustedHeaderTimestamp,
 		TrustedStateTimestamp:    trustedStateTimestamp,
 		TrustingPeriod:           trustingPeriod,
@@ -155,7 +167,7 @@ func timestampNanosBytesToTime(bz []byte) time.Time {
 	return time.Unix(secs.Int64(), nanos.Int64())
 }
 
-var _ CommitmentContext = TrustingPeriodCommitmentContext{}
+var _ ValidationContext = TrustingPeriodValidationContext{}
 
 func timeToBigInt(t time.Time) big.Int {
 	var (
@@ -169,7 +181,7 @@ func timeToBigInt(t time.Time) big.Int {
 	return secs
 }
 
-func (c TrustingPeriodCommitmentContext) Validate(now time.Time) error {
+func (c TrustingPeriodValidationContext) Validate(now time.Time) error {
 	currentTimestamp := timeToBigInt(now)
 	trustedStateTimestamp := timeToBigInt(c.TrustedStateTimestamp)
 	untrustedHeaderTimestamp := timeToBigInt(c.UntrustedHeaderTimestamp)
@@ -192,7 +204,7 @@ func (c TrustingPeriodCommitmentContext) Validate(now time.Time) error {
 	return nil
 }
 
-type StateCommitment struct {
+type ELCVerifyMembershipMessage struct {
 	Prefix  []byte
 	Path    []byte
 	Value   [32]byte
@@ -201,39 +213,39 @@ type StateCommitment struct {
 }
 
 type CommitmentProof struct {
-	CommitmentBytes []byte
-	Signer          common.Address
-	Signature       []byte
+	Message   []byte
+	Signer    common.Address
+	Signature []byte
 }
 
-func (p CommitmentProof) GetCommitment() (*HeaderedCommitment, error) {
-	return EthABIDecodeHeaderedCommitment(p.CommitmentBytes)
+func (p CommitmentProof) GetELCMessage() (*HeaderedELCMessage, error) {
+	return EthABIDecodeHeaderedMessage(p.Message)
 }
 
-type HeaderedCommitment struct {
-	Version    uint16
-	Type       uint16
-	Commitment []byte
+type HeaderedELCMessage struct {
+	Version uint16
+	Type    uint16
+	Message []byte
 }
 
-func (c HeaderedCommitment) GetUpdateClientCommitment() (*UpdateClientCommitment, error) {
-	if c.Version != LCPCommitmentVersion {
-		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPCommitmentVersion, c.Version)
+func (c HeaderedELCMessage) GetUpdateClientMessage() (*ELCUpdateClientMessage, error) {
+	if c.Version != LCPMessageVersion {
+		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, c.Version)
 	}
-	if c.Type != LCPCommitmentTypeUpdateClient {
-		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPCommitmentTypeUpdateClient, c.Type)
+	if c.Type != LCPMessageTypeUpdateClient {
+		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeUpdateClient, c.Type)
 	}
-	return EthABIDecodeUpdateClientCommitment(c.Commitment)
+	return EthABIDecodeUpdateClientMessage(c.Message)
 }
 
-func (c HeaderedCommitment) GetStateCommitment() (*StateCommitment, error) {
-	if c.Version != LCPCommitmentVersion {
-		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPCommitmentVersion, c.Version)
+func (c HeaderedELCMessage) GetVerifyMembershipMessage() (*ELCVerifyMembershipMessage, error) {
+	if c.Version != LCPMessageVersion {
+		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, c.Version)
 	}
-	if c.Type != LCPCommitmentTypeState {
-		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPCommitmentTypeState, c.Type)
+	if c.Type != LCPMessageTypeState {
+		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeState, c.Type)
 	}
-	return EthABIDecodeStateCommitment(c.Commitment)
+	return EthABIDecodeVerifyMembershipMessage(c.Message)
 }
 
 func EthABIEncodeCommitmentProof(p *CommitmentProof) ([]byte, error) {
@@ -252,72 +264,77 @@ func EthABIDecodeCommitmentProof(bz []byte) (*CommitmentProof, error) {
 		return nil, err
 	}
 	p := CommitmentProof(v[0].(struct {
-		CommitmentBytes []byte         `json:"commitment_bytes"`
-		Signer          common.Address `json:"signer"`
-		Signature       []byte         `json:"signature"`
+		Message   []byte         `json:"message"`
+		Signer    common.Address `json:"signer"`
+		Signature []byte         `json:"signature"`
 	}))
 	return &p, nil
 }
 
-func EthABIDecodeHeaderedCommitment(bz []byte) (*HeaderedCommitment, error) {
+func EthABIDecodeHeaderedMessage(bz []byte) (*HeaderedELCMessage, error) {
 	unpacker := abi.Arguments{
-		{Type: headeredCommitmentABI},
+		{Type: headeredMessageABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
 		return nil, err
 	}
 	p := v[0].(struct {
-		Header     [32]byte `json:"header"`
-		Commitment []byte   `json:"commitment"`
+		Header  [32]byte `json:"header"`
+		Message []byte   `json:"message"`
 	})
 	// Header format:
 	// MSB first
 	// 0-1:  version
-	// 2-3:  commitment type
+	// 2-3:  message type
 	// 4-31: reserved
 	version := binary.BigEndian.Uint16(p.Header[:2])
-	commitmentType := binary.BigEndian.Uint16(p.Header[2:4])
-	return &HeaderedCommitment{
-		Version:    version,
-		Type:       commitmentType,
-		Commitment: p.Commitment,
+	messageType := binary.BigEndian.Uint16(p.Header[2:4])
+	return &HeaderedELCMessage{
+		Version: version,
+		Type:    messageType,
+		Message: p.Message,
 	}, nil
 }
 
-func EthABIDecodeUpdateClientCommitment(bz []byte) (*UpdateClientCommitment, error) {
+func EthABIDecodeUpdateClientMessage(bz []byte) (*ELCUpdateClientMessage, error) {
 	unpacker := abi.Arguments{
-		{Type: updateClientCommitmentABI},
+		{Type: updateClientMessageABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
 		return nil, err
 	}
 	p := v[0].(struct {
-		PrevStateId [32]byte `json:"prev_state_id"`
-		NewStateId  [32]byte `json:"new_state_id"`
-		NewState    []byte   `json:"new_state"`
-		PrevHeight  struct {
+		PrevHeight struct {
 			RevisionNumber uint64 `json:"revision_number"`
 			RevisionHeight uint64 `json:"revision_height"`
 		} `json:"prev_height"`
-		NewHeight struct {
+		PrevStateId [32]byte `json:"prev_state_id"`
+		PostHeight  struct {
 			RevisionNumber uint64 `json:"revision_number"`
 			RevisionHeight uint64 `json:"revision_height"`
-		} `json:"new_height"`
-		Timestamp *big.Int `json:"timestamp"`
-		Context   []byte   `json:"context"`
+		} `json:"post_height"`
+		PostStateId   [32]byte `json:"post_state_id"`
+		Timestamp     *big.Int `json:"timestamp"`
+		Context       []byte   `json:"context"`
+		EmittedStates []struct {
+			Height struct {
+				RevisionNumber uint64 `json:"revision_number"`
+				RevisionHeight uint64 `json:"revision_height"`
+			} `json:"height"`
+			State []byte `json:"state"`
+		} `json:"emitted_states"`
 	})
-	cctx, err := EthABIDecodeCommitmentContext(p.Context)
+	cctx, err := EthABIDecodeValidationContext(p.Context)
 	if err != nil {
 		return nil, err
 	}
-	c := &UpdateClientCommitment{
-		NewStateID: p.NewStateId,
-		NewState:   p.NewState,
-		NewHeight:  clienttypes.Height{RevisionNumber: p.NewHeight.RevisionNumber, RevisionHeight: p.NewHeight.RevisionHeight},
-		Timestamp:  p.Timestamp,
-		Context:    cctx,
+	c := &ELCUpdateClientMessage{
+		PostStateID: p.PostStateId,
+		PostHeight:  clienttypes.Height{RevisionNumber: p.PostHeight.RevisionNumber, RevisionHeight: p.PostHeight.RevisionHeight},
+		Timestamp:   p.Timestamp,
+		Context:     cctx,
 	}
 	if p.PrevStateId != [32]byte{} {
 		prev := StateID(p.PrevStateId)
@@ -326,12 +343,22 @@ func EthABIDecodeUpdateClientCommitment(bz []byte) (*UpdateClientCommitment, err
 	if p.PrevHeight.RevisionNumber != 0 || p.PrevHeight.RevisionHeight != 0 {
 		c.PrevHeight = &clienttypes.Height{RevisionNumber: p.PrevHeight.RevisionNumber, RevisionHeight: p.PrevHeight.RevisionHeight}
 	}
+	for _, emitted := range p.EmittedStates {
+		var anyState codectypes.Any
+		if err := anyState.Unmarshal(emitted.State); err != nil {
+			return nil, err
+		}
+		c.EmittedStates = append(c.EmittedStates, EmittedState{
+			Height: clienttypes.Height{RevisionNumber: emitted.Height.RevisionNumber, RevisionHeight: emitted.Height.RevisionHeight},
+			State:  anyState,
+		})
+	}
 	return c, nil
 }
 
-func EthABIDecodeCommitmentContext(bz []byte) (CommitmentContext, error) {
+func EthABIDecodeValidationContext(bz []byte) (ValidationContext, error) {
 	unpacker := abi.Arguments{
-		{Type: headeredCommitmentContextABI},
+		{Type: headeredMessageContextABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
@@ -347,19 +374,19 @@ func EthABIDecodeCommitmentContext(bz []byte) (CommitmentContext, error) {
 	// 2-31: reserved
 	contextType := binary.BigEndian.Uint16(p.Header[:2])
 	switch contextType {
-	case LCPCommitmentContextTypeEmpty:
+	case LCPMessageContextTypeEmpty:
 		if len(p.ContextBytes) != 0 {
 			return nil, fmt.Errorf("unexpected context bytes for empty commitment context: %X", p.ContextBytes)
 		}
-		return &NoneCommitmentContext{}, nil
-	case LCPCommitmentContextTypeTrustingPeriod:
-		return EthABIDecodeTrustingPeriodCommitmentContext(p.ContextBytes)
+		return &EmptyValidationContext{}, nil
+	case LCPMessageContextTypeTrustingPeriod:
+		return EthABIDecodeTrustingPeriodValidationContext(p.ContextBytes)
 	default:
 		return nil, fmt.Errorf("unexpected commitment context type: %v", contextType)
 	}
 }
 
-func EthABIDecodeTrustingPeriodCommitmentContext(bz []byte) (*TrustingPeriodCommitmentContext, error) {
+func EthABIDecodeTrustingPeriodValidationContext(bz []byte) (*TrustingPeriodValidationContext, error) {
 	if len(bz) != 64 {
 		return nil, fmt.Errorf("unexpected length of trusting period commitment context: %d", len(bz))
 	}
@@ -374,12 +401,12 @@ func EthABIDecodeTrustingPeriodCommitmentContext(bz []byte) (*TrustingPeriodComm
 		Timestamps [32]byte `json:"timestamps"`
 		Params     [32]byte `json:"params"`
 	})
-	return DecodeTrustingPeriodCommitmentContext(p.Timestamps, p.Params), nil
+	return DecodeTrustingPeriodValidationContext(p.Timestamps, p.Params), nil
 }
 
-func EthABIDecodeStateCommitment(bz []byte) (*StateCommitment, error) {
+func EthABIDecodeVerifyMembershipMessage(bz []byte) (*ELCVerifyMembershipMessage, error) {
 	unpacker := abi.Arguments{
-		{Type: stateCommitmentABI},
+		{Type: verifyMembershipMessageABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
@@ -395,7 +422,7 @@ func EthABIDecodeStateCommitment(bz []byte) (*StateCommitment, error) {
 		} `json:"height"`
 		StateId [32]byte `json:"state_id"`
 	})
-	return &StateCommitment{
+	return &ELCVerifyMembershipMessage{
 		Prefix:  p.Prefix,
 		Path:    p.Path,
 		Value:   p.Value,
