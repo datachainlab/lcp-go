@@ -48,9 +48,10 @@ func NewProver(config ProverConfig, originChain core.Chain, originProver core.Pr
 		config.LcpServiceAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
+		grpc.WithTimeout(config.GetDialTimeout()),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to LCP service: %w", err)
 	}
 	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn)}, nil
 }

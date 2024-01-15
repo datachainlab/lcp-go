@@ -11,13 +11,15 @@ message ProverConfig {
     google.protobuf.Any origin_prover = 1;
     // hex string
     string lcp_service_address = 2;
-    // hex string
-    string mrenclave = 3;
-    repeated string allowed_quote_statuses = 4;
-    repeated string allowed_advisory_ids = 5;
     // unit: seconds
-    uint64 key_expiration = 6;
-    string elc_client_id = 7;
-    bool message_aggregation = 8;
-    uint64 message_aggregation_batch_size = 9;
+    uint64 lcp_service_dial_timeout = 3;
+    // hex string
+    string mrenclave = 4;
+    repeated string allowed_quote_statuses = 5;
+    repeated string allowed_advisory_ids = 6;
+    // unit: seconds
+    uint64 key_expiration = 7;
+    string elc_client_id = 8;
+    bool message_aggregation = 9;
+    uint64 message_aggregation_batch_size = 10;
 }

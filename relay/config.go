@@ -4,13 +4,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
-const DefaultMessageAggregationBatchSize = 8
+const (
+	DefaultDialTimeout                 = 20 // seconds
+	DefaultMessageAggregationBatchSize = 8
+)
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
 
@@ -35,6 +39,14 @@ func (pc ProverConfig) Build(chain core.Chain) (core.Prover, error) {
 		return nil, err
 	}
 	return NewProver(pc, chain, prover)
+}
+
+func (pc ProverConfig) GetDialTimeout() time.Duration {
+	if pc.LcpServiceDialTimeout == 0 {
+		return DefaultDialTimeout * time.Second
+	} else {
+		return time.Duration(pc.LcpServiceDialTimeout) * time.Second
+	}
 }
 
 func (pc ProverConfig) GetMrenclave() []byte {
