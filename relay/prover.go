@@ -336,3 +336,9 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	}
 	return cp, sc.Height, nil
 }
+
+// ProveHostConsensusState returns an existence proof of the consensus state at `height`
+// This proof would be ignored in ibc-go, but it is required to `getSelfConsensusState` of ibc-solidity.
+func (pr *Prover) ProveHostConsensusState(ctx core.QueryContext, height exported.Height, consensusState exported.ConsensusState) (proof []byte, err error) {
+	return pr.originProver.ProveHostConsensusState(ctx, height, consensusState)
+}
