@@ -5,6 +5,8 @@ LCP_BIN=./bin/lcp
 ENCLAVE_PATH=./bin/enclave.signed.so
 CERTS_DIR=./lcp/tests/certs
 
+export LCP_ENCLAVE_DEBUG=1
+
 ./scripts/init_lcp.sh
 
 if [ "$SGX_MODE" = "SW" ]; then
