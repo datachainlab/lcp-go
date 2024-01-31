@@ -7,9 +7,9 @@ lcp-go includes the followings:
 
 ## Dependencies
 
-- [lcp v0.2.2](https://github.com/datachainlab/lcp/releases/tag/v0.2.2)
+- [lcp v0.2.5](https://github.com/datachainlab/lcp/releases/tag/v0.2.5)
 - [ibc-go v7.2](https://github.com/cosmos/ibc-go/releases/tag/v7.2.0)
-- [yui-relayer v0.4.19](https://github.com/hyperledger-labs/yui-relayer/releases/tag/v0.4.19)
+- [yui-relayer v0.4.21](https://github.com/hyperledger-labs/yui-relayer/releases/tag/v0.4.21)
 
 ## How to run tests
 
