@@ -1,17 +1,30 @@
 name: test
-
-on:
-  push:
-    branches:
-      - main
-  pull_request:
+on: [push, pull_request]
 
 jobs:
-  relayer:
+  e2e-test:
     runs-on: ubuntu-22.04
+    env:
+      SGX_MODE: SW
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.20'
-      - run: make yrly
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+      - uses: datachainlab/rust-cache@allow_registry_src_caching
+        with:
+          workspaces: |
+            ./lcp
+            ./lcp/enclave
+          cache-directories: |
+            ~/.cargo/registry/src/**/librocksdb-sys-*
+      - run: curl -LO https://download.01.org/intel-sgx/sgx-linux/2.19/distro/ubuntu22.04-server/sgx_linux_x64_sdk_2.19.100.3.bin
+      - run: chmod +x ./sgx_linux_x64_sdk_2.19.100.3.bin
+      - run: echo -e 'no\n/opt' | ./sgx_linux_x64_sdk_2.19.100.3.bin
+      - run: make tendermint-images
+      - run: source /opt/sgxsdk/environment && make e2e-test
