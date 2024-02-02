@@ -11,4 +11,5 @@ var (
 	ErrProcessedTimeNotFound       = sdkerrors.Register(ModuleName, 4, "processed time not found")
 	ErrProcessedHeightNotFound     = sdkerrors.Register(ModuleName, 5, "processed height not found")
 	ErrDelayPeriodNotPassed        = sdkerrors.Register(ModuleName, 6, "packet-specified delay period has not been reached")
+	ErrInvalidMisbehaviour         = sdkerrors.Register(ModuleName, 7, "invalid misbehaviour")
 )

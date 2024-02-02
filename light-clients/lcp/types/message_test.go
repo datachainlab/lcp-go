@@ -23,18 +23,18 @@ func TestVerifyMembershipABI(t *testing.T) {
 		if !bytes.Equal(bz, bz2) {
 			t.Fatal("pack/unpack failed")
 		}
-		hc, err := EthABIDecodeHeaderedMessage(proof.Message)
+		hc, err := EthABIDecodeHeaderedProxyMessage(proof.Message)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = hc.GetVerifyMembershipMessage()
+		_, err = hc.GetVerifyMembershipProxyMessage()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
-func TestUpdateClientMessageABI(t *testing.T) {
+func TestUpdateStateProxyMessageABI(t *testing.T) {
 	for _, tc := range testUpdateClientMessageABICases {
 		bz, err := hex.DecodeString(tc.input)
 		if err != nil {
@@ -51,11 +51,11 @@ func TestUpdateClientMessageABI(t *testing.T) {
 		if !bytes.Equal(bz, bz2) {
 			t.Fatal("pack/unpack failed")
 		}
-		hc, err := EthABIDecodeHeaderedMessage(proof.Message)
+		hc, err := EthABIDecodeHeaderedProxyMessage(proof.Message)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = hc.GetUpdateClientMessage()
+		_, err = hc.GetUpdateStateProxyMessage()
 		if err != nil {
 			t.Fatal(err)
 		}

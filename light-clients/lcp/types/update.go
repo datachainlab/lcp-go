@@ -8,6 +8,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	host "github.com/cosmos/ibc-go/v7/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	mapset "github.com/deckarep/golang-set/v2"
@@ -17,7 +18,18 @@ import (
 func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, clientMsg exported.ClientMessage) error {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
-		return cs.verifyUpdateClient(ctx, cdc, clientStore, clientMsg)
+		pmsg, err := clientMsg.GetProxyMessage()
+		if err != nil {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
+		}
+		switch pmsg := pmsg.(type) {
+		case *UpdateStateProxyMessage:
+			return cs.verifyUpdateClient(ctx, cdc, clientStore, clientMsg, pmsg)
+		case *MisbehaviourProxyMessage:
+			return cs.verifyMisbehaviour(ctx, cdc, clientStore, clientMsg, pmsg)
+		default:
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg)
+		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.verifyRegisterEnclaveKey(ctx, cdc, clientStore, clientMsg)
 	default:
@@ -25,39 +37,39 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 	}
 }
 
-func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, message *UpdateClientMessage) error {
-	emsg, err := message.GetELCMessage()
-	if err != nil {
-		return err
-	}
+func (cs ClientState) UpdateStateOnMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg exported.ClientMessage) {
+	cs.Frozen = true
+	clientStore.Set(host.ClientStateKey(), clienttypes.MustMarshalClientState(cdc, &cs))
+}
 
+func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, msg *UpdateClientMessage, pmsg *UpdateStateProxyMessage) error {
 	if cs.LatestHeight.IsZero() {
-		if len(emsg.EmittedStates) == 0 {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", message)
+		if len(pmsg.EmittedStates) == 0 {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", msg)
 		}
 	} else {
-		if emsg.PrevHeight == nil || emsg.PrevStateID == nil {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", message)
+		if pmsg.PrevHeight == nil || pmsg.PrevStateID == nil {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", msg)
 		}
-		prevConsensusState, err := GetConsensusState(store, cdc, emsg.PrevHeight)
+		prevConsensusState, err := GetConsensusState(store, cdc, pmsg.PrevHeight)
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(prevConsensusState.StateId, emsg.PrevStateID[:]) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, emsg.PrevStateID[:])
+		if !bytes.Equal(prevConsensusState.StateId, pmsg.PrevStateID[:]) {
+			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, pmsg.PrevStateID[:])
 		}
 	}
 
-	signer := common.BytesToAddress(message.Signer)
+	signer := common.BytesToAddress(msg.Signer)
 	if !cs.IsActiveKey(ctx.BlockTime(), store, signer) {
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' not found", signer)
 	}
 
-	if err := VerifySignatureWithSignBytes(message.ElcMessage, message.Signature, signer); err != nil {
+	if err := VerifySignatureWithSignBytes(msg.ProxyMessage, msg.Signature, signer); err != nil {
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 	}
 
-	if err := emsg.Context.Validate(ctx.BlockTime()); err != nil {
+	if err := pmsg.Context.Validate(ctx.BlockTime()); err != nil {
 		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid context: %v", err)
 	}
 
@@ -110,7 +122,16 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, clientMsg exported.ClientMessage) []exported.Height {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
-		return cs.updateClient(ctx, cdc, clientStore, clientMsg)
+		pmsg, err := clientMsg.GetProxyMessage()
+		if err != nil {
+			panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err))
+		}
+		switch pmsg := pmsg.(type) {
+		case *UpdateStateProxyMessage:
+			return cs.updateClient(ctx, cdc, clientStore, pmsg)
+		default:
+			panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg))
+		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, cdc, clientStore, clientMsg)
 	default:
@@ -118,18 +139,14 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 	}
 }
 
-func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, message *UpdateClientMessage) []exported.Height {
-	emsg, err := message.GetELCMessage()
-	if err != nil {
-		panic(err)
+func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
+	if cs.LatestHeight.LT(msg.PostHeight) {
+		cs.LatestHeight = msg.PostHeight
 	}
-	if cs.LatestHeight.LT(emsg.PostHeight) {
-		cs.LatestHeight = emsg.PostHeight
-	}
-	consensusState := ConsensusState{StateId: emsg.PostStateID[:], Timestamp: emsg.Timestamp.Uint64()}
+	consensusState := ConsensusState{StateId: msg.PostStateID[:], Timestamp: msg.Timestamp.Uint64()}
 
 	setClientState(clientStore, cdc, &cs)
-	setConsensusState(clientStore, cdc, &consensusState, emsg.PostHeight)
+	setConsensusState(clientStore, cdc, &consensusState, msg.PostHeight)
 	return nil
 }
 

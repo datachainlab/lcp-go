@@ -1,9 +1,12 @@
 package types
 
 import (
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	"fmt"
+
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 )
+
+type ProxyMessage interface{}
 
 var _ exported.ClientMessage = (*UpdateClientMessage)(nil)
 
@@ -12,38 +15,46 @@ func (UpdateClientMessage) ClientType() string {
 }
 
 func (ucm UpdateClientMessage) GetHeight() exported.Height {
-	m, err := ucm.GetELCMessage()
+	m, err := ucm.GetProxyMessage()
 	if err != nil {
 		panic(err)
 	}
-	return m.PostHeight
+	switch m := m.(type) {
+	case *UpdateStateProxyMessage:
+		return m.PostHeight
+	default:
+		panic(fmt.Errorf("unexpected message type: %T", m))
+	}
 }
 
 func (ucm UpdateClientMessage) ValidateBasic() error {
-	if _, err := ucm.GetELCMessage(); err != nil {
+	if _, err := ucm.GetProxyMessage(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (ucm UpdateClientMessage) GetELCMessage() (*ELCUpdateClientMessage, error) {
-	m, err := EthABIDecodeHeaderedMessage(ucm.ElcMessage)
+func (ucm UpdateClientMessage) GetProxyMessage() (ProxyMessage, error) {
+	m, err := EthABIDecodeHeaderedProxyMessage(ucm.ProxyMessage)
 	if err != nil {
 		return nil, err
 	}
-	return m.GetUpdateClientMessage()
+	if m.Version != LCPMessageVersion {
+		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, m.Version)
+	}
+	if m.Type == LCPMessageTypeUpdateState {
+		return m.GetUpdateStateProxyMessage()
+	} else if m.Type == LCPMessageTypeMisbehaviour {
+		return m.GetMisbehaviourProxyMessage()
+	} else {
+		return nil, fmt.Errorf("unexpected message type: %v", m.Type)
+	}
 }
 
 var _ exported.ClientMessage = (*RegisterEnclaveKeyMessage)(nil)
 
 func (RegisterEnclaveKeyMessage) ClientType() string {
 	return ClientTypeLCP
-}
-
-func (RegisterEnclaveKeyMessage) GetHeight() exported.Height {
-	// XXX: the header doesn't have height info, so return zero
-	// this is just workaround until this function removed
-	return clienttypes.ZeroHeight()
 }
 
 func (RegisterEnclaveKeyMessage) ValidateBasic() error {

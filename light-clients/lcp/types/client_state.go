@@ -84,13 +84,6 @@ func (cs ClientState) ExportMetadata(_ sdk.KVStore) []exported.GenesisMetadata {
 	panic("not implemented") // TODO: Implement
 }
 
-func (cs ClientState) CheckForMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg exported.ClientMessage) bool {
-	return false
-}
-
-func (cs ClientState) UpdateStateOnMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, _ exported.ClientMessage) {
-}
-
 func (cs ClientState) CheckSubstituteAndUpdateState(
 	ctx sdk.Context, cdc codec.BinaryCodec, subjectClientStore,
 	substituteClientStore sdk.KVStore, substituteClient exported.ClientState,
@@ -157,11 +150,11 @@ func (cs ClientState) VerifyMembership(
 	if err != nil {
 		return err
 	}
-	m, err := commitmentProof.GetELCMessage()
+	m, err := commitmentProof.GetMessage()
 	if err != nil {
 		return err
 	}
-	msg, err := m.GetVerifyMembershipMessage()
+	msg, err := m.GetVerifyMembershipProxyMessage()
 	if err != nil {
 		return err
 	}

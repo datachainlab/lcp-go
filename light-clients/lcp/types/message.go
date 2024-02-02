@@ -15,8 +15,9 @@ import (
 
 const (
 	LCPMessageVersion          = 1
-	LCPMessageTypeUpdateClient = 1
+	LCPMessageTypeUpdateState  = 1
 	LCPMessageTypeState        = 2
+	LCPMessageTypeMisbehaviour = 3
 )
 
 const (
@@ -36,7 +37,7 @@ var (
 		{Name: "message", Type: "bytes"},
 	})
 
-	updateClientMessageABI, _ = abi.NewType("tuple", "struct UpdateClientMessage", []abi.ArgumentMarshaling{
+	updateStateProxyMessageABI, _ = abi.NewType("tuple", "struct UpdateStateProxyMessage", []abi.ArgumentMarshaling{
 		{Name: "prev_height", Type: "tuple", Components: []abi.ArgumentMarshaling{
 			{Name: "revision_number", Type: "uint64"},
 			{Name: "revision_height", Type: "uint64"},
@@ -56,6 +57,18 @@ var (
 			}},
 			{Name: "state", Type: "bytes"},
 		}},
+	})
+
+	misbehaviourProxyMessageABI, _ = abi.NewType("tuple", "struct MisbehaviourProxyMessage", []abi.ArgumentMarshaling{
+		{Name: "prev_states", Type: "tuple[]", Components: []abi.ArgumentMarshaling{
+			{Name: "height", Type: "tuple", Components: []abi.ArgumentMarshaling{
+				{Name: "revision_number", Type: "uint64"},
+				{Name: "revision_height", Type: "uint64"},
+			}},
+			{Name: "state_id", Type: "bytes32"},
+		}},
+		{Name: "context", Type: "bytes"},
+		{Name: "client_message", Type: "bytes"},
 	})
 
 	headeredMessageContextABI, _ = abi.NewType("tuple", "struct HeaderedMessageContext", []abi.ArgumentMarshaling{
@@ -86,7 +99,7 @@ func (id StateID) EqualBytes(bz []byte) bool {
 	return bytes.Equal(id[:], bz)
 }
 
-type ELCUpdateClientMessage struct {
+type UpdateStateProxyMessage struct {
 	PrevHeight    *clienttypes.Height
 	PrevStateID   *StateID
 	PostHeight    clienttypes.Height
@@ -99,6 +112,15 @@ type ELCUpdateClientMessage struct {
 type EmittedState struct {
 	Height clienttypes.Height
 	State  codectypes.Any
+}
+
+type MisbehaviourProxyMessage struct {
+	PrevStates []struct {
+		Height  clienttypes.Height
+		StateID StateID
+	}
+	Context       ValidationContext
+	ClientMessage []byte
 }
 
 // ValidationContext is the interface of validation context.
@@ -218,34 +240,44 @@ type CommitmentProof struct {
 	Signature []byte
 }
 
-func (p CommitmentProof) GetELCMessage() (*HeaderedELCMessage, error) {
-	return EthABIDecodeHeaderedMessage(p.Message)
+func (p CommitmentProof) GetMessage() (*HeaderedProxyMessage, error) {
+	return EthABIDecodeHeaderedProxyMessage(p.Message)
 }
 
-type HeaderedELCMessage struct {
+type HeaderedProxyMessage struct {
 	Version uint16
 	Type    uint16
 	Message []byte
 }
 
-func (c HeaderedELCMessage) GetUpdateClientMessage() (*ELCUpdateClientMessage, error) {
+func (c HeaderedProxyMessage) GetUpdateStateProxyMessage() (*UpdateStateProxyMessage, error) {
 	if c.Version != LCPMessageVersion {
 		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, c.Version)
 	}
-	if c.Type != LCPMessageTypeUpdateClient {
-		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeUpdateClient, c.Type)
+	if c.Type != LCPMessageTypeUpdateState {
+		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeUpdateState, c.Type)
 	}
-	return EthABIDecodeUpdateClientMessage(c.Message)
+	return EthABIDecodeUpdateStateProxyMessage(c.Message)
 }
 
-func (c HeaderedELCMessage) GetVerifyMembershipMessage() (*ELCVerifyMembershipMessage, error) {
+func (c HeaderedProxyMessage) GetMisbehaviourProxyMessage() (*MisbehaviourProxyMessage, error) {
+	if c.Version != LCPMessageVersion {
+		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, c.Version)
+	}
+	if c.Type != LCPMessageTypeMisbehaviour {
+		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeMisbehaviour, c.Type)
+	}
+	return EthABIDecodeMisbehaviourProxyMessage(c.Message)
+}
+
+func (c HeaderedProxyMessage) GetVerifyMembershipProxyMessage() (*ELCVerifyMembershipMessage, error) {
 	if c.Version != LCPMessageVersion {
 		return nil, fmt.Errorf("unexpected commitment version: expected=%v actual=%v", LCPMessageVersion, c.Version)
 	}
 	if c.Type != LCPMessageTypeState {
 		return nil, fmt.Errorf("unexpected commitment type: expected=%v actual=%v", LCPMessageTypeState, c.Type)
 	}
-	return EthABIDecodeVerifyMembershipMessage(c.Message)
+	return EthABIDecodeVerifyMembershipProxyMessage(c.Message)
 }
 
 func EthABIEncodeCommitmentProof(p *CommitmentProof) ([]byte, error) {
@@ -271,7 +303,7 @@ func EthABIDecodeCommitmentProof(bz []byte) (*CommitmentProof, error) {
 	return &p, nil
 }
 
-func EthABIDecodeHeaderedMessage(bz []byte) (*HeaderedELCMessage, error) {
+func EthABIDecodeHeaderedProxyMessage(bz []byte) (*HeaderedProxyMessage, error) {
 	unpacker := abi.Arguments{
 		{Type: headeredMessageABI},
 	}
@@ -290,16 +322,16 @@ func EthABIDecodeHeaderedMessage(bz []byte) (*HeaderedELCMessage, error) {
 	// 4-31: reserved
 	version := binary.BigEndian.Uint16(p.Header[:2])
 	messageType := binary.BigEndian.Uint16(p.Header[2:4])
-	return &HeaderedELCMessage{
+	return &HeaderedProxyMessage{
 		Version: version,
 		Type:    messageType,
 		Message: p.Message,
 	}, nil
 }
 
-func EthABIDecodeUpdateClientMessage(bz []byte) (*ELCUpdateClientMessage, error) {
+func EthABIDecodeUpdateStateProxyMessage(bz []byte) (*UpdateStateProxyMessage, error) {
 	unpacker := abi.Arguments{
-		{Type: updateClientMessageABI},
+		{Type: updateStateProxyMessageABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
@@ -330,7 +362,7 @@ func EthABIDecodeUpdateClientMessage(bz []byte) (*ELCUpdateClientMessage, error)
 	if err != nil {
 		return nil, err
 	}
-	c := &ELCUpdateClientMessage{
+	c := &UpdateStateProxyMessage{
 		PostStateID: p.PostStateId,
 		PostHeight:  clienttypes.Height{RevisionNumber: p.PostHeight.RevisionNumber, RevisionHeight: p.PostHeight.RevisionHeight},
 		Timestamp:   p.Timestamp,
@@ -354,6 +386,49 @@ func EthABIDecodeUpdateClientMessage(bz []byte) (*ELCUpdateClientMessage, error)
 		})
 	}
 	return c, nil
+}
+
+func EthABIDecodeMisbehaviourProxyMessage(bz []byte) (*MisbehaviourProxyMessage, error) {
+	unpacker := abi.Arguments{
+		{Type: misbehaviourProxyMessageABI},
+	}
+	v, err := unpacker.Unpack(bz)
+	if err != nil {
+		return nil, err
+	}
+	p := v[0].(struct {
+		PrevStates []struct {
+			Height struct {
+				RevisionNumber uint64 `json:"revision_number"`
+				RevisionHeight uint64 `json:"revision_height"`
+			} `json:"height"`
+			StateID [32]byte `json:"state_id"`
+		} `json:"prev_states"`
+		Context       []byte `json:"context"`
+		ClientMessage []byte `json:"client_message"`
+	})
+	cctx, err := EthABIDecodeValidationContext(p.Context)
+	if err != nil {
+		return nil, err
+	}
+	var prevStates []struct {
+		Height  clienttypes.Height
+		StateID StateID
+	}
+	for _, prev := range p.PrevStates {
+		prevStates = append(prevStates, struct {
+			Height  clienttypes.Height
+			StateID StateID
+		}{
+			Height:  clienttypes.Height{RevisionNumber: prev.Height.RevisionNumber, RevisionHeight: prev.Height.RevisionHeight},
+			StateID: prev.StateID,
+		})
+	}
+	return &MisbehaviourProxyMessage{
+		PrevStates:    prevStates,
+		Context:       cctx,
+		ClientMessage: p.ClientMessage,
+	}, nil
 }
 
 func EthABIDecodeValidationContext(bz []byte) (ValidationContext, error) {
@@ -404,7 +479,7 @@ func EthABIDecodeTrustingPeriodValidationContext(bz []byte) (*TrustingPeriodVali
 	return DecodeTrustingPeriodValidationContext(p.Timestamps, p.Params), nil
 }
 
-func EthABIDecodeVerifyMembershipMessage(bz []byte) (*ELCVerifyMembershipMessage, error) {
+func EthABIDecodeVerifyMembershipProxyMessage(bz []byte) (*ELCVerifyMembershipMessage, error) {
 	unpacker := abi.Arguments{
 		{Type: verifyMembershipMessageABI},
 	}
