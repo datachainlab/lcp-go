@@ -402,7 +402,7 @@ func EthABIDecodeMisbehaviourProxyMessage(bz []byte) (*MisbehaviourProxyMessage,
 				RevisionNumber uint64 `json:"revision_number"`
 				RevisionHeight uint64 `json:"revision_height"`
 			} `json:"height"`
-			StateID [32]byte `json:"state_id"`
+			StateId [32]byte `json:"state_id"`
 		} `json:"prev_states"`
 		Context       []byte `json:"context"`
 		ClientMessage []byte `json:"client_message"`
@@ -421,7 +421,7 @@ func EthABIDecodeMisbehaviourProxyMessage(bz []byte) (*MisbehaviourProxyMessage,
 			StateID StateID
 		}{
 			Height:  clienttypes.Height{RevisionNumber: prev.Height.RevisionNumber, RevisionHeight: prev.Height.RevisionHeight},
-			StateID: prev.StateID,
+			StateID: prev.StateId,
 		})
 	}
 	return &MisbehaviourProxyMessage{
