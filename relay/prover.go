@@ -182,7 +182,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 			return nil, err
 		}
 		// ensure the message is valid
-		if _, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message); err != nil {
+		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
 			return nil, err
 		}
 		messages = append(messages, res.Message)
@@ -202,9 +202,9 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 		log.GetLogger().Info("updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
 			updates = append(updates, &lcptypes.UpdateClientMessage{
-				ElcMessage: messages[i],
-				Signer:     pr.activeEnclaveKey.EnclaveKeyAddress,
-				Signature:  signatures[i],
+				ProxyMessage: messages[i],
+				Signer:       pr.activeEnclaveKey.EnclaveKeyAddress,
+				Signature:    signatures[i],
 			})
 		}
 	}
@@ -227,9 +227,9 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 				return nil, fmt.Errorf("unexpected error: messages must not be empty")
 			} else if mn == 1 {
 				return &lcptypes.UpdateClientMessage{
-					ElcMessage: batches[0].Messages[0],
-					Signer:     batches[0].Signer,
-					Signature:  batches[0].Signatures[0],
+					ProxyMessage: batches[0].Messages[0],
+					Signer:       batches[0].Signer,
+					Signature:    batches[0].Signatures[0],
 				}, nil
 			} else {
 				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
@@ -241,9 +241,9 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 					return nil, err
 				}
 				return &lcptypes.UpdateClientMessage{
-					ElcMessage: resp.Message,
-					Signer:     resp.Signer,
-					Signature:  resp.Signature,
+					ProxyMessage: resp.Message,
+					Signer:       resp.Signer,
+					Signature:    resp.Signature,
 				}, nil
 			}
 		} else if n == 0 {
@@ -318,11 +318,11 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	message, err := lcptypes.EthABIDecodeHeaderedMessage(res.Message)
+	message, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}
-	sc, err := message.GetVerifyMembershipMessage()
+	sc, err := message.GetVerifyMembershipProxyMessage()
 	if err != nil {
 		return nil, clienttypes.Height{}, err
 	}

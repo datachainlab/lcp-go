@@ -366,9 +366,9 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	var msgs []sdk.Msg
 	for _, update := range updates {
 		message := &lcptypes.UpdateClientMessage{
-			ElcMessage: update.Message,
-			Signer:     update.Signer,
-			Signature:  update.Signature,
+			ProxyMessage: update.Message,
+			Signer:       update.Signer,
+			Signature:    update.Signature,
 		}
 		if err := message.ValidateBasic(); err != nil {
 			return err
