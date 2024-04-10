@@ -1,12 +1,13 @@
 package types
 
 import (
+	errorsmod "cosmossdk.io/errors"
+	storetypes "cosmossdk.io/store/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	host "github.com/cosmos/ibc-go/v7/modules/core/24-host"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 )
 
 var (
@@ -17,14 +18,14 @@ var (
 )
 
 // setClientState stores the client state
-func setClientState(clientStore sdk.KVStore, cdc codec.BinaryCodec, clientState *ClientState) {
+func setClientState(clientStore storetypes.KVStore, cdc codec.BinaryCodec, clientState *ClientState) {
 	key := host.ClientStateKey()
 	val := clienttypes.MustMarshalClientState(cdc, clientState)
 	clientStore.Set(key, val)
 }
 
 // setConsensusState stores the consensus state at the given height.
-func setConsensusState(clientStore sdk.KVStore, cdc codec.BinaryCodec, consensusState *ConsensusState, height exported.Height) {
+func setConsensusState(clientStore storetypes.KVStore, cdc codec.BinaryCodec, consensusState *ConsensusState, height exported.Height) {
 	key := host.ConsensusStateKey(height)
 	val := clienttypes.MustMarshalConsensusState(cdc, consensusState)
 	clientStore.Set(key, val)
@@ -32,10 +33,10 @@ func setConsensusState(clientStore sdk.KVStore, cdc codec.BinaryCodec, consensus
 
 // GetConsensusState retrieves the consensus state from the client prefixed
 // store. An error is returned if the consensus state does not exist.
-func GetConsensusState(store sdk.KVStore, cdc codec.BinaryCodec, height exported.Height) (*ConsensusState, error) {
+func GetConsensusState(store storetypes.KVStore, cdc codec.BinaryCodec, height exported.Height) (*ConsensusState, error) {
 	bz := store.Get(host.ConsensusStateKey(height))
 	if bz == nil {
-		return nil, sdkerrors.Wrapf(
+		return nil, errorsmod.Wrapf(
 			clienttypes.ErrConsensusStateNotFound,
 			"consensus state does not exist for height %s", height,
 		)
@@ -43,12 +44,12 @@ func GetConsensusState(store sdk.KVStore, cdc codec.BinaryCodec, height exported
 
 	consensusStateI, err := clienttypes.UnmarshalConsensusState(cdc, bz)
 	if err != nil {
-		return nil, sdkerrors.Wrapf(clienttypes.ErrInvalidConsensus, "unmarshal error: %v", err)
+		return nil, errorsmod.Wrapf(clienttypes.ErrInvalidConsensus, "unmarshal error: %v", err)
 	}
 
 	consensusState, ok := consensusStateI.(*ConsensusState)
 	if !ok {
-		return nil, sdkerrors.Wrapf(
+		return nil, errorsmod.Wrapf(
 			clienttypes.ErrInvalidConsensus,
 			"invalid consensus type %T, expected %T", consensusState, &ConsensusState{},
 		)
@@ -65,7 +66,7 @@ func ProcessedTimeKey(height exported.Height) []byte {
 // SetProcessedTime stores the time at which a header was processed and the corresponding consensus state was created.
 // This is useful when validating whether a packet has reached the time specified delay period in the tendermint client's
 // verification functions
-func SetProcessedTime(clientStore sdk.KVStore, height exported.Height, timeNs uint64) {
+func SetProcessedTime(clientStore storetypes.KVStore, height exported.Height, timeNs uint64) {
 	key := ProcessedTimeKey(height)
 	val := sdk.Uint64ToBigEndian(timeNs)
 	clientStore.Set(key, val)
@@ -73,7 +74,7 @@ func SetProcessedTime(clientStore sdk.KVStore, height exported.Height, timeNs ui
 
 // GetProcessedTime gets the time (in nanoseconds) at which this chain received and processed a tendermint header.
 // This is used to validate that a received packet has passed the time delay period.
-func GetProcessedTime(clientStore sdk.KVStore, height exported.Height) (uint64, bool) {
+func GetProcessedTime(clientStore storetypes.KVStore, height exported.Height) (uint64, bool) {
 	key := ProcessedTimeKey(height)
 	bz := clientStore.Get(key)
 	if bz == nil {
@@ -83,7 +84,7 @@ func GetProcessedTime(clientStore sdk.KVStore, height exported.Height) (uint64, 
 }
 
 // deleteProcessedTime deletes the processedTime for a given height
-func deleteProcessedTime(clientStore sdk.KVStore, height exported.Height) {
+func deleteProcessedTime(clientStore storetypes.KVStore, height exported.Height) {
 	key := ProcessedTimeKey(height)
 	clientStore.Delete(key)
 }
@@ -96,7 +97,7 @@ func ProcessedHeightKey(height exported.Height) []byte {
 // SetProcessedHeight stores the height at which a header was processed and the corresponding consensus state was created.
 // This is useful when validating whether a packet has reached the specified block delay period in the tendermint client's
 // verification functions
-func SetProcessedHeight(clientStore sdk.KVStore, consHeight, processedHeight exported.Height) {
+func SetProcessedHeight(clientStore storetypes.KVStore, consHeight, processedHeight exported.Height) {
 	key := ProcessedHeightKey(consHeight)
 	val := []byte(processedHeight.String())
 	clientStore.Set(key, val)
@@ -104,7 +105,7 @@ func SetProcessedHeight(clientStore sdk.KVStore, consHeight, processedHeight exp
 
 // GetProcessedHeight gets the height at which this chain received and processed a tendermint header.
 // This is used to validate that a received packet has passed the block delay period.
-func GetProcessedHeight(clientStore sdk.KVStore, height exported.Height) (exported.Height, bool) {
+func GetProcessedHeight(clientStore storetypes.KVStore, height exported.Height) (exported.Height, bool) {
 	key := ProcessedHeightKey(height)
 	bz := clientStore.Get(key)
 	if bz == nil {
@@ -118,7 +119,7 @@ func GetProcessedHeight(clientStore sdk.KVStore, height exported.Height) (export
 }
 
 // deleteProcessedHeight deletes the processedHeight for a given height
-func deleteProcessedHeight(clientStore sdk.KVStore, height exported.Height) {
+func deleteProcessedHeight(clientStore storetypes.KVStore, height exported.Height) {
 	key := ProcessedHeightKey(height)
 	clientStore.Delete(key)
 }

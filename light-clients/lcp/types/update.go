@@ -4,23 +4,24 @@ import (
 	"bytes"
 	"time"
 
+	errorsmod "cosmossdk.io/errors"
+	storetypes "cosmossdk.io/store/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	host "github.com/cosmos/ibc-go/v7/modules/core/24-host"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, clientMsg exported.ClientMessage) error {
+func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, clientMsg exported.ClientMessage) error {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
 		pmsg, err := clientMsg.GetProxyMessage()
 		if err != nil {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
 		}
 		switch pmsg := pmsg.(type) {
 		case *UpdateStateProxyMessage:
@@ -28,75 +29,75 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 		case *MisbehaviourProxyMessage:
 			return cs.verifyMisbehaviour(ctx, cdc, clientStore, clientMsg, pmsg)
 		default:
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg)
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.verifyRegisterEnclaveKey(ctx, cdc, clientStore, clientMsg)
 	default:
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg)
 	}
 }
 
-func (cs ClientState) UpdateStateOnMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg exported.ClientMessage) {
+func (cs ClientState) UpdateStateOnMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg exported.ClientMessage) {
 	cs.Frozen = true
 	clientStore.Set(host.ClientStateKey(), clienttypes.MustMarshalClientState(cdc, &cs))
 }
 
-func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, msg *UpdateClientMessage, pmsg *UpdateStateProxyMessage) error {
+func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec, store storetypes.KVStore, msg *UpdateClientMessage, pmsg *UpdateStateProxyMessage) error {
 	if cs.LatestHeight.IsZero() {
 		if len(pmsg.EmittedStates) == 0 {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", msg)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `NewState` must be non-nil", msg)
 		}
 	} else {
 		if pmsg.PrevHeight == nil || pmsg.PrevStateID == nil {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", msg)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message %v: `PrevHeight` and `PrevStateID` must be non-nil", msg)
 		}
 		prevConsensusState, err := GetConsensusState(store, cdc, pmsg.PrevHeight)
 		if err != nil {
 			return err
 		}
 		if !bytes.Equal(prevConsensusState.StateId, pmsg.PrevStateID[:]) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, pmsg.PrevStateID[:])
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, pmsg.PrevStateID[:])
 		}
 	}
 
 	signer := common.BytesToAddress(msg.Signer)
 	if !cs.IsActiveKey(ctx.BlockTime(), store, signer) {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' not found", signer)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' not found", signer)
 	}
 
 	if err := VerifySignatureWithSignBytes(msg.ProxyMessage, msg.Signature, signer); err != nil {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 	}
 
 	if err := pmsg.Context.Validate(ctx.BlockTime()); err != nil {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid context: %v", err)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid context: %v", err)
 	}
 
 	return nil
 }
 
-func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, store sdk.KVStore, message *RegisterEnclaveKeyMessage) error {
+func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, store storetypes.KVStore, message *RegisterEnclaveKeyMessage) error {
 	// TODO define error types
 
 	if err := ias.VerifyReport(message.Report, message.Signature, message.SigningCert, ctx.BlockTime()); err != nil {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: message=%v, err=%v", message, err)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: message=%v, err=%v", message, err)
 	}
 	avr, err := ias.ParseAndValidateAVR(message.Report)
 	if err != nil {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err)
 	}
 	quoteStatus := avr.ISVEnclaveQuoteStatus.String()
 	if quoteStatus == QuoteOK {
 		if len(avr.AdvisoryIDs) != 0 {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "advisory IDs should be empty when status is OK: actual=%v", avr.AdvisoryIDs)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "advisory IDs should be empty when status is OK: actual=%v", avr.AdvisoryIDs)
 		}
 	} else {
 		if !cs.isAllowedStatus(quoteStatus) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "disallowed quote status exists: allowed=%v actual=%v", cs.AllowedQuoteStatuses, quoteStatus)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed quote status exists: allowed=%v actual=%v", cs.AllowedQuoteStatuses, quoteStatus)
 		}
 		if !cs.isAllowedAdvisoryIDs(avr.AdvisoryIDs) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "disallowed advisory ID(s) exists: allowed=%v actual=%v", cs.AllowedAdvisoryIds, avr.AdvisoryIDs)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed advisory ID(s) exists: allowed=%v actual=%v", cs.AllowedAdvisoryIds, avr.AdvisoryIDs)
 		}
 	}
 	quote, err := avr.Quote()
@@ -104,7 +105,7 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 		return err
 	}
 	if !bytes.Equal(cs.Mrenclave, quote.Report.MRENCLAVE[:]) {
-		return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, quote.Report.MRENCLAVE[:])
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
 	addr, err := ias.GetEnclaveKeyAddress(quote)
 	if err != nil {
@@ -113,33 +114,33 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
 	if e, found := cs.GetEnclaveKeyExpiredAt(store, addr); found {
 		if !e.Equal(expiredAt) {
-			return sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "enclave key '%v' already exists: expected=%v actual=%v", addr, e, expiredAt)
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "enclave key '%v' already exists: expected=%v actual=%v", addr, e, expiredAt)
 		}
 	}
 	return nil
 }
 
-func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, clientMsg exported.ClientMessage) []exported.Height {
+func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, clientMsg exported.ClientMessage) []exported.Height {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
 		pmsg, err := clientMsg.GetProxyMessage()
 		if err != nil {
-			panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err))
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err))
 		}
 		switch pmsg := pmsg.(type) {
 		case *UpdateStateProxyMessage:
 			return cs.updateClient(ctx, cdc, clientStore, pmsg)
 		default:
-			panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg))
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg))
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, cdc, clientStore, clientMsg)
 	default:
-		panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
+		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
 	}
 }
 
-func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
+func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
 	if cs.LatestHeight.LT(msg.PostHeight) {
 		cs.LatestHeight = msg.PostHeight
 	}
@@ -150,10 +151,10 @@ func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clien
 	return nil
 }
 
-func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
+func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
 	avr, err := ias.ParseAndValidateAVR(message.Report)
 	if err != nil {
-		panic(sdkerrors.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err))
+		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err))
 	}
 	quote, err := avr.Quote()
 	if err != nil {
@@ -178,7 +179,7 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec,
 	return nil
 }
 
-func (cs ClientState) GetEnclaveKeyExpiredAt(clientStore sdk.KVStore, key common.Address) (time.Time, bool) {
+func (cs ClientState) GetEnclaveKeyExpiredAt(clientStore storetypes.KVStore, key common.Address) (time.Time, bool) {
 	if !cs.Contains(clientStore, key) {
 		return time.Time{}, false
 	}
@@ -186,11 +187,11 @@ func (cs ClientState) GetEnclaveKeyExpiredAt(clientStore sdk.KVStore, key common
 	return time.Unix(int64(expiredAt), 0), true
 }
 
-func (cs ClientState) Contains(clientStore sdk.KVStore, key common.Address) bool {
+func (cs ClientState) Contains(clientStore storetypes.KVStore, key common.Address) bool {
 	return clientStore.Has(enclaveKeyPath(key))
 }
 
-func (cs ClientState) IsActiveKey(blockTime time.Time, clientStore sdk.KVStore, key common.Address) bool {
+func (cs ClientState) IsActiveKey(blockTime time.Time, clientStore storetypes.KVStore, key common.Address) bool {
 	if !cs.Contains(clientStore, key) {
 		return false
 	}
@@ -198,7 +199,7 @@ func (cs ClientState) IsActiveKey(blockTime time.Time, clientStore sdk.KVStore, 
 	return time.Unix(int64(expiredAt), 0).After(blockTime)
 }
 
-func (cs ClientState) AddEnclaveKey(clientStore sdk.KVStore, key common.Address, expiredAt time.Time) {
+func (cs ClientState) AddEnclaveKey(clientStore storetypes.KVStore, key common.Address, expiredAt time.Time) {
 	clientStore.Set(enclaveKeyPath(key), sdk.Uint64ToBigEndian(uint64(expiredAt.Unix())))
 }
 

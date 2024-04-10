@@ -4,7 +4,7 @@ LCP_PROTO ?= $(LCP_REPO)/proto/definitions
 DOCKER        ?= docker
 DOCKER_BUILD  ?= $(DOCKER) build --rm --no-cache --pull
 
-protoVer=0.13.1
+protoVer=0.14.0
 protoImageName=ghcr.io/cosmos/proto-builder:$(protoVer)
 protoImage=docker run --user 0 --rm -v $(CURDIR):/workspace --workdir /workspace $(protoImageName)
 
@@ -29,13 +29,15 @@ e2e-test: yrly lcp
 proto-gen:
 	@echo "Generating Protobuf files"
 	@rm -rf ./proto/ibc && rm -rf ./proto/lcp
-	@mkdir -p ./proto/ibc/lightclients/lcp/v1 && mkdir -p ./proto/lcp/service/elc/v1
+	@mkdir -p ./proto/ibc/lightclients/lcp/v1 && mkdir -p ./proto/lcp/service/elc/v1 && mkdir -p ./proto/lcp/service/enclave/v1
 	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/light-clients\/lcp\/types\";/g"\
 		$(LCP_PROTO)/ibc/lightclients/lcp/v1/lcp.proto > ./proto/ibc/lightclients/lcp/v1/lcp.proto
 	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/relay\/elc\";/g"\
 		$(LCP_PROTO)/lcp/service/elc/v1/query.proto > ./proto/lcp/service/elc/v1/query.proto
 	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/relay\/elc\";/g"\
 		$(LCP_PROTO)/lcp/service/elc/v1/tx.proto > ./proto/lcp/service/elc/v1/tx.proto
+	@sed "s/option\sgo_package.*;/option\ go_package\ =\ \"github.com\/datachainlab\/lcp-go\/relay\/enclave\";/g"\
+		$(LCP_PROTO)/lcp/service/enclave/v1/query.proto > ./proto/lcp/service/enclave/v1/query.proto
 	@$(protoImage) sh ./scripts/protocgen.sh
 
 proto-update-deps:
