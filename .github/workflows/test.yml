@@ -17,10 +17,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
-      - uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
+          go-version: '1.21'
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: datachainlab/rust-cache@allow_registry_src_caching
         with:
           workspaces: |
