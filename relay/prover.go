@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/enclave"
@@ -62,6 +62,8 @@ func (pr *Prover) GetOriginProver() core.Prover {
 
 // Init initializes the chain
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
+	pr.homePath = homePath
+	pr.codec = codec
 	if debug {
 		ias.SetAllowDebugEnclaves()
 	}
@@ -74,8 +76,6 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 	if err := os.MkdirAll(pr.dbPath(), os.ModePerm); err != nil {
 		return err
 	}
-	pr.homePath = homePath
-	pr.codec = codec
 	return nil
 }
 

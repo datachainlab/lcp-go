@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 
-	"github.com/cosmos/cosmos-sdk/server"
+	"cosmossdk.io/log"
+
 	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
+
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	"github.com/datachainlab/lcp-go/simapp"
 	"github.com/datachainlab/lcp-go/simapp/simd/cmd"
@@ -15,13 +17,9 @@ func main() {
 	ias.SetAllowDebugEnclaves()
 	defer ias.UnsetAllowDebugEnclaves()
 
-	rootCmd, _ := cmd.NewRootCmd()
-	if err := svrcmd.Execute(rootCmd, "simd", simapp.DefaultNodeHome); err != nil {
-		switch e := err.(type) {
-		case server.ErrorCode:
-			os.Exit(e.Code)
-		default:
-			os.Exit(1)
-		}
+	rootCmd := cmd.NewRootCmd()
+	if err := svrcmd.Execute(rootCmd, "", simapp.DefaultNodeHome); err != nil {
+		log.NewLogger(rootCmd.OutOrStderr()).Error("failure when running app", "err", err)
+		os.Exit(1)
 	}
 }

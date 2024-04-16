@@ -3,14 +3,15 @@ package types
 import (
 	"bytes"
 
+	errorsmod "cosmossdk.io/errors"
+	storetypes "cosmossdk.io/store/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func (cs ClientState) CheckForMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg exported.ClientMessage) bool {
+func (cs ClientState) CheckForMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg exported.ClientMessage) bool {
 	switch msg := msg.(type) {
 	case *UpdateClientMessage:
 		m, err := msg.GetProxyMessage()
@@ -28,28 +29,28 @@ func (cs ClientState) CheckForMisbehaviour(ctx sdk.Context, cdc codec.BinaryCode
 	}
 }
 
-func (cs ClientState) verifyMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore sdk.KVStore, msg *UpdateClientMessage, pmsg *MisbehaviourProxyMessage) error {
+func (cs ClientState) verifyMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateClientMessage, pmsg *MisbehaviourProxyMessage) error {
 	for _, state := range pmsg.PrevStates {
 		cons, err := GetConsensusState(clientStore, cdc, state.Height)
 		if err != nil {
 			return err
 		}
 		if !bytes.Equal(cons.StateId, state.StateID[:]) {
-			return sdkerrors.Wrapf(ErrInvalidMisbehaviour, "unexpected StateID: expected=%v actual=%v", cons.StateId, state.StateID)
+			return errorsmod.Wrapf(ErrInvalidMisbehaviour, "unexpected StateID: expected=%v actual=%v", cons.StateId, state.StateID)
 		}
 	}
 
 	signer := common.BytesToAddress(msg.Signer)
 	if !cs.IsActiveKey(ctx.BlockTime(), clientStore, signer) {
-		return sdkerrors.Wrapf(ErrInvalidMisbehaviour, "signer '%v' not found", signer)
+		return errorsmod.Wrapf(ErrInvalidMisbehaviour, "signer '%v' not found", signer)
 	}
 
 	if err := VerifySignatureWithSignBytes(msg.ProxyMessage, msg.Signature, signer); err != nil {
-		return sdkerrors.Wrapf(ErrInvalidMisbehaviour, err.Error())
+		return errorsmod.Wrapf(ErrInvalidMisbehaviour, err.Error())
 	}
 
 	if err := pmsg.Context.Validate(ctx.BlockTime()); err != nil {
-		return sdkerrors.Wrapf(ErrInvalidMisbehaviour, "invalid context: %v", err)
+		return errorsmod.Wrapf(ErrInvalidMisbehaviour, "invalid context: %v", err)
 	}
 
 	return nil
