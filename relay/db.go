@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 const (
@@ -37,7 +37,7 @@ func (pr *Prover) lastEnclaveKeyInfoFilePath(finalized bool) string {
 	}
 }
 
-func (pr *Prover) loadLastFinalizedEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyInfo, error) {
+func (pr *Prover) loadLastFinalizedEnclaveKey(context.Context) (*enclave.EnclaveKeyInfo, error) {
 	path := pr.lastEnclaveKeyInfoFilePath(true)
 	bz, err := os.ReadFile(path)
 	if err != nil {
@@ -53,7 +53,7 @@ func (pr *Prover) loadLastFinalizedEnclaveKey(ctx context.Context) (*enclave.Enc
 	return &eki, nil
 }
 
-func (pr *Prover) loadLastUnfinalizedEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyInfo, core.MsgID, error) {
+func (pr *Prover) loadLastUnfinalizedEnclaveKey(context.Context) (*enclave.EnclaveKeyInfo, core.MsgID, error) {
 	path := pr.lastEnclaveKeyInfoFilePath(false)
 	bz, err := os.ReadFile(path)
 	if err != nil {
@@ -73,8 +73,8 @@ func (pr *Prover) loadLastUnfinalizedEnclaveKey(ctx context.Context) (*enclave.E
 	return ueki.Info, unfinalizedMsgID, nil
 }
 
-func (pr *Prover) saveFinalizedEnclaveKeyInfo(ctx context.Context, eki *enclave.EnclaveKeyInfo) error {
-	log.Println("save finalized enclave key info")
+func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo) error {
+	log.GetLogger().Info("save finalized enclave key info")
 	bz, err := json.Marshal(eki)
 	if err != nil {
 		return err
@@ -82,8 +82,8 @@ func (pr *Prover) saveFinalizedEnclaveKeyInfo(ctx context.Context, eki *enclave.
 	return os.WriteFile(pr.lastEnclaveKeyInfoFilePath(true), bz, 0600)
 }
 
-func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(ctx context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
-	log.Println("save unfinalized enclave key info")
+func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
+	log.GetLogger().Info("save unfinalized enclave key info")
 	msgIDBytes, err := pr.codec.MarshalInterface(msgID)
 	if err != nil {
 		return err
@@ -98,9 +98,9 @@ func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(ctx context.Context, eki *enclav
 	return os.WriteFile(pr.lastEnclaveKeyInfoFilePath(false), bz, 0600)
 }
 
-func (pr *Prover) removeFinalizedEnclaveKeyInfo(ctx context.Context) error {
+func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(true)
-	log.Printf("remove finalized enclave key info: %v", path)
+	log.GetLogger().Info("remove finalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -110,9 +110,9 @@ func (pr *Prover) removeFinalizedEnclaveKeyInfo(ctx context.Context) error {
 	return os.Remove(path)
 }
 
-func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(ctx context.Context) error {
+func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(false)
-	log.Printf("remove unfinalized enclave key info: %v", path)
+	log.GetLogger().Info("remove unfinalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil

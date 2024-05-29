@@ -95,6 +95,10 @@ var (
 
 type StateID [32]byte
 
+func (id StateID) String() string {
+	return fmt.Sprintf("0x%x", id[:])
+}
+
 func (id StateID) EqualBytes(bz []byte) bool {
 	return bytes.Equal(id[:], bz)
 }
