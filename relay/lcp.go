@@ -347,41 +347,53 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 	return ids[0], nil
 }
 
+type CreateELCResult struct {
+	ELCClientID string                            `json:"elc_client_id"`
+	Message     *lcptypes.UpdateStateProxyMessage `json:"message"`
+}
+
 // height: 0 means the latest height
-func (pr *Prover) doCreateELC(height uint64) error {
+func (pr *Prover) doCreateELC(height uint64) (*CreateELCResult, error) {
 	header, err := pr.originProver.GetLatestFinalizedHeader()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	latestHeight := header.GetHeight()
 	if height == 0 {
 		height = latestHeight.GetRevisionHeight()
 	} else if height >= latestHeight.GetRevisionHeight() {
-		return fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
+		return nil, fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
 	}
 	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
 	log.GetLogger().Info("try to create ELC client", "height", h)
 	res, err := pr.createELC(h)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.GetLogger().Info("created ELC client", "client_id", res.ClientId)
 	// ensure the message is valid
 	msg, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	m, err := msg.GetUpdateStateProxyMessage()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.GetLogger().Info("created state", "post_height", m.PostHeight, "post_state_id", m.PostStateID.String(), "timestamp", m.Timestamp.String())
-	return err
+	return &CreateELCResult{
+		ELCClientID: res.ClientId,
+		Message:     m,
+	}, nil
 }
 
-func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwareChain) error {
+type UpdateELCResult struct {
+	Messages []*lcptypes.UpdateStateProxyMessage `json:"messages"`
+}
+
+func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwareChain) (*UpdateELCResult, error) {
 	if err := pr.UpdateEKIfNeeded(context.TODO(), counterparty); err != nil {
-		return err
+		return nil, err
 	}
 	if elcClientID == "" {
 		elcClientID = pr.config.ElcClientId
@@ -389,24 +401,30 @@ func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwar
 	log.GetLogger().Info("try to update the ELC client", "elc_client_id", elcClientID)
 	updates, err := pr.updateELC(elcClientID, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(updates) == 0 {
 		log.GetLogger().Info("no update is needed")
-		return nil
+		return &UpdateELCResult{
+			Messages: []*lcptypes.UpdateStateProxyMessage{},
+		}, nil
 	}
+	var msgs []*lcptypes.UpdateStateProxyMessage
 	for _, update := range updates {
 		commitment, err := lcptypes.EthABIDecodeHeaderedProxyMessage(update.Message)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		usm, err := commitment.GetUpdateStateProxyMessage()
+		msg, err := commitment.GetUpdateStateProxyMessage()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		log.GetLogger().Info("updated state", "prev_height", usm.PrevHeight, "prev_state_id", usm.PrevStateID.String(), "post_height", usm.PostHeight, "post_state_id", usm.PostStateID.String(), "timestamp", usm.Timestamp.String())
+		log.GetLogger().Info("updated state", "prev_height", msg.PrevHeight, "prev_state_id", msg.PrevStateID.String(), "post_height", msg.PostHeight, "post_state_id", msg.PostStateID.String(), "timestamp", msg.Timestamp.String())
+		msgs = append(msgs, msg)
 	}
-	return nil
+	return &UpdateELCResult{
+		Messages: msgs,
+	}, nil
 }
 
 func (pr *Prover) createELC(height exported.Height) (*elc.MsgCreateClientResponse, error) {

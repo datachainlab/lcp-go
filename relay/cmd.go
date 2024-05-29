@@ -2,6 +2,8 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -110,7 +112,16 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 				target = c[dst]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.doCreateELC(viper.GetUint64(flagHeight))
+			out, err := prover.doCreateELC(viper.GetUint64(flagHeight))
+			if err != nil {
+				return err
+			}
+			bz, err := json.Marshal(out)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(bz))
+			return nil
 		},
 	}
 	return heightFlag(srcFlag(cmd))
@@ -138,7 +149,16 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 				counterparty = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.doUpdateELC(viper.GetString(flagELCClientID), counterparty)
+			out, err := prover.doUpdateELC(viper.GetString(flagELCClientID), counterparty)
+			if err != nil {
+				return err
+			}
+			bz, err := json.Marshal(out)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(bz))
+			return nil
 		},
 	}
 	return elcClientIDFlag(srcFlag(cmd))
