@@ -3,6 +3,7 @@ module github.com/datachainlab/lcp-go
 go 1.21
 
 require (
+	cosmossdk.io/core v0.11.0
 	cosmossdk.io/errors v1.0.1
 	cosmossdk.io/store v1.0.2
 	github.com/cosmos/cosmos-sdk v0.50.5
@@ -10,9 +11,8 @@ require (
 	github.com/cosmos/ibc-go/v8 v8.2.0
 	github.com/deckarep/golang-set/v2 v2.1.0
 	github.com/ethereum/go-ethereum v1.12.0
-	github.com/gorilla/mux v1.8.1
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/hyperledger-labs/yui-relayer v0.5.1
+	github.com/hyperledger-labs/yui-relayer v0.5.3
 	github.com/oasisprotocol/oasis-core/go v0.2201.11
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
@@ -28,7 +28,6 @@ require (
 	cloud.google.com/go/storage v1.36.0 // indirect
 	cosmossdk.io/api v0.7.3 // indirect
 	cosmossdk.io/collections v0.4.0 // indirect
-	cosmossdk.io/core v0.11.0 // indirect
 	cosmossdk.io/depinject v1.0.0-alpha.4 // indirect
 	cosmossdk.io/log v1.3.1 // indirect
 	cosmossdk.io/math v1.3.0 // indirect
@@ -103,6 +102,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/gorilla/handlers v1.5.2 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
