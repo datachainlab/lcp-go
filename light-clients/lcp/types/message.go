@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -95,23 +96,45 @@ var (
 
 type StateID [32]byte
 
+func (id StateID) String() string {
+	return fmt.Sprintf("0x%x", id[:])
+}
+
 func (id StateID) EqualBytes(bz []byte) bool {
 	return bytes.Equal(id[:], bz)
 }
 
+func (id StateID) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf("\"%s\"", id.String())), nil
+}
+
 type UpdateStateProxyMessage struct {
-	PrevHeight    *clienttypes.Height
-	PrevStateID   *StateID
-	PostHeight    clienttypes.Height
-	PostStateID   StateID
-	Timestamp     *big.Int
-	Context       ValidationContext
-	EmittedStates []EmittedState
+	PrevHeight    *clienttypes.Height `json:"prev_height"`
+	PrevStateID   *StateID            `json:"prev_state_id"`
+	PostHeight    clienttypes.Height  `json:"post_height"`
+	PostStateID   StateID             `json:"post_state_id"`
+	Timestamp     *big.Int            `json:"timestamp"`
+	Context       ValidationContext   `json:"context"`
+	EmittedStates []EmittedState      `json:"emitted_states"`
 }
 
 type EmittedState struct {
 	Height clienttypes.Height
 	State  codectypes.Any
+}
+
+func (es EmittedState) MarshalJSON() ([]byte, error) {
+	var es2 struct {
+		Height clienttypes.Height `json:"height"`
+		State  struct {
+			TypeUrl string `json:"type_url"`
+			Value   []byte `json:"value"`
+		} `json:"state"`
+	}
+	es2.Height = es.Height
+	es2.State.TypeUrl = es.State.TypeUrl
+	es2.State.Value = es.State.Value
+	return json.Marshal(es2)
 }
 
 type MisbehaviourProxyMessage struct {
@@ -139,10 +162,24 @@ func (EmptyValidationContext) Validate(time.Time) error {
 
 // TrustingPeriodValidationContext is the commitment context for a commitment that requires the current time to be within the trusting period.
 type TrustingPeriodValidationContext struct {
-	UntrustedHeaderTimestamp time.Time
-	TrustedStateTimestamp    time.Time
-	TrustingPeriod           big.Int
-	ClockDrift               big.Int
+	UntrustedHeaderTimestamp time.Time `json:"untrusted_header_timestamp"`
+	TrustedStateTimestamp    time.Time `json:"trusted_state_timestamp"`
+	TrustingPeriod           big.Int   `json:"trusting_period"`
+	ClockDrift               big.Int   `json:"clock_drift"`
+}
+
+func (c TrustingPeriodValidationContext) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		UntrustedHeaderTimestamp *big.Int `json:"untrusted_header_timestamp"`
+		TrustedStateTimestamp    *big.Int `json:"trusted_state_timestamp"`
+		TrustingPeriod           *big.Int `json:"trusting_period"`
+		ClockDrift               *big.Int `json:"clock_drift"`
+	}{
+		UntrustedHeaderTimestamp: big.NewInt(c.UntrustedHeaderTimestamp.UnixNano()),
+		TrustedStateTimestamp:    big.NewInt(c.TrustedStateTimestamp.UnixNano()),
+		TrustingPeriod:           &c.TrustingPeriod,
+		ClockDrift:               &c.ClockDrift,
+	})
 }
 
 func DecodeTrustingPeriodValidationContext(timestamps, params [32]byte) *TrustingPeriodValidationContext {

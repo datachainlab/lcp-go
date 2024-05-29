@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
@@ -12,6 +11,7 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain, height uint64) error {
@@ -44,7 +44,7 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		restoreHeight = clienttypes.NewHeight(cs.GetLatestHeight().GetRevisionNumber(), height)
 	}
 
-	log.Printf("try to restore ELC state: height=%v", restoreHeight)
+	log.GetLogger().Info("try to restore ELC state", "height", restoreHeight)
 
 	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(context.TODO(), cplatestHeight), restoreHeight)
 	if err != nil {
@@ -123,7 +123,7 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		return fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
 	}
 
-	log.Printf("successfully restored ELC state: client_id=%v, state_id=%v, height=%v", res.ClientId, usm.PostStateID, usm.PostHeight)
+	log.GetLogger().Info("successfully restored ELC state", "client_id", res.ClientId, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
 
 	return nil
 }
