@@ -28,10 +28,14 @@ setup:
 handshake:
 	RLY_BIN=$(RLY_BIN) ./scripts/handshake
 
-.PHONY: test
-test:
-	RLY_BIN=$(RLY_BIN) ./scripts/test-tx
+.PHONY: test-relay
+test-relay:
+	RLY_BIN=$(RLY_BIN) ./scripts/test-relay
 
 .PHONY: restore
 restore:
 	RLY_BIN=$(RLY_BIN) ./scripts/restore
+
+.PHONY: test-elc-update
+test-elc-update:
+	RLY_BIN=$(RLY_BIN) ./scripts/test-elc-update
