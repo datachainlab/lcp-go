@@ -1,0 +1,22 @@
+#!/bin/bash
+
+set -eu
+
+RLY="${RLY_BIN} --debug"
+
+output=$(${RLY} lcp create-elc ibc01 --src 2>&1)
+if [[ ! $output =~ "created ELC client: 07-tendermint-2" ]]; then
+  echo "unexpected output: $output"
+  exit 1
+fi
+output=$(${RLY} lcp create-elc ibc01 --src=false 2>&1)
+if [[ ! $output =~ "created ELC client: 07-tendermint-3" ]]; then
+  echo "unexpected output: $output"
+  exit 1
+fi
+
+echo "sleeping for 5 seconds"
+sleep 5
+
+${RLY} lcp update-elc ibc01 --src --elc_client_id=07-tendermint-2
+${RLY} lcp update-elc ibc01 --src=false --elc_client_id=07-tendermint-3

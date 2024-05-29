@@ -99,28 +99,7 @@ func (pr *Prover) GetChainID() string {
 // These states will be submitted to the counterparty chain as MsgCreateClient.
 // If `height` is nil, the latest finalized height is selected automatically.
 func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
-	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
-	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
-	if err != nil {
-		return nil, nil, err
-	}
-	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(height)
-	if err != nil {
-		return nil, nil, err
-	}
-	anyOriginClientState, err := clienttypes.PackClientState(originClientState)
-	if err != nil {
-		return nil, nil, err
-	}
-	anyOriginConsensusState, err := clienttypes.PackConsensusState(originConsensusState)
-	if err != nil {
-		return nil, nil, err
-	}
-	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
-		ClientState:    anyOriginClientState,
-		ConsensusState: anyOriginConsensusState,
-		Signer:         tmpEKI.EnclaveKeyAddress,
-	})
+	res, err := pr.createELC(height)
 	if err != nil {
 		return nil, nil, err
 	}

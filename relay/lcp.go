@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -260,11 +261,11 @@ func (pr *Prover) validateAdvisoryIDs(ids []string) bool {
 	return targetSet.Difference(allowedSet).Cardinality() == 0
 }
 
-func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientResponse, error) {
+func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUpdateClientResponse, error) {
 
 	// 1. check if the latest height of the client is less than the given height
 
-	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: pr.config.ElcClientId})
+	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
 	}
@@ -281,11 +282,11 @@ func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientR
 		return nil, nil
 	}
 
-	log.Printf("syncUpstreamHeader try to update the client in ELC: latest=%v got=%v", clientState.GetLatestHeight(), latestHeader.GetHeight())
+	log.Printf("try to setup headers: elc_client_id=%v current=%v latest=%v", elcClientID, clientState.GetLatestHeight(), latestHeader.GetHeight())
 
 	// 2. query the header from the upstream chain
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(NewLCPQuerier(pr.lcpServiceClient, pr.config.ElcClientId), latestHeader)
+	headers, err := pr.originProver.SetupHeadersForUpdate(NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +302,7 @@ func (pr *Prover) syncUpstreamHeader(includeState bool) ([]*elc.MsgUpdateClientR
 			return nil, err
 		}
 		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &elc.MsgUpdateClient{
-			ClientId:     pr.config.ElcClientId,
+			ClientId:     elcClientID,
 			Header:       anyHeader,
 			IncludeState: includeState,
 			Signer:       pr.activeEnclaveKey.EnclaveKeyAddress,
@@ -345,6 +346,93 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 	return ids[0], nil
 }
 
+// height: 0 means the latest height
+func (pr *Prover) doCreateELC(height uint64) error {
+	header, err := pr.originProver.GetLatestFinalizedHeader()
+	if err != nil {
+		return err
+	}
+	latestHeight := header.GetHeight()
+	if height == 0 {
+		height = latestHeight.GetRevisionHeight()
+	} else if height >= latestHeight.GetRevisionHeight() {
+		return fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
+	}
+	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
+	log.Printf("try to create ELC client: height=%v", h)
+	res, err := pr.createELC(h)
+	if err != nil {
+		return err
+	}
+	log.Printf("created ELC client: %v", res.ClientId)
+	// ensure the message is valid
+	msg, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
+	if err != nil {
+		return err
+	}
+	m, err := msg.GetUpdateStateProxyMessage()
+	if err != nil {
+		return err
+	}
+	log.Printf("created state: post_height=%v post_state_id=0x%x timestamp=%v", m.PostHeight, m.PostStateID, m.Timestamp.String())
+	return err
+}
+
+func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwareChain) error {
+	if err := pr.UpdateEKIfNeeded(context.TODO(), counterparty); err != nil {
+		return err
+	}
+	if elcClientID == "" {
+		elcClientID = pr.config.ElcClientId
+	}
+	log.Printf("try to update the ELC client: elc_client_id=%v", elcClientID)
+	updates, err := pr.updateELC(elcClientID, false)
+	if err != nil {
+		return err
+	}
+	if len(updates) == 0 {
+		log.Println("no update is needed")
+		return nil
+	}
+	for _, update := range updates {
+		commitment, err := lcptypes.EthABIDecodeHeaderedProxyMessage(update.Message)
+		if err != nil {
+			return err
+		}
+		usm, err := commitment.GetUpdateStateProxyMessage()
+		if err != nil {
+			return err
+		}
+		log.Printf("updated state: prev_height=%v prev_state_id=0x%x post_height=%v post_state_id=0x%x timestamp=%v", usm.PrevHeight, *usm.PrevStateID, usm.PostHeight, usm.PostStateID, usm.Timestamp.String())
+	}
+	return nil
+}
+
+func (pr *Prover) createELC(height exported.Height) (*elc.MsgCreateClientResponse, error) {
+	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
+	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(height)
+	if err != nil {
+		return nil, err
+	}
+	anyOriginClientState, err := clienttypes.PackClientState(originClientState)
+	if err != nil {
+		return nil, err
+	}
+	anyOriginConsensusState, err := clienttypes.PackConsensusState(originConsensusState)
+	if err != nil {
+		return nil, err
+	}
+	return pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+		ClientState:    anyOriginClientState,
+		ConsensusState: anyOriginConsensusState,
+		Signer:         tmpEKI.EnclaveKeyAddress,
+	})
+}
+
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	srcProver := src.Prover.(*Prover)
 	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
@@ -352,7 +440,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	}
 
 	// 1. LCP synchronises with the latest header of the upstream chain
-	updates, err := srcProver.syncUpstreamHeader(true)
+	updates, err := srcProver.updateELC(srcProver.config.ElcClientId, true)
 	if err != nil {
 		return err
 	}

@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	flagSrc    = "src"
-	flagHeight = "height"
+	flagSrc         = "src"
+	flagHeight      = "height"
+	flagELCClientID = "elc_client_id"
 )
 
 func LCPCmd(ctx *config.Context) *cobra.Command {
@@ -21,6 +22,8 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	}
 
 	cmd.AddCommand(
+		createELCCmd(ctx),
+		updateELCCmd(ctx),
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
 		restoreELCStateCmd(ctx),
@@ -88,6 +91,57 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 	return srcFlag(cmd)
+}
+
+func createELCCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create-elc [path]",
+		Short: "Create ELC client",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var target *core.ProvableChain
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+			} else {
+				target = c[dst]
+			}
+			prover := target.Prover.(*Prover)
+			return prover.doCreateELC(viper.GetUint64(flagHeight))
+		},
+	}
+	return heightFlag(srcFlag(cmd))
+}
+
+func updateELCCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update-elc [path]",
+		Short: "Update ELC client",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var (
+				target       *core.ProvableChain
+				counterparty *core.ProvableChain
+			)
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+				counterparty = c[dst]
+			} else {
+				target = c[dst]
+				counterparty = c[src]
+			}
+			prover := target.Prover.(*Prover)
+			return prover.doUpdateELC(viper.GetString(flagELCClientID), counterparty)
+		},
+	}
+	return elcClientIDFlag(srcFlag(cmd))
 }
 
 func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
@@ -158,6 +212,14 @@ func srcFlag(cmd *cobra.Command) *cobra.Command {
 func heightFlag(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().Uint64P(flagHeight, "", 0, "a height to restore")
 	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func elcClientIDFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().StringP("elc_client_id", "", "", "a client ID of the ELC client")
+	if err := viper.BindPFlag(flagELCClientID, cmd.Flags().Lookup(flagELCClientID)); err != nil {
 		panic(err)
 	}
 	return cmd
