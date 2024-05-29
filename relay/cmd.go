@@ -21,6 +21,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	}
 
 	cmd.AddCommand(
+		createELCCmd(ctx),
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
 		restoreELCStateCmd(ctx),
@@ -88,6 +89,29 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 	return srcFlag(cmd)
+}
+
+func createELCCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "create-elc [path]",
+		Short: "Create ELC client",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var target *core.ProvableChain
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+			} else {
+				target = c[dst]
+			}
+			prover := target.Prover.(*Prover)
+			return prover.doCreateELC(viper.GetUint64(flagHeight))
+		},
+	}
+	return heightFlag(srcFlag(cmd))
 }
 
 func restoreELCStateCmd(ctx *config.Context) *cobra.Command {

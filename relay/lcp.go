@@ -9,6 +9,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -343,6 +344,63 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		return nil, fmt.Errorf("unexpected number of msgIDs: %v", ids)
 	}
 	return ids[0], nil
+}
+
+// height: 0 means the latest height
+func (pr *Prover) doCreateELC(height uint64) error {
+	header, err := pr.originProver.GetLatestFinalizedHeader()
+	if err != nil {
+		return err
+	}
+	latestHeight := header.GetHeight()
+	if height == 0 {
+		height = latestHeight.GetRevisionHeight()
+	} else if height >= latestHeight.GetRevisionHeight() {
+		return fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
+	}
+	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
+	log.Printf("try to create ELC client: height=%v", h)
+	res, err := pr.createELC(h)
+	if err != nil {
+		return err
+	}
+	log.Printf("created ELC client: %v", res.ClientId)
+	// ensure the message is valid
+	msg, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
+	if err != nil {
+		return err
+	}
+	m, err := msg.GetUpdateStateProxyMessage()
+	if err != nil {
+		return err
+	}
+	log.Printf("created state: post_height=%v post_state_id=0x%x", m.PostHeight, m.PostStateID)
+	return err
+}
+
+func (pr *Prover) createELC(height exported.Height) (*elc.MsgCreateClientResponse, error) {
+	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
+	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(height)
+	if err != nil {
+		return nil, err
+	}
+	anyOriginClientState, err := clienttypes.PackClientState(originClientState)
+	if err != nil {
+		return nil, err
+	}
+	anyOriginConsensusState, err := clienttypes.PackConsensusState(originConsensusState)
+	if err != nil {
+		return nil, err
+	}
+	return pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+		ClientState:    anyOriginClientState,
+		ConsensusState: anyOriginConsensusState,
+		Signer:         tmpEKI.EnclaveKeyAddress,
+	})
 }
 
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
