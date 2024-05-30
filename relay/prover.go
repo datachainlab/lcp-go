@@ -64,7 +64,7 @@ func (pr *Prover) GetOriginProver() core.Prover {
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
 	pr.homePath = homePath
 	pr.codec = codec
-	if debug {
+	if pr.config.IsDebugEnclave {
 		ias.SetAllowDebugEnclaves()
 	}
 	if err := pr.originChain.Init(homePath, timeout, codec, debug); err != nil {

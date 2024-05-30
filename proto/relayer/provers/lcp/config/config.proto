@@ -22,4 +22,5 @@ message ProverConfig {
     string elc_client_id = 8;
     bool message_aggregation = 9;
     uint64 message_aggregation_batch_size = 10;
+    bool is_debug_enclave = 11;
 }
