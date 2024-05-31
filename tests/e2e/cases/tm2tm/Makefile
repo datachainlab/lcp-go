@@ -36,6 +36,6 @@ test-relay:
 restore:
 	RLY_BIN=$(RLY_BIN) ./scripts/restore
 
-.PHONY: test-elc-update
-test-elc-update:
-	RLY_BIN=$(RLY_BIN) ./scripts/test-elc-update
+.PHONY: test-elc-cmd
+test-elc-cmd:
+	RLY_BIN=$(RLY_BIN) ./scripts/test-elc-cmd

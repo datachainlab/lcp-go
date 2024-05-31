@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/spf13/cobra"
@@ -26,9 +27,11 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	cmd.AddCommand(
 		createELCCmd(ctx),
 		updateELCCmd(ctx),
+		restoreELCCmd(ctx),
+		queryELCCmd(ctx),
+		flags.LineBreak,
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
-		restoreELCStateCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
 	)
 
@@ -112,7 +115,13 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 				target = c[dst]
 			}
 			prover := target.Prover.(*Prover)
-			out, err := prover.doCreateELC(viper.GetUint64(flagHeight))
+			var elcClientID string
+			if viper.GetString(flagELCClientID) != "" {
+				elcClientID = viper.GetString(flagELCClientID)
+			} else {
+				elcClientID = prover.config.ElcClientId
+			}
+			out, err := prover.doCreateELC(elcClientID, viper.GetUint64(flagHeight))
 			if err != nil {
 				return err
 			}
@@ -124,7 +133,9 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 			return nil
 		},
 	}
-	return heightFlag(srcFlag(cmd))
+	cmd = elcClientIDFlag(heightFlag(srcFlag(cmd)))
+	cmd.MarkFlagRequired(flagELCClientID)
+	return cmd
 }
 
 func updateELCCmd(ctx *config.Context) *cobra.Command {
@@ -149,7 +160,13 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 				counterparty = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			out, err := prover.doUpdateELC(viper.GetString(flagELCClientID), counterparty)
+			var elcClientID string
+			if id := viper.GetString(flagELCClientID); id != "" {
+				elcClientID = id
+			} else {
+				elcClientID = prover.config.ElcClientId
+			}
+			out, err := prover.doUpdateELC(elcClientID, counterparty)
 			if err != nil {
 				return err
 			}
@@ -164,10 +181,48 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 	return elcClientIDFlag(srcFlag(cmd))
 }
 
-func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
+func queryELCCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "restore-elc-state [path]",
-		Short: "Restore ELC state on LCP",
+		Use:   "query-elc [path]",
+		Short: "Query ELC client",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var target *core.ProvableChain
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+			} else {
+				target = c[dst]
+			}
+			prover := target.Prover.(*Prover)
+			var elcClientID string
+			if id := viper.GetString(flagELCClientID); id != "" {
+				elcClientID = id
+			} else {
+				elcClientID = prover.config.ElcClientId
+			}
+			out, err := prover.doQueryELC(elcClientID)
+			if err != nil {
+				return err
+			}
+			bz, err := json.Marshal(out)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(bz))
+			return nil
+		},
+	}
+	return elcClientIDFlag(srcFlag(cmd))
+}
+
+func restoreELCCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restore-elc [path]",
+		Short: "Restore ELC client state with the latest height of the LCP Client on the counterparty chain",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
@@ -186,22 +241,22 @@ func restoreELCStateCmd(ctx *config.Context) *cobra.Command {
 				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			if err := prover.restoreELCState(context.TODO(), verifier, viper.GetUint64(flagHeight)); err != nil {
-				return err
+			var elcClientID string
+			if id := viper.GetString(flagELCClientID); id != "" {
+				elcClientID = id
+			} else {
+				elcClientID = prover.config.ElcClientId
 			}
-			if err := prover.removeEnclaveKeyInfos(context.TODO()); err != nil {
-				return err
-			}
-			return nil
+			return prover.restoreELC(context.TODO(), verifier, elcClientID, viper.GetUint64(flagHeight))
 		},
 	}
-	return heightFlag(srcFlag(cmd))
+	return elcClientIDFlag(heightFlag(srcFlag(cmd)))
 }
 
 func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove-eki [path]",
-		Short: "Remove finalized and unfinalized EKIs in the relayer home directory",
+		Short: "Remove finalized and unfinalized EKIs in the relayer's home directory",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])

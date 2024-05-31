@@ -30,6 +30,6 @@ LCP_PID=$!
 make -C tests/e2e/cases/tm2tm restore
 
 make -C tests/e2e/cases/tm2tm test-relay
-make -C tests/e2e/cases/tm2tm test-elc-update
+make -C tests/e2e/cases/tm2tm test-elc-cmd
 make -C tests/e2e/cases/tm2tm network-down
 kill $LCP_PID
