@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -eu
+
+RLY="${RLY_BIN} --debug"
+
+echo "query non-existent ELCs"
+
+src_elc_exists=$(${RLY} lcp query-elc ibc01 --elc_client_id=07-tendermint-2 --src | jq -r '.found')
+if [ "${src_elc_exists}" != "false" ]; then
+  echo "src elc already exists"
+  exit 1
+fi
+dst_elc_exists=$(${RLY} lcp query-elc ibc01 --elc_client_id=07-tendermint-3 --src=false | jq -r '.found')
+if [ "${dst_elc_exists}" != "false" ]; then
+  echo "dst elc already exists"
+  exit 1
+fi
+
+echo "create a new ELCs"
+
+src_elc_created=$(${RLY} lcp create-elc ibc01 --elc_client_id=07-tendermint-2 --src | jq -r '.created')
+if [ "${src_elc_created}" != "true" ]; then
+  echo "failed to create src elc"
+  exit 1
+fi
+dst_elc_created=$(${RLY} lcp create-elc ibc01 --elc_client_id=07-tendermint-3 --src=false | jq -r '.created')
+if [ "${dst_elc_created}" != "true" ]; then
+  echo "failed to create dst elc"
+  exit 1
+fi
+
+echo "query the ELCs"
+
+src_elc_exists=$(${RLY} lcp query-elc ibc01 --elc_client_id=07-tendermint-2 --src | jq -r '.found')
+if [ "${src_elc_exists}" != "true" ]; then
+  echo "src elc does not exist"
+  exit 1
+fi
+
+dst_elc_exists=$(${RLY} lcp query-elc ibc01 --elc_client_id=07-tendermint-3 --src=false | jq -r '.found')
+if [ "${dst_elc_exists}" != "true" ]; then
+  echo "dst elc does not exist"
+  exit 1
+fi
+
+echo "sleeping for 5 seconds"
+sleep 5
+
+echo "update the ELCs"
+
+${RLY} lcp update-elc ibc01 --src --elc_client_id=07-tendermint-2
+${RLY} lcp update-elc ibc01 --src=false --elc_client_id=07-tendermint-3
+
+echo "ensure that the same elc ID cannot be used for both src and dst"
+
+src_elc_created=$(${RLY} lcp create-elc ibc01 --elc_client_id=07-tendermint-2 --src | jq -r '.created')
+if [ "${src_elc_created}" != "false" ]; then
+  echo "failed to create src elc"
+  exit 1
+fi
+dst_elc_created=$(${RLY} lcp create-elc ibc01 --elc_client_id=07-tendermint-3 --src=false | jq -r '.created')
+if [ "${dst_elc_created}" != "false" ]; then
+  echo "failed to create dst elc"
+  exit 1
+fi

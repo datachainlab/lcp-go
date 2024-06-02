@@ -14,14 +14,14 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.FinalityAwareChain, height uint64) error {
-
+func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwareChain, elcClientID string, height uint64) error {
 	// ensure the client does not exist in the LCP service
-	_, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
-		ClientId: pr.config.ElcClientId,
-	})
-	if err == nil {
-		return fmt.Errorf("client '%v' already exists", pr.config.ElcClientId)
+	if res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
+		ClientId: elcClientID,
+	}); err != nil {
+		return err
+	} else if res.Found {
+		return fmt.Errorf("client '%v' already exists", elcClientID)
 	}
 
 	cplatestHeight, err := counterparty.LatestHeight()
@@ -93,6 +93,7 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		return err
 	}
 	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+		ClientId:       elcClientID,
 		ClientState:    originAnyClientState,
 		ConsensusState: originAnyConsensusState,
 		Signer:         tmpEKI.EnclaveKeyAddress,
@@ -118,12 +119,7 @@ func (pr *Prover) restoreELCState(ctx context.Context, counterparty core.Finalit
 		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, usm.PostHeight)
 	}
 
-	// TODO relayer should update res.ClientId in the config
-	if pr.config.ElcClientId != res.ClientId {
-		return fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
-	}
-
-	log.GetLogger().Info("successfully restored ELC state", "client_id", res.ClientId, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
+	log.GetLogger().Info("successfully restored ELC state", "client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
 
 	return nil
 }

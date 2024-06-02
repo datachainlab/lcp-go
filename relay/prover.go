@@ -99,14 +99,10 @@ func (pr *Prover) GetChainID() string {
 // These states will be submitted to the counterparty chain as MsgCreateClient.
 // If `height` is nil, the latest finalized height is selected automatically.
 func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
-	res, err := pr.createELC(height)
-	if err != nil {
+	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
 		return nil, nil, err
-	}
-
-	// TODO relayer should persist res.ClientId
-	if pr.config.ElcClientId != res.ClientId {
-		return nil, nil, fmt.Errorf("you must specify '%v' as elc_client_id, but got %v", res.ClientId, pr.config.ElcClientId)
+	} else if res == nil {
+		log.GetLogger().Info("no need to create ELC", "client_id", pr.config.ElcClientId)
 	}
 
 	clientState := &lcptypes.ClientState{

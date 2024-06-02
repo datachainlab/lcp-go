@@ -9,7 +9,6 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
-	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -348,12 +347,12 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 }
 
 type CreateELCResult struct {
-	ELCClientID string                            `json:"elc_client_id"`
-	Message     *lcptypes.UpdateStateProxyMessage `json:"message"`
+	Created bool                              `json:"created"`
+	Message *lcptypes.UpdateStateProxyMessage `json:"message,omitempty"`
 }
 
 // height: 0 means the latest height
-func (pr *Prover) doCreateELC(height uint64) (*CreateELCResult, error) {
+func (pr *Prover) doCreateELC(elcClientID string, height uint64) (*CreateELCResult, error) {
 	header, err := pr.originProver.GetLatestFinalizedHeader()
 	if err != nil {
 		return nil, err
@@ -365,12 +364,15 @@ func (pr *Prover) doCreateELC(height uint64) (*CreateELCResult, error) {
 		return nil, fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
 	}
 	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
-	log.GetLogger().Info("try to create ELC client", "height", h)
-	res, err := pr.createELC(h)
+	log.GetLogger().Info("try to create ELC client", "client_id", elcClientID, "height", h)
+	res, err := pr.createELC(elcClientID, h)
 	if err != nil {
 		return nil, err
+	} else if res == nil {
+		log.GetLogger().Info("no need to create ELC client", "client_id", elcClientID)
+		return &CreateELCResult{Created: false}, nil
 	}
-	log.GetLogger().Info("created ELC client", "client_id", res.ClientId)
+	log.GetLogger().Info("created ELC client", "client_id", elcClientID, "height", h)
 	// ensure the message is valid
 	msg, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
 	if err != nil {
@@ -382,8 +384,8 @@ func (pr *Prover) doCreateELC(height uint64) (*CreateELCResult, error) {
 	}
 	log.GetLogger().Info("created state", "post_height", m.PostHeight, "post_state_id", m.PostStateID.String(), "timestamp", m.Timestamp.String())
 	return &CreateELCResult{
-		ELCClientID: res.ClientId,
-		Message:     m,
+		Created: true,
+		Message: m,
 	}, nil
 }
 
@@ -394,9 +396,6 @@ type UpdateELCResult struct {
 func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwareChain) (*UpdateELCResult, error) {
 	if err := pr.UpdateEKIfNeeded(context.TODO(), counterparty); err != nil {
 		return nil, err
-	}
-	if elcClientID == "" {
-		elcClientID = pr.config.ElcClientId
 	}
 	log.GetLogger().Info("try to update the ELC client", "elc_client_id", elcClientID)
 	updates, err := pr.updateELC(elcClientID, false)
@@ -427,7 +426,68 @@ func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwar
 	}, nil
 }
 
-func (pr *Prover) createELC(height exported.Height) (*elc.MsgCreateClientResponse, error) {
+type QueryELCResult struct {
+	// if false, `Raw` and `Decoded` are empty
+	Found bool `json:"found"`
+	Raw   struct {
+		ClientState    Any `json:"client_state"`
+		ConsensusState Any `json:"consensus_state"`
+	} `json:"raw"`
+	// if cannot decode the client state or the consensus state, `Decoded` is empty
+	Decoded struct {
+		ClientState    ibcexported.ClientState    `json:"client_state"`
+		ConsensusState ibcexported.ConsensusState `json:"consensus_state"`
+	} `json:"decoded,omitempty"`
+}
+
+type Any struct {
+	TypeURL string `json:"type_url"`
+	Value   []byte `json:"value"`
+}
+
+func (pr *Prover) doQueryELC(elcClientID string) (*QueryELCResult, error) {
+	r, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
+	if err != nil {
+		return nil, err
+	} else if !r.Found {
+		return &QueryELCResult{
+			Found: false,
+		}, nil
+	}
+	var result QueryELCResult
+	result.Found = true
+	result.Raw.ClientState = Any{
+		TypeURL: r.ClientState.TypeUrl,
+		Value:   r.ClientState.Value,
+	}
+	result.Raw.ConsensusState = Any{
+		TypeURL: r.ConsensusState.TypeUrl,
+		Value:   r.ConsensusState.Value,
+	}
+	var (
+		clientState    ibcexported.ClientState
+		consensusState ibcexported.ConsensusState
+	)
+	if err := pr.codec.UnpackAny(r.ClientState, &clientState); err != nil {
+		log.GetLogger().Warn("failed to unpack client state", "error", err)
+		return &result, nil
+	}
+	if err := pr.codec.UnpackAny(r.ConsensusState, &consensusState); err != nil {
+		log.GetLogger().Warn("failed to unpack consensus state", "error", err)
+		return &result, nil
+	}
+	result.Decoded.ClientState = clientState
+	result.Decoded.ConsensusState = consensusState
+	return &result, nil
+}
+
+func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc.MsgCreateClientResponse, error) {
+	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
+	if err != nil {
+		return nil, err
+	} else if res.Found {
+		return nil, nil
+	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
 	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
 	if err != nil {
@@ -446,6 +506,7 @@ func (pr *Prover) createELC(height exported.Height) (*elc.MsgCreateClientRespons
 		return nil, err
 	}
 	return pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+		ClientId:       elcClientID,
 		ClientState:    anyOriginClientState,
 		ConsensusState: anyOriginConsensusState,
 		Signer:         tmpEKI.EnclaveKeyAddress,
