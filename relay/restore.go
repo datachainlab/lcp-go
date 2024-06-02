@@ -18,7 +18,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 	if res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
 		ClientId: elcClientID,
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to query ELC: elc_client_id=%v %w", elcClientID, err)
 	} else if res.Found {
 		return fmt.Errorf("client '%v' already exists", elcClientID)
 	}
@@ -29,11 +29,11 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 	}
 	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to query client state: height=%v %w", cplatestHeight, err)
 	}
 	var cs ibcexported.ClientState
 	if err := pr.codec.UnpackAny(counterpartyClientRes.ClientState, &cs); err != nil {
-		return err
+		return fmt.Errorf("failed to unpack client state: client_state=%v %w", counterpartyClientRes.ClientState, err)
 	}
 
 	var restoreHeight ibcexported.Height
@@ -51,7 +51,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 	}
 	var cons ibcexported.ConsensusState
 	if err := pr.codec.UnpackAny(counterpartyConsRes.ConsensusState, &cons); err != nil {
-		return err
+		return fmt.Errorf("failed to unpack consensus state: consensus_state=%v %w", counterpartyConsRes.ConsensusState, err)
 	}
 
 	clientState := cs.(*lcptypes.ClientState)
@@ -77,7 +77,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 
 	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(clientState.LatestHeight)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create initial light client state: height=%v %w", clientState.LatestHeight, err)
 	}
 	originAnyClientState, err := clienttypes.PackClientState(originClientState)
 	if err != nil {
@@ -98,7 +98,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		Signer:         tmpEKI.EnclaveKeyAddress,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create ELC client: elc_client_id=%v %w", elcClientID, err)
 	}
 
 	// Ensure the restored state is correct
@@ -118,7 +118,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, usm.PostHeight)
 	}
 
-	pr.getLogger().Info("successfully restored ELC state", "client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
+	pr.getLogger().Info("successfully restored ELC state", "elc_client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
 
 	return nil
 }

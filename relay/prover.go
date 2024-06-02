@@ -100,9 +100,9 @@ func (pr *Prover) GetChainID() string {
 // If `height` is nil, the latest finalized height is selected automatically.
 func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
 	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
 	} else if res == nil {
-		pr.getLogger().Info("no need to create ELC", "client_id", pr.config.ElcClientId)
+		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
 	}
 
 	clientState := &lcptypes.ClientState{
@@ -133,7 +133,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 
 	headers, err := pr.originProver.SetupHeadersForUpdate(dstChain, latestFinalizedHeader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
 	if len(headers) == 0 {
 		return nil, nil
@@ -142,23 +142,24 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 		messages   [][]byte
 		signatures [][]byte
 	)
-	for _, h := range headers {
+	for i, h := range headers {
 		anyHeader, err := clienttypes.PackClientMessage(h)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h, err)
 		}
-		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &elc.MsgUpdateClient{
+		m := elc.MsgUpdateClient{
 			ClientId:     pr.config.ElcClientId,
 			Header:       anyHeader,
 			IncludeState: false,
 			Signer:       pr.activeEnclaveKey.EnclaveKeyAddress,
-		})
+		}
+		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &m)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v msg=%v %w", i, pr.config.ElcClientId, m, err)
 		}
 		// ensure the message is valid
 		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to decode headered proxy message: i=%v message=%x %w", i, res.Message, err)
 		}
 		messages = append(messages, res.Message)
 		signatures = append(signatures, res.Signature)
@@ -167,7 +168,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	var updates []core.Header
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
-		pr.getLogger().Info("aggregateMessages", "num_messages", len(messages))
+		pr.getLogger().Info("aggregate messages", "num_messages", len(messages))
 		update, err := pr.aggregateMessages(messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
 		if err != nil {
 			return nil, err
@@ -207,13 +208,14 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 					Signature:    batches[0].Signatures[0],
 				}, nil
 			} else {
-				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
+				m := elc.MsgAggregateMessages{
 					Signer:     batches[0].Signer,
 					Messages:   batches[0].Messages,
 					Signatures: batches[0].Signatures,
-				})
+				}
+				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &m)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("failed to aggregate messages: msg=%v %w", m, err)
 				}
 				return &lcptypes.UpdateClientMessage{
 					ProxyMessage: resp.Message,
@@ -228,14 +230,15 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 		}
 		messages = nil
 		signatures = nil
-		for _, b := range batches {
-			resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &elc.MsgAggregateMessages{
+		for i, b := range batches {
+			m := elc.MsgAggregateMessages{
 				Signer:     b.Signer,
 				Messages:   b.Messages,
 				Signatures: b.Signatures,
-			})
+			}
+			resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &m)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to aggregate messages: i=%v msg=%v %w", i, m, err)
 			}
 			messages = append(messages, resp.Message)
 			signatures = append(signatures, resp.Signature)
@@ -248,7 +251,7 @@ func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, 
 	var currentMessages [][]byte
 	var currentBatchStartIndex uint64 = 0
 	if messageBatchSize < 2 {
-		return nil, fmt.Errorf("messageBatchSize must be greater than 1")
+		return nil, fmt.Errorf("messageBatchSize must be greater than 1: messageBatchSize=%v", messageBatchSize)
 	}
 	for i := 0; i < len(messages); i++ {
 		currentMessages = append(currentMessages, messages[i])
@@ -279,9 +282,9 @@ func (pr *Prover) CheckRefreshRequired(counterparty core.ChainInfoICS02Querier) 
 func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) ([]byte, clienttypes.Height, error) {
 	proof, proofHeight, err := pr.originProver.ProveState(ctx, path, value)
 	if err != nil {
-		return nil, clienttypes.Height{}, err
+		return nil, clienttypes.Height{}, fmt.Errorf("failed originProver.ProveState: path=%v value=%x %w", path, value, err)
 	}
-	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &elc.MsgVerifyMembership{
+	m := elc.MsgVerifyMembership{
 		ClientId:    pr.config.ElcClientId,
 		Prefix:      []byte(exported.StoreKey),
 		Path:        path,
@@ -289,17 +292,18 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 		ProofHeight: proofHeight,
 		Proof:       proof,
 		Signer:      pr.activeEnclaveKey.EnclaveKeyAddress,
-	})
+	}
+	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
 	if err != nil {
-		return nil, clienttypes.Height{}, err
+		return nil, clienttypes.Height{}, fmt.Errorf("failed ELC's VerifyMembership: elc_client_id=%v msg=%v %w", pr.config.ElcClientId, m, err)
 	}
 	message, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
 	if err != nil {
-		return nil, clienttypes.Height{}, err
+		return nil, clienttypes.Height{}, fmt.Errorf("failed to decode headered proxy message: message=%x %w", res.Message, err)
 	}
 	sc, err := message.GetVerifyMembershipProxyMessage()
 	if err != nil {
-		return nil, clienttypes.Height{}, err
+		return nil, clienttypes.Height{}, fmt.Errorf("failed GetVerifyMembershipProxyMessage: message=%x %w", res.Message, err)
 	}
 	cp, err := lcptypes.EthABIEncodeCommitmentProof(&lcptypes.CommitmentProof{
 		Message:   res.Message,
@@ -307,7 +311,7 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 		Signature: res.Signature,
 	})
 	if err != nil {
-		return nil, clienttypes.Height{}, err
+		return nil, clienttypes.Height{}, fmt.Errorf("failed to encode commitment proof: %w", err)
 	}
 	return cp, sc.Height, nil
 }

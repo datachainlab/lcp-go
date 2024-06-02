@@ -43,11 +43,11 @@ func (pr *Prover) loadLastFinalizedEnclaveKey(context.Context) (*enclave.Enclave
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%v not found: %w", path, ErrEnclaveKeyInfoNotFound)
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to stat file: path=%v %w", path, err)
 	}
 	var eki enclave.EnclaveKeyInfo
 	if err := json.Unmarshal(bz, &eki); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal enclave key info: path=%v %w", path, err)
 	}
 	return &eki, nil
 }
@@ -59,15 +59,15 @@ func (pr *Prover) loadLastUnfinalizedEnclaveKey(context.Context) (*enclave.Encla
 		if os.IsNotExist(err) {
 			return nil, nil, fmt.Errorf("%v not found: %w", path, ErrEnclaveKeyInfoNotFound)
 		}
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to stat file: path=%v %w", path, err)
 	}
 	var ueki unfinalizedEKI
 	if err := json.Unmarshal(bz, &ueki); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to unmarshal unfinalized enclave key info: %w", err)
 	}
 	var unfinalizedMsgID core.MsgID
 	if err := pr.codec.UnmarshalInterface(ueki.MsgIDBytes, &unfinalizedMsgID); err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to unmarshal msg id: value=%x %w", ueki.MsgIDBytes, err)
 	}
 	return ueki.Info, unfinalizedMsgID, nil
 }
@@ -76,25 +76,31 @@ func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.En
 	pr.getLogger().Info("save finalized enclave key info")
 	bz, err := json.Marshal(eki)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal enclave key info: %w", err)
 	}
-	return os.WriteFile(pr.lastEnclaveKeyInfoFilePath(true), bz, 0600)
+	if err := os.WriteFile(pr.lastEnclaveKeyInfoFilePath(true), bz, 0600); err != nil {
+		return fmt.Errorf("failed to write enclave key info: %w", err)
+	}
+	return nil
 }
 
 func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
 	pr.getLogger().Info("save unfinalized enclave key info")
 	msgIDBytes, err := pr.codec.MarshalInterface(msgID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal msg id: %w", err)
 	}
 	bz, err := json.Marshal(unfinalizedEKI{
 		Info:       eki,
 		MsgIDBytes: msgIDBytes,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal enclave key info: %w", err)
 	}
-	return os.WriteFile(pr.lastEnclaveKeyInfoFilePath(false), bz, 0600)
+	if err := os.WriteFile(pr.lastEnclaveKeyInfoFilePath(false), bz, 0600); err != nil {
+		return fmt.Errorf("failed to write enclave key info: %w", err)
+	}
+	return nil
 }
 
 func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
@@ -104,9 +110,12 @@ func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("failed to stat file: path=%v %w", path, err)
 	}
-	return os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove file: path=%v %w", path, err)
+	}
+	return nil
 }
 
 func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(context.Context) error {
@@ -116,9 +125,12 @@ func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(context.Context) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return err
+		return fmt.Errorf("failed to stat file: path=%v %w", path, err)
 	}
-	return os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove file: path=%v %w", path, err)
+	}
+	return nil
 }
 
 func (pr *Prover) removeEnclaveKeyInfos(ctx context.Context) error {
