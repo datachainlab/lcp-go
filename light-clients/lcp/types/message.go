@@ -330,7 +330,7 @@ func EthABIDecodeCommitmentProof(bz []byte) (*CommitmentProof, error) {
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack commitment proof: bz=%x %w", bz, err)
 	}
 	p := CommitmentProof(v[0].(struct {
 		Message   []byte         `json:"message"`
@@ -346,7 +346,7 @@ func EthABIDecodeHeaderedProxyMessage(bz []byte) (*HeaderedProxyMessage, error) 
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack headered message: bz=%x %w", bz, err)
 	}
 	p := v[0].(struct {
 		Header  [32]byte `json:"header"`
@@ -431,7 +431,7 @@ func EthABIDecodeMisbehaviourProxyMessage(bz []byte) (*MisbehaviourProxyMessage,
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack misbehaviourProxyMessage: bz=%x %w", bz, err)
 	}
 	p := v[0].(struct {
 		PrevStates []struct {
@@ -446,7 +446,7 @@ func EthABIDecodeMisbehaviourProxyMessage(bz []byte) (*MisbehaviourProxyMessage,
 	})
 	cctx, err := EthABIDecodeValidationContext(p.Context)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode validation context: bz=%x %w", p.Context, err)
 	}
 	var prevStates []struct {
 		Height  clienttypes.Height
@@ -474,7 +474,7 @@ func EthABIDecodeValidationContext(bz []byte) (ValidationContext, error) {
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack headered message context: bz=%x %w", bz, err)
 	}
 	p := v[0].(struct {
 		Header       [32]byte `json:"header"`
@@ -500,14 +500,14 @@ func EthABIDecodeValidationContext(bz []byte) (ValidationContext, error) {
 
 func EthABIDecodeTrustingPeriodValidationContext(bz []byte) (*TrustingPeriodValidationContext, error) {
 	if len(bz) != 64 {
-		return nil, fmt.Errorf("unexpected length of trusting period commitment context: %d", len(bz))
+		return nil, fmt.Errorf("unexpected length of trusting period commitment context: bz=%x", bz)
 	}
 	unpacker := abi.Arguments{
 		{Type: trustingPeriodContextABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack trusting period context: bz=%x %w", bz, err)
 	}
 	p := v[0].(struct {
 		Timestamps [32]byte `json:"timestamps"`
@@ -522,7 +522,7 @@ func EthABIDecodeVerifyMembershipProxyMessage(bz []byte) (*ELCVerifyMembershipMe
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unpack verify membership message: bz=%x %w", bz, err)
 	}
 	p := v[0].(struct {
 		Prefix []byte   `json:"prefix"`

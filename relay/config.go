@@ -89,6 +89,10 @@ func (pc ProverConfig) Validate() error {
 }
 
 func decodeMrenclaveHex(s string) ([]byte, error) {
-	s = strings.ToLower(strings.TrimPrefix(s, "0x"))
-	return hex.DecodeString(s)
+	trimmed := strings.ToLower(strings.TrimPrefix(s, "0x"))
+	bz, err := hex.DecodeString(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode MRENCLAVE: value=%v %w", s, err)
+	}
+	return bz, nil
 }
