@@ -9,7 +9,6 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
-	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -482,7 +481,7 @@ func (pr *Prover) doQueryELC(elcClientID string) (*QueryELCResult, error) {
 	return &result, nil
 }
 
-func (pr *Prover) createELC(elcClientID string, height exported.Height) (*elc.MsgCreateClientResponse, error) {
+func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc.MsgCreateClientResponse, error) {
 	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
