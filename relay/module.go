@@ -6,13 +6,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const ModuleName = "lcp-prover"
+
 type Module struct{}
 
 var _ config.ModuleI = (*Module)(nil)
 
 // Name returns the name of the module
 func (Module) Name() string {
-	return "lcp"
+	return ModuleName
 }
 
 // RegisterInterfaces register the module interfaces to protobuf Any.

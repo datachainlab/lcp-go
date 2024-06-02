@@ -11,7 +11,6 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/hyperledger-labs/yui-relayer/core"
-	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwareChain, elcClientID string, height uint64) error {
@@ -44,7 +43,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		restoreHeight = clienttypes.NewHeight(cs.GetLatestHeight().GetRevisionNumber(), height)
 	}
 
-	log.GetLogger().Info("try to restore ELC state", "height", restoreHeight)
+	pr.getLogger().Info("try to restore ELC state", "height", restoreHeight)
 
 	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(context.TODO(), cplatestHeight), restoreHeight)
 	if err != nil {
@@ -119,7 +118,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, usm.PostHeight)
 	}
 
-	log.GetLogger().Info("successfully restored ELC state", "client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
+	pr.getLogger().Info("successfully restored ELC state", "client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
 
 	return nil
 }

@@ -102,7 +102,7 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
 		return nil, nil, err
 	} else if res == nil {
-		log.GetLogger().Info("no need to create ELC", "client_id", pr.config.ElcClientId)
+		pr.getLogger().Info("no need to create ELC", "client_id", pr.config.ElcClientId)
 	}
 
 	clientState := &lcptypes.ClientState{
@@ -167,14 +167,14 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	var updates []core.Header
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
-		log.GetLogger().Info("aggregateMessages", "num_messages", len(messages))
+		pr.getLogger().Info("aggregateMessages", "num_messages", len(messages))
 		update, err := pr.aggregateMessages(messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
 		if err != nil {
 			return nil, err
 		}
 		updates = append(updates, update)
 	} else {
-		log.GetLogger().Info("updateClient", "num_messages", len(messages))
+		pr.getLogger().Info("updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
 			updates = append(updates, &lcptypes.UpdateClientMessage{
 				ProxyMessage: messages[i],
@@ -224,7 +224,7 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 		} else if n == 0 {
 			return nil, fmt.Errorf("unexpected error: batches must not be empty")
 		} else {
-			log.GetLogger().Info("aggregateMessages", "num_batches", n)
+			pr.getLogger().Info("aggregateMessages", "num_batches", n)
 		}
 		messages = nil
 		signatures = nil
@@ -316,4 +316,12 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 // This proof would be ignored in ibc-go, but it is required to `getSelfConsensusState` of ibc-solidity.
 func (pr *Prover) ProveHostConsensusState(ctx core.QueryContext, height exported.Height, consensusState exported.ConsensusState) (proof []byte, err error) {
 	return pr.originProver.ProveHostConsensusState(ctx, height, consensusState)
+}
+
+func (pr *Prover) getLogger() *log.RelayLogger {
+	logger := log.GetLogger().WithModule(ModuleName)
+	if pr.path == nil {
+		return logger
+	}
+	return logger.WithChain(pr.path.ChainID)
 }

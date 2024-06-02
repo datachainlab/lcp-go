@@ -10,7 +10,6 @@ import (
 
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/hyperledger-labs/yui-relayer/core"
-	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 const (
@@ -74,7 +73,7 @@ func (pr *Prover) loadLastUnfinalizedEnclaveKey(context.Context) (*enclave.Encla
 }
 
 func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo) error {
-	log.GetLogger().Info("save finalized enclave key info")
+	pr.getLogger().Info("save finalized enclave key info")
 	bz, err := json.Marshal(eki)
 	if err != nil {
 		return err
@@ -83,7 +82,7 @@ func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.En
 }
 
 func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
-	log.GetLogger().Info("save unfinalized enclave key info")
+	pr.getLogger().Info("save unfinalized enclave key info")
 	msgIDBytes, err := pr.codec.MarshalInterface(msgID)
 	if err != nil {
 		return err
@@ -100,7 +99,7 @@ func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.
 
 func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(true)
-	log.GetLogger().Info("remove finalized enclave key info", "path", path)
+	pr.getLogger().Info("remove finalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -112,7 +111,7 @@ func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
 
 func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(false)
-	log.GetLogger().Info("remove unfinalized enclave key info", "path", path)
+	pr.getLogger().Info("remove unfinalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
