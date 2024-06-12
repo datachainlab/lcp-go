@@ -14,6 +14,7 @@ import (
 	commitmenttypes "github.com/cosmos/ibc-go/v8/modules/core/23-commitment/types"
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -76,6 +77,12 @@ func (cs ClientState) Initialize(_ sdk.Context, cdc codec.BinaryCodec, clientSto
 	}
 	if len(cs.Operators) != 0 && (cs.OperatorsThresholdNumerator == 0 || cs.OperatorsThresholdDenominator == 0) {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsThresholdNumerator` and `OperatorsThresholdDenominator` must be non-zero")
+	}
+	var zeroAddr common.Address
+	for _, op := range cs.GetOperators() {
+		if op == zeroAddr {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "operator address cannot be empty")
+		}
 	}
 	if cs.OperatorsThresholdNumerator > cs.OperatorsThresholdDenominator {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsThresholdNumerator` must be less than or equal to `OperatorsThresholdDenominator`")

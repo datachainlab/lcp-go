@@ -37,7 +37,7 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg)
 		}
 	case *RegisterEnclaveKeyMessage:
-		return cs.verifyRegisterEnclaveKey(ctx, cdc, clientStore, clientMsg)
+		return cs.verifyRegisterEnclaveKey(ctx, clientStore, clientMsg)
 	default:
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg)
 	}
@@ -59,7 +59,7 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 		}
 		prevConsensusState, err := GetConsensusState(store, cdc, pmsg.PrevHeight)
 		if err != nil {
-			return err
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get consensus state: %v", err)
 		}
 		if !bytes.Equal(prevConsensusState.StateId, pmsg.PrevStateID[:]) {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, pmsg.PrevStateID[:])
@@ -73,7 +73,7 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 	return nil
 }
 
-func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, store storetypes.KVStore, message *RegisterEnclaveKeyMessage) error {
+func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes.KVStore, message *RegisterEnclaveKeyMessage) error {
 	// TODO define error types
 
 	if err := ias.VerifyReport(message.Report, message.Signature, message.SigningCert, ctx.BlockTime()); err != nil {
@@ -103,24 +103,29 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 	if !bytes.Equal(cs.Mrenclave, quote.Report.MRENCLAVE[:]) {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712RegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), message.Report)
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err)
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err)
+		}
+	}
 	ek, expectedOperator, err := ias.GetEKAndOperator(quote)
 	if err != nil {
-		return err
-	}
-	commitment, err := ComputeEIP712RegisterEnclaveKeyHash(ctx.ChainID(), []byte("ibc"), message.Report)
-	if err != nil {
-		return err
-	}
-	operator, err := RecoverAddress(commitment, message.OperatorSignature)
-	if err != nil {
-		return err
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get enclave key and operator: %v", err)
 	}
 	if (expectedOperator != common.Address{}) && operator != expectedOperator {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v", expectedOperator, operator)
 	}
 	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
 	if cs.Contains(store, ek) {
-		return cs.ensureEKInfoMatch(store, ek, operator, expiredAt)
+		if err := cs.ensureEKInfoMatch(store, ek, operator, expiredAt); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid enclave key info: %v", err)
+		}
 	}
 	return nil
 }
@@ -134,18 +139,18 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 		}
 		switch pmsg := pmsg.(type) {
 		case *UpdateStateProxyMessage:
-			return cs.updateClient(ctx, cdc, clientStore, pmsg)
+			return cs.updateClient(cdc, clientStore, pmsg)
 		default:
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg))
 		}
 	case *RegisterEnclaveKeyMessage:
-		return cs.registerEnclaveKey(ctx, cdc, clientStore, clientMsg)
+		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
 	default:
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
 	}
 }
 
-func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
+func (cs ClientState) updateClient(cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
 	if cs.LatestHeight.LT(msg.PostHeight) {
 		cs.LatestHeight = msg.PostHeight
 	}
@@ -156,7 +161,7 @@ func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clien
 	return nil
 }
 
-func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
+func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
 	avr, err := ias.ParseAndValidateAVR(message.Report)
 	if err != nil {
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err))
