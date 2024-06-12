@@ -11,6 +11,7 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 
@@ -323,9 +324,17 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		return nil, err
 	}
 	message := &lcptypes.RegisterEnclaveKeyMessage{
-		Report:      eki.Report,
-		Signature:   eki.Signature,
-		SigningCert: eki.SigningCert,
+		Report:            eki.Report,
+		Signature:         eki.Signature,
+		SigningCert:       eki.SigningCert,
+		OperatorSignature: nil,
+	}
+	if pr.IsOperatorEnabled() {
+		sig, err := pr.OperatorSign(crypto.Keccak256Hash([]byte(eki.Report)))
+		if err != nil {
+			return nil, err
+		}
+		message.OperatorSignature = sig
 	}
 	signer, err := verifier.GetAddress()
 	if err != nil {
@@ -534,8 +543,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	for _, update := range updates {
 		message := &lcptypes.UpdateClientMessage{
 			ProxyMessage: update.Message,
-			Signer:       update.Signer,
-			Signature:    update.Signature,
+			Signatures:   [][]byte{update.Signature},
 		}
 		if err := message.ValidateBasic(); err != nil {
 			return err

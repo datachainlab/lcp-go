@@ -13,7 +13,6 @@ import (
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx/ias"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
@@ -105,12 +104,24 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
 	}
 
+	ops, err := pr.GetOperators()
+	if err != nil {
+		return nil, nil, err
+	}
+	var operators [][]byte
+	for _, op := range ops {
+		operators = append(operators, op.Bytes())
+	}
 	clientState := &lcptypes.ClientState{
-		LatestHeight:         clienttypes.Height{},
-		Mrenclave:            pr.config.GetMrenclave(),
-		KeyExpiration:        pr.config.KeyExpiration,
-		AllowedQuoteStatuses: pr.config.AllowedQuoteStatuses,
-		AllowedAdvisoryIds:   pr.config.AllowedAdvisoryIds,
+		LatestHeight:                  clienttypes.Height{},
+		Mrenclave:                     pr.config.GetMrenclave(),
+		KeyExpiration:                 pr.config.KeyExpiration,
+		AllowedQuoteStatuses:          pr.config.AllowedQuoteStatuses,
+		AllowedAdvisoryIds:            pr.config.AllowedAdvisoryIds,
+		Operators:                     operators,
+		OperatorsNonce:                0,
+		OperatorsThresholdNumerator:   pr.config.OperatorsThreshold.Numerator,
+		OperatorsThresholdDenominator: pr.config.OperatorsThreshold.Denominator,
 	}
 	consensusState := &lcptypes.ConsensusState{}
 	// NOTE after creates client, register an enclave key into the client state
@@ -179,8 +190,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 		for i := 0; i < len(messages); i++ {
 			updates = append(updates, &lcptypes.UpdateClientMessage{
 				ProxyMessage: messages[i],
-				Signer:       pr.activeEnclaveKey.EnclaveKeyAddress,
-				Signature:    signatures[i],
+				Signatures:   [][]byte{signatures[i]},
 			})
 		}
 	}
@@ -204,8 +214,7 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 			} else if mn == 1 {
 				return &lcptypes.UpdateClientMessage{
 					ProxyMessage: batches[0].Messages[0],
-					Signer:       batches[0].Signer,
-					Signature:    batches[0].Signatures[0],
+					Signatures:   [][]byte{batches[0].Signatures[0]},
 				}, nil
 			} else {
 				m := elc.MsgAggregateMessages{
@@ -219,8 +228,7 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 				}
 				return &lcptypes.UpdateClientMessage{
 					ProxyMessage: resp.Message,
-					Signer:       resp.Signer,
-					Signature:    resp.Signature,
+					Signatures:   [][]byte{resp.Signature},
 				}, nil
 			}
 		} else if n == 0 {
@@ -305,10 +313,9 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed GetVerifyMembershipProxyMessage: message=%x %w", res.Message, err)
 	}
-	cp, err := lcptypes.EthABIEncodeCommitmentProof(&lcptypes.CommitmentProof{
-		Message:   res.Message,
-		Signer:    common.BytesToAddress(res.Signer),
-		Signature: res.Signature,
+	cp, err := lcptypes.EthABIEncodeCommitmentProofs(&lcptypes.CommitmentProofs{
+		Message:    res.Message,
+		Signatures: [][]byte{res.Signature},
 	})
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed to encode commitment proof: %w", err)

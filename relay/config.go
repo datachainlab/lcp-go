@@ -85,6 +85,9 @@ func (pc ProverConfig) Validate() error {
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
+	if l := len(pc.Operators); l > 1 {
+		return fmt.Errorf("Operators: greater than 1 operator is not supported yet")
+	}
 	return nil
 }
 
