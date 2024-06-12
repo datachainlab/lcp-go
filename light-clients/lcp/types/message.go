@@ -11,7 +11,6 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 const (
@@ -27,10 +26,9 @@ const (
 )
 
 var (
-	commitmentProofABI, _ = abi.NewType("tuple", "struct CommitmentProof", []abi.ArgumentMarshaling{
+	commitmentProofsABI, _ = abi.NewType("tuple", "struct CommitmentProofs", []abi.ArgumentMarshaling{
 		{Name: "message", Type: "bytes"},
-		{Name: "signer", Type: "address"},
-		{Name: "signature", Type: "bytes"},
+		{Name: "signatures", Type: "bytes[]"},
 	})
 
 	headeredMessageABI, _ = abi.NewType("tuple", "struct HeaderedMessage", []abi.ArgumentMarshaling{
@@ -271,13 +269,12 @@ type ELCVerifyMembershipMessage struct {
 	StateID StateID
 }
 
-type CommitmentProof struct {
-	Message   []byte
-	Signer    common.Address
-	Signature []byte
+type CommitmentProofs struct {
+	Message    []byte
+	Signatures [][]byte
 }
 
-func (p CommitmentProof) GetMessage() (*HeaderedProxyMessage, error) {
+func (p CommitmentProofs) GetMessage() (*HeaderedProxyMessage, error) {
 	return EthABIDecodeHeaderedProxyMessage(p.Message)
 }
 
@@ -317,25 +314,24 @@ func (c HeaderedProxyMessage) GetVerifyMembershipProxyMessage() (*ELCVerifyMembe
 	return EthABIDecodeVerifyMembershipProxyMessage(c.Message)
 }
 
-func EthABIEncodeCommitmentProof(p *CommitmentProof) ([]byte, error) {
+func EthABIEncodeCommitmentProofs(p *CommitmentProofs) ([]byte, error) {
 	packer := abi.Arguments{
-		{Type: commitmentProofABI},
+		{Type: commitmentProofsABI},
 	}
 	return packer.Pack(p)
 }
 
-func EthABIDecodeCommitmentProof(bz []byte) (*CommitmentProof, error) {
+func EthABIDecodeCommitmentProofs(bz []byte) (*CommitmentProofs, error) {
 	unpacker := abi.Arguments{
-		{Type: commitmentProofABI},
+		{Type: commitmentProofsABI},
 	}
 	v, err := unpacker.Unpack(bz)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unpack commitment proof: bz=%x %w", bz, err)
 	}
-	p := CommitmentProof(v[0].(struct {
-		Message   []byte         `json:"message"`
-		Signer    common.Address `json:"signer"`
-		Signature []byte         `json:"signature"`
+	p := CommitmentProofs(v[0].(struct {
+		Message    []byte   `json:"message"`
+		Signatures [][]byte `json:"signatures"`
 	}))
 	return &p, nil
 }

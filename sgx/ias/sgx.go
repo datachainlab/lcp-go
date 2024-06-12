@@ -9,6 +9,10 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 )
 
+const (
+	ReportDataVersion uint8 = 1
+)
+
 type AttestationVerificationReport struct {
 	ias.AttestationVerificationReport
 }
@@ -61,9 +65,15 @@ func ParseAndValidateAVR(report string) (*AttestationVerificationReport, error) 
 	return &AttestationVerificationReport{AttestationVerificationReport: *avr}, nil
 }
 
-func GetEnclaveKeyAddress(quote *ias.Quote) (common.Address, error) {
+func GetEKAndOperator(quote *ias.Quote) (common.Address, common.Address, error) {
 	if err := quote.Verify(); err != nil {
-		return common.Address{}, err
+		return common.Address{}, common.Address{}, err
 	}
-	return common.BytesToAddress(quote.Report.ReportData[:20]), nil
+	reportData := quote.Report.ReportData
+	if reportData[0] != ReportDataVersion {
+		return common.Address{}, common.Address{}, fmt.Errorf("unexpected report data version: %v", reportData[0])
+	}
+	ek := common.BytesToAddress(quote.Report.ReportData[1:21])
+	operator := common.BytesToAddress(quote.Report.ReportData[21:41])
+	return ek, operator, nil
 }

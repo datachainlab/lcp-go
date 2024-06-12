@@ -8,7 +8,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 func (cs ClientState) CheckForMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg exported.ClientMessage) bool {
@@ -39,19 +38,8 @@ func (cs ClientState) verifyMisbehaviour(ctx sdk.Context, cdc codec.BinaryCodec,
 			return errorsmod.Wrapf(ErrInvalidMisbehaviour, "unexpected StateID: expected=%v actual=%v", cons.StateId, state.StateID)
 		}
 	}
-
-	signer := common.BytesToAddress(msg.Signer)
-	if !cs.IsActiveKey(ctx.BlockTime(), clientStore, signer) {
-		return errorsmod.Wrapf(ErrInvalidMisbehaviour, "signer '%v' not found", signer)
-	}
-
-	if err := VerifySignatureWithSignBytes(msg.ProxyMessage, msg.Signature, signer); err != nil {
-		return errorsmod.Wrapf(ErrInvalidMisbehaviour, err.Error())
-	}
-
 	if err := pmsg.Context.Validate(ctx.BlockTime()); err != nil {
 		return errorsmod.Wrapf(ErrInvalidMisbehaviour, "invalid context: %v", err)
 	}
-
 	return nil
 }

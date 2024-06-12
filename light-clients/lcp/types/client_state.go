@@ -70,6 +70,17 @@ func (cs ClientState) Initialize(_ sdk.Context, cdc codec.BinaryCodec, clientSto
 	if !ok {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidConsensus, "unexpected consensus state type: expected=%T got=%T", &ConsensusState{}, consensusState)
 	}
+
+	if cs.OperatorsNonce != 0 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsNonce` must be zero")
+	}
+	if len(cs.Operators) != 0 && (cs.OperatorsThresholdNumerator == 0 || cs.OperatorsThresholdDenominator == 0) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsThresholdNumerator` and `OperatorsThresholdDenominator` must be non-zero")
+	}
+	if cs.OperatorsThresholdNumerator > cs.OperatorsThresholdDenominator {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsThresholdNumerator` must be less than or equal to `OperatorsThresholdDenominator`")
+	}
+
 	setClientState(clientStore, cdc, &cs)
 	setConsensusState(clientStore, cdc, consState, cs.GetLatestHeight())
 	return nil
@@ -148,11 +159,11 @@ func (cs ClientState) VerifyMembership(
 	if err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrConsensusStateNotFound, "please ensure the proof was constructed against a height that exists on the client: err=%v", err)
 	}
-	commitmentProof, err := EthABIDecodeCommitmentProof(proof)
+	commitmentProofs, err := EthABIDecodeCommitmentProofs(proof)
 	if err != nil {
 		return err
 	}
-	m, err := commitmentProof.GetMessage()
+	m, err := commitmentProofs.GetMessage()
 	if err != nil {
 		return err
 	}
@@ -177,13 +188,9 @@ func (cs ClientState) VerifyMembership(
 	if !msg.StateID.EqualBytes(consensusState.StateId) {
 		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid state ID: expected=%v got=%v", consensusState.StateId, msg.StateID)
 	}
-	if err := VerifySignatureWithSignBytes(commitmentProof.Message, commitmentProof.Signature, commitmentProof.Signer); err != nil {
-		return errorsmod.Wrapf(ErrInvalidStateCommitmentProof, "failed to verify state commitment proof: %v", err)
-	}
-	if !cs.IsActiveKey(ctx.BlockTime(), clientStore, commitmentProof.Signer) {
-		return errorsmod.Wrapf(ErrExpiredEnclaveKey, "key '%v' has expired", commitmentProof.Signer.Hex())
-	}
-	return nil
+
+	commitment := crypto.Keccak256Hash(commitmentProofs.Message)
+	return cs.VerifyOperatorProofs(ctx, clientStore, commitment, commitmentProofs.Signatures)
 }
 
 // VerifyNonMembership is a generic proof verification method which verifies the absence of a given CommitmentPath at a specified height.
