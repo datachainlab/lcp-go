@@ -37,3 +37,10 @@ func (pr *Prover) GetOperators() ([]common.Address, error) {
 	}
 	return operators, nil
 }
+
+func (pr *Prover) GetOperatorsThreshold() Fraction {
+	if pr.config.OperatorsThreshold.Denominator == 0 && pr.config.OperatorsThreshold.Numerator == 0 {
+		return Fraction{Numerator: 1, Denominator: 1}
+	}
+	return pr.config.OperatorsThreshold
+}

@@ -18,6 +18,19 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
+type EKInfo struct {
+	ExpiredAt uint64
+	Operator  common.Address
+}
+
+func (ei EKInfo) IsExpired(blockTime time.Time) bool {
+	return time.Unix(int64(ei.ExpiredAt), 0).Before(blockTime)
+}
+
+func (ei EKInfo) IsMatchOperator(operator common.Address) bool {
+	return ei.Operator == operator
+}
+
 func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, clientMsg exported.ClientMessage) error {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
@@ -25,7 +38,7 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 		if err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
 		}
-		if err := cs.VerifyOperatorProofs(ctx, clientStore, crypto.Keccak256Hash(clientMsg.ProxyMessage), clientMsg.Signatures); err != nil {
+		if err := cs.VerifySignatures(ctx, clientStore, crypto.Keccak256Hash(clientMsg.ProxyMessage), clientMsg.Signatures); err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 		}
 		switch pmsg := pmsg.(type) {
@@ -170,9 +183,20 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 	if err != nil {
 		panic(err)
 	}
-	ek, operator, err := ias.GetEKAndOperator(quote)
+	ek, _, err := ias.GetEKAndOperator(quote)
 	if err != nil {
 		panic(err)
+	}
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712RegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), message.Report)
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err))
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err))
+		}
 	}
 	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
 	if cs.Contains(clientStore, ek) {
@@ -234,34 +258,7 @@ func (cs ClientState) SetEKInfo(clientStore storetypes.KVStore, ek, operator com
 	return nil
 }
 
-type EKInfo struct {
-	ExpiredAt uint64
-	Operator  common.Address
-}
-
-func (cs ClientState) IsActiveKey(blockTime time.Time, clientStore storetypes.KVStore, ek common.Address) (bool, error) {
-	ekInfo, err := cs.GetEKInfo(clientStore, ek)
-	if err != nil {
-		return false, err
-	}
-	if ekInfo == nil {
-		return false, nil
-	}
-	return time.Unix(int64(ekInfo.ExpiredAt), 0).After(blockTime), nil
-}
-
-func (cs ClientState) IsActiveKeyOperator(blockTime time.Time, clientStore storetypes.KVStore, ek, operator common.Address) (bool, error) {
-	ekInfo, err := cs.GetEKInfo(clientStore, ek)
-	if err != nil {
-		return false, err
-	}
-	if ekInfo == nil {
-		return false, nil
-	}
-	return ekInfo.Operator == operator && time.Unix(int64(ekInfo.ExpiredAt), 0).After(blockTime), nil
-}
-
-func (cs ClientState) VerifyOperatorProofs(ctx sdk.Context, clientStore storetypes.KVStore, commitment [32]byte, signatures [][]byte) error {
+func (cs ClientState) VerifySignatures(ctx sdk.Context, clientStore storetypes.KVStore, commitment [32]byte, signatures [][]byte) error {
 	operators := cs.GetOperators()
 	sigNum := len(signatures)
 	opNum := len(operators)
@@ -273,12 +270,13 @@ func (cs ClientState) VerifyOperatorProofs(ctx sdk.Context, clientStore storetyp
 		if err != nil {
 			return err
 		}
-		active, err := cs.IsActiveKey(ctx.BlockTime(), clientStore, ek)
+		ekInfo, err := cs.GetEKInfo(clientStore, ek)
 		if err != nil {
 			return err
-		}
-		if !active {
-			return fmt.Errorf("enclave key '%v' is not active", ek)
+		} else if ekInfo == nil {
+			return fmt.Errorf("enclave key '%v' not found", ek)
+		} else if ekInfo.IsExpired(ctx.BlockTime()) {
+			return fmt.Errorf("enclave key '%v' is expired", ek)
 		}
 		return nil
 	} else if opNum != sigNum {
@@ -294,12 +292,15 @@ func (cs ClientState) VerifyOperatorProofs(ctx sdk.Context, clientStore storetyp
 		if err != nil {
 			return err
 		}
-		active, err := cs.IsActiveKeyOperator(ctx.BlockTime(), clientStore, ek, op)
+		ekInfo, err := cs.GetEKInfo(clientStore, ek)
 		if err != nil {
 			return err
-		}
-		if !active {
-			return fmt.Errorf("enclave key '%v' is not active", ek)
+		} else if ekInfo == nil {
+			return fmt.Errorf("enclave key '%v' not found", ek)
+		} else if ekInfo.IsExpired(ctx.BlockTime()) {
+			return fmt.Errorf("enclave key '%v' is expired", ek)
+		} else if !ekInfo.IsMatchOperator(op) {
+			return fmt.Errorf("enclave key '%v' operator mismatch: expected=%v actual=%v", ek, op, ekInfo.Operator)
 		}
 		success++
 	}

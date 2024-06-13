@@ -197,7 +197,7 @@ func (cs ClientState) VerifyMembership(
 	}
 
 	commitment := crypto.Keccak256Hash(commitmentProofs.Message)
-	return cs.VerifyOperatorProofs(ctx, clientStore, commitment, commitmentProofs.Signatures)
+	return cs.VerifySignatures(ctx, clientStore, commitment, commitmentProofs.Signatures)
 }
 
 // VerifyNonMembership is a generic proof verification method which verifies the absence of a given CommitmentPath at a specified height.

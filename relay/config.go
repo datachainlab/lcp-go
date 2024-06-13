@@ -8,13 +8,34 @@ import (
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
 const (
 	DefaultDialTimeout                 = 20 // seconds
 	DefaultMessageAggregationBatchSize = 8
+
+	ChainTypeEVM    ChainType = 1
+	ChainTypeCosmos ChainType = 2
 )
+
+type ChainType uint16
+
+func (t ChainType) String() string {
+	switch t {
+	case ChainTypeEVM:
+		return "EVM"
+	case ChainTypeCosmos:
+		return "Cosmos"
+	default:
+		return fmt.Sprintf("UnknownChainType(%d)", t.Uint16())
+	}
+}
+
+func (t ChainType) Uint16() uint16 {
+	return uint16(t)
+}
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
 
@@ -65,6 +86,17 @@ func (pc ProverConfig) GetMessageAggregationBatchSize() uint64 {
 	}
 }
 
+func (pc ProverConfig) ChainType() ChainType {
+	switch pc.OperatorsEip712Salt.(type) {
+	case *ProverConfig_EvmChainEip712Salt:
+		return ChainTypeEVM
+	case *ProverConfig_CosmosChainEip712Salt:
+		return ChainTypeCosmos
+	default:
+		panic(fmt.Sprintf("unknown chain salt: %v", pc.OperatorsEip712Salt))
+	}
+}
+
 func (pc ProverConfig) Validate() error {
 	// origin prover config validation
 	if err := pc.OriginProver.GetCachedValue().(core.ProverConfig).Validate(); err != nil {
@@ -87,6 +119,28 @@ func (pc ProverConfig) Validate() error {
 	}
 	if l := len(pc.Operators); l > 1 {
 		return fmt.Errorf("Operators: greater than 1 operator is not supported yet")
+	}
+	if pc.OperatorsEip712Salt == nil {
+		return fmt.Errorf("OperatorsEip712Salt must be set")
+	} else {
+		switch salt := pc.OperatorsEip712Salt.(type) {
+		case *ProverConfig_EvmChainEip712Salt:
+			if salt.EvmChainEip712Salt.ChainId == 0 {
+				return fmt.Errorf("OperatorsEip712Salt: EvmChainSalt.ChainId must be set")
+			}
+			if !common.IsHexAddress(salt.EvmChainEip712Salt.VerifyingContractAddress) {
+				return fmt.Errorf("OperatorsEip712Salt: EvmChainSalt.VerifyingContractAddress must be a valid hex address")
+			}
+		case *ProverConfig_CosmosChainEip712Salt:
+			if salt.CosmosChainEip712Salt.ChainId == "" {
+				return fmt.Errorf("OperatorsEip712Salt: CosmosChainSalt.ChainId must be set")
+			}
+			if salt.CosmosChainEip712Salt.Prefix == "" {
+				return fmt.Errorf("OperatorsEip712Salt: CosmosChainSalt.Prefix must be set")
+			}
+		default:
+			return fmt.Errorf("OperatorsEip712Salt: unknown type")
+		}
 	}
 	return nil
 }

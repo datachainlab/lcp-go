@@ -30,10 +30,25 @@ message ProverConfig {
     // the value must be less than or equal to 1
     Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
     // TODO use signer module instead
+    // hex string
     string operator_private_key = 14;
+    oneof operators_eip712_salt {
+        EVMChainSalt evm_chain_eip712_salt = 31;
+        CosmosChainSalt cosmos_chain_eip712_salt = 32;
+    }
 }
 
 message Fraction {
     uint64 numerator = 1;
     uint64 denominator = 2;
+}
+
+message EVMChainSalt {
+    uint64 chain_id = 1;
+    string verifying_contract_address = 2;
+}
+
+message CosmosChainSalt {
+    string chain_id = 1;
+    string prefix = 2;
 }

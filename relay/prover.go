@@ -120,8 +120,8 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 		AllowedAdvisoryIds:            pr.config.AllowedAdvisoryIds,
 		Operators:                     operators,
 		OperatorsNonce:                0,
-		OperatorsThresholdNumerator:   pr.config.OperatorsThreshold.Numerator,
-		OperatorsThresholdDenominator: pr.config.OperatorsThreshold.Denominator,
+		OperatorsThresholdNumerator:   pr.GetOperatorsThreshold().Numerator,
+		OperatorsThresholdDenominator: pr.GetOperatorsThreshold().Denominator,
 	}
 	consensusState := &lcptypes.ConsensusState{}
 	// NOTE after creates client, register an enclave key into the client state
@@ -335,4 +335,13 @@ func (pr *Prover) getLogger() *log.RelayLogger {
 		return logger
 	}
 	return logger.WithChain(pr.path.ChainID)
+}
+
+func (pr *Prover) getClientLogger(clientID string) *log.RelayLogger {
+	logger := pr.getLogger()
+	return &log.RelayLogger{
+		Logger: logger.With(
+			"client_id", clientID,
+		),
+	}
 }

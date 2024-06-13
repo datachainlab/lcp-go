@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
@@ -317,6 +319,7 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 }
 
 func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, err
 	}
@@ -330,11 +333,16 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		OperatorSignature: nil,
 	}
 	if pr.IsOperatorEnabled() {
-		sig, err := pr.OperatorSign(crypto.Keccak256Hash([]byte(eki.Report)))
+		commitment, err := pr.ComputeEIP712RegisterEnclaveKeyHash(eki.Report)
+		if err != nil {
+			return nil, err
+		}
+		sig, err := pr.OperatorSign(commitment)
 		if err != nil {
 			return nil, err
 		}
 		message.OperatorSignature = sig
+		clientLogger.Info("operator signature", "signature", hex.EncodeToString(sig))
 	}
 	signer, err := verifier.GetAddress()
 	if err != nil {
@@ -352,6 +360,36 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		return nil, fmt.Errorf("unexpected number of msgIDs: %v", ids)
 	}
 	return ids[0], nil
+}
+
+func (pr *Prover) ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
+	bz, err := lcptypes.ComputeEIP712RegisterEnclaveKeyWithSalt(pr.computeEIP712ChainSalt(), report)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
+}
+
+func (pr *Prover) computeEIP712ChainSalt() common.Hash {
+	switch pr.config.ChainType() {
+	case ChainTypeEVM:
+		return pr.computeEIP712EVMChainSalt()
+	case ChainTypeCosmos:
+		return pr.computeEIP712CosmosChainSalt()
+	default:
+		panic(fmt.Sprintf("unsupported chain type: %v", pr.config.ChainType()))
+	}
+}
+
+func (pr *Prover) computeEIP712EVMChainSalt() common.Hash {
+	var bz [2]byte
+	binary.BigEndian.PutUint16(bz[:], ChainTypeEVM.Uint16())
+	return crypto.Keccak256Hash(bz[:])
+}
+
+func (pr *Prover) computeEIP712CosmosChainSalt() common.Hash {
+	salt := pr.config.GetCosmosChainEip712Salt()
+	return lcptypes.ComputeChainSalt(salt.ChainId, []byte(salt.Prefix))
 }
 
 type CreateELCResult struct {

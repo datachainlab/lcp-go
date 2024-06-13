@@ -103,12 +103,16 @@ func GetUpdateOperatorsTypedData(salt common.Hash, clientID string, nonce uint64
 	}
 }
 
-func ComputeEIP712RegisterEnclaveKey(chainID string, prefix []byte, report string) ([]byte, error) {
-	_, raw, err := apitypes.TypedDataAndHash(GetRegisterEnclaveKeyTypedData(ComputeChainSalt(chainID, prefix), report))
+func ComputeEIP712RegisterEnclaveKeyWithSalt(salt common.Hash, report string) ([]byte, error) {
+	_, raw, err := apitypes.TypedDataAndHash(GetRegisterEnclaveKeyTypedData(salt, report))
 	if err != nil {
 		return nil, err
 	}
 	return []byte(raw), nil
+}
+
+func ComputeEIP712RegisterEnclaveKey(chainID string, prefix []byte, report string) ([]byte, error) {
+	return ComputeEIP712RegisterEnclaveKeyWithSalt(ComputeChainSalt(chainID, prefix), report)
 }
 
 func ComputeEIP712RegisterEnclaveKeyHash(chainID string, prefix []byte, report string) (common.Hash, error) {
