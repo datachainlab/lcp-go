@@ -156,9 +156,13 @@ func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KV
 	if err != nil {
 		return err
 	}
+	nextNonce := cs.OperatorsNonce + 1
+	if message.Nonce != nextNonce {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid nonce: expected=%v actual=%v clientID=%v", nextNonce, message.Nonce, clientID)
+	}
 	newOperators, err := message.GetNewOperators()
 	if err != nil {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get new operators: %v", err)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get new operators: %v clientID=%v", err, clientID)
 	}
 	signBytes, err := ComputeEIP712UpdateOperators(
 		ctx.ChainID(),
@@ -170,10 +174,25 @@ func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KV
 		message.NewOperatorsThresholdDenominator,
 	)
 	if err != nil {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute sign bytes: %v", err)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute sign bytes: err=%v clientID=%v", err, clientID)
 	}
-	if err := cs.VerifySignatures(ctx, store, crypto.Keccak256Hash(signBytes), message.Signatures); err != nil {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify signatures: %v", err)
+	commitment := crypto.Keccak256Hash(signBytes)
+	var success uint64 = 0
+	for i, op := range cs.GetOperators() {
+		if len(message.Signatures[i]) == 0 {
+			continue
+		}
+		addr, err := RecoverAddress(commitment, message.Signatures[i])
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: err=%v clientID=%v", err, clientID)
+		}
+		if addr != op {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v clientID=%v", op, addr, clientID)
+		}
+		success++
+	}
+	if success*cs.OperatorsThresholdDenominator < cs.OperatorsThresholdDenominator*uint64(len(cs.Operators)) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "insufficient signatures: expected=%v actual=%v clientID=%v", cs.OperatorsThresholdDenominator, success, clientID)
 	}
 	return nil
 }
@@ -259,6 +278,7 @@ func (cs ClientState) updateOperators(cdc codec.BinaryCodec, clientStore storety
 	cs.Operators = message.NewOperators
 	cs.OperatorsThresholdNumerator = message.NewOperatorsThresholdNumerator
 	cs.OperatorsThresholdDenominator = message.NewOperatorsThresholdDenominator
+	cs.OperatorsNonce = message.Nonce
 	setClientState(clientStore, cdc, &cs)
 	return nil
 }

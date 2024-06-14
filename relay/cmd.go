@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/spf13/cobra"
@@ -13,9 +14,13 @@ import (
 )
 
 const (
-	flagSrc         = "src"
-	flagHeight      = "height"
-	flagELCClientID = "elc_client_id"
+	flagSrc                  = "src"
+	flagHeight               = "height"
+	flagELCClientID          = "elc_client_id"
+	flagOperators            = "operators"
+	flagNonce                = "nonce"
+	flagThresholdNumerator   = "threshold_numerator"
+	flagThresholdDenominator = "threshold_denominator"
 )
 
 func LCPCmd(ctx *config.Context) *cobra.Command {
@@ -33,6 +38,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
+		updateOperatorsCmd(ctx),
 	)
 
 	return cmd
@@ -276,6 +282,53 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 	return srcFlag(cmd)
 }
 
+func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update-operators [path]",
+		Short: "Update operators",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var (
+				target       *core.ProvableChain
+				counterparty *core.ProvableChain
+			)
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+				counterparty = c[dst]
+			} else {
+				target = c[dst]
+				counterparty = c[src]
+			}
+			prover := target.Prover.(*Prover)
+			operators := viper.GetStringSlice(flagOperators)
+			threshold := Fraction{
+				Numerator:   viper.GetUint64(flagThresholdNumerator),
+				Denominator: viper.GetUint64(flagThresholdDenominator),
+			}
+			nonce := viper.GetUint64(flagNonce)
+
+			var newOperators []common.Address
+			for _, op := range operators {
+				if !common.IsHexAddress(op) {
+					return fmt.Errorf("invalid operator address: %s", op)
+				}
+				newOperators = append(newOperators, common.HexToAddress(op))
+			}
+			return prover.updateOperators(counterparty, nonce, newOperators, threshold)
+		},
+	}
+	cmd = thresholdFlag(nonceFlag(operatorsFlag(srcFlag(cmd))))
+	cmd.MarkFlagRequired(flagOperators)
+	cmd.MarkFlagRequired(flagThresholdNumerator)
+	cmd.MarkFlagRequired(flagThresholdDenominator)
+	cmd.MarkFlagRequired(flagNonce)
+	return cmd
+}
+
 func srcFlag(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().BoolP(flagSrc, "", true, "a boolean value whether src is the target chain")
 	if err := viper.BindPFlag(flagSrc, cmd.Flags().Lookup(flagSrc)); err != nil {
@@ -293,8 +346,36 @@ func heightFlag(cmd *cobra.Command) *cobra.Command {
 }
 
 func elcClientIDFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().StringP("elc_client_id", "", "", "a client ID of the ELC client")
+	cmd.Flags().StringP(flagELCClientID, "", "", "a client ID of the ELC client")
 	if err := viper.BindPFlag(flagELCClientID, cmd.Flags().Lookup(flagELCClientID)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func operatorsFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().StringSliceP(flagOperators, "", nil, "new operator addresses")
+	if err := viper.BindPFlag(flagOperators, cmd.Flags().Lookup(flagOperators)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func nonceFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().Uint64P(flagNonce, "", 0, "a nonce")
+	if err := viper.BindPFlag(flagNonce, cmd.Flags().Lookup(flagNonce)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func thresholdFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().Uint64P(flagThresholdNumerator, "", 0, "a numerator of new threshold")
+	cmd.Flags().Uint64P(flagThresholdDenominator, "", 0, "a denominator of new threshold")
+	if err := viper.BindPFlag(flagThresholdNumerator, cmd.Flags().Lookup(flagThresholdNumerator)); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag(flagThresholdDenominator, cmd.Flags().Lookup(flagThresholdDenominator)); err != nil {
 		panic(err)
 	}
 	return cmd
