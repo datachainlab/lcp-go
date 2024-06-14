@@ -51,6 +51,8 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.verifyRegisterEnclaveKey(ctx, clientStore, clientMsg)
+	case *UpdateOperatorsMessage:
+		return cs.verifyUpdateOperators(ctx, clientStore, clientMsg)
 	default:
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg)
 	}
@@ -143,6 +145,39 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes
 	return nil
 }
 
+func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KVStore, message *UpdateOperatorsMessage) error {
+	if err := message.ValidateBasic(); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
+	}
+	if len(cs.Operators) == 0 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "permissionless operators")
+	}
+	clientID, err := getClientID(store)
+	if err != nil {
+		return err
+	}
+	newOperators, err := message.GetNewOperators()
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get new operators: %v", err)
+	}
+	signBytes, err := ComputeEIP712UpdateOperators(
+		ctx.ChainID(),
+		[]byte(exported.StoreKey),
+		clientID,
+		message.Nonce,
+		newOperators,
+		message.NewOperatorsThresholdNumerator,
+		message.NewOperatorsThresholdDenominator,
+	)
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute sign bytes: %v", err)
+	}
+	if err := cs.VerifySignatures(ctx, store, crypto.Keccak256Hash(signBytes), message.Signatures); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify signatures: %v", err)
+	}
+	return nil
+}
+
 func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, clientMsg exported.ClientMessage) []exported.Height {
 	switch clientMsg := clientMsg.(type) {
 	case *UpdateClientMessage:
@@ -158,6 +193,8 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
+	case *UpdateOperatorsMessage:
+		return cs.updateOperators(cdc, clientStore, clientMsg)
 	default:
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
 	}
@@ -215,6 +252,14 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 	if err := cs.SetEKInfo(clientStore, ek, operator, expiredAt); err != nil {
 		panic(err)
 	}
+	return nil
+}
+
+func (cs ClientState) updateOperators(cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *UpdateOperatorsMessage) []exported.Height {
+	cs.Operators = message.NewOperators
+	cs.OperatorsThresholdNumerator = message.NewOperatorsThresholdNumerator
+	cs.OperatorsThresholdDenominator = message.NewOperatorsThresholdDenominator
+	setClientState(clientStore, cdc, &cs)
 	return nil
 }
 
