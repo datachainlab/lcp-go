@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -213,7 +214,7 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
 	case *UpdateOperatorsMessage:
-		return cs.updateOperators(cdc, clientStore, clientMsg)
+		return cs.updateOperators(ctx, cdc, clientStore, clientMsg)
 	default:
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
 	}
@@ -259,14 +260,16 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 		if err := cs.ensureEKInfoMatch(clientStore, ek, operator, expiredAt); err != nil {
 			panic(err)
 		}
+		return nil
+	} else {
 		ctx.EventManager().EmitEvent(
 			sdk.NewEvent(
-				EventTypeRegisteredEnclaveKey,
+				EventTypeRegisterEnclaveKey,
 				sdk.NewAttribute(AttributeKeyEnclaveKey, ek.Hex()),
-				sdk.NewAttribute(AttributeExpiredAt, expiredAt.String()),
+				sdk.NewAttribute(AttributeKeyExpiredAt, expiredAt.String()),
+				sdk.NewAttribute(AttributeKeyOperator, operator.Hex()),
 			),
 		)
-		return nil
 	}
 	if err := cs.SetEKInfo(clientStore, ek, operator, expiredAt); err != nil {
 		panic(err)
@@ -274,12 +277,30 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 	return nil
 }
 
-func (cs ClientState) updateOperators(cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *UpdateOperatorsMessage) []exported.Height {
+func (cs ClientState) updateOperators(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *UpdateOperatorsMessage) []exported.Height {
 	cs.Operators = message.NewOperators
 	cs.OperatorsThresholdNumerator = message.NewOperatorsThresholdNumerator
 	cs.OperatorsThresholdDenominator = message.NewOperatorsThresholdDenominator
 	cs.OperatorsNonce = message.Nonce
 	setClientState(clientStore, cdc, &cs)
+
+	newOperators, err := message.GetNewOperators()
+	if err != nil {
+		panic(err)
+	}
+	newOperatorsJSON, err := json.Marshal(newOperators)
+	if err != nil {
+		panic(err)
+	}
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			EventTypeUpdateOperators,
+			sdk.NewAttribute(AttributeKeyNonce, fmt.Sprint(message.Nonce)),
+			sdk.NewAttribute(AttributeKeyNewOperators, string(newOperatorsJSON)),
+			sdk.NewAttribute(AttributeKeyThresholdNumerator, fmt.Sprint(message.NewOperatorsThresholdNumerator)),
+			sdk.NewAttribute(AttributeKeyThresholdDenominator, fmt.Sprint(message.NewOperatorsThresholdDenominator)),
+		),
+	)
 	return nil
 }
 
