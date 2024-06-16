@@ -120,9 +120,10 @@ func (pc ProverConfig) Validate() error {
 	if l := len(pc.Operators); l > 1 {
 		return fmt.Errorf("Operators: greater than 1 operator is not supported yet")
 	}
-	if pc.OperatorsEip712Salt == nil {
-		return fmt.Errorf("OperatorsEip712Salt must be set")
-	} else {
+	if pc.OperatorsEip712Salt != nil {
+		if len(pc.OperatorPrivateKey) == 0 {
+			return fmt.Errorf("OperatorPrivateKey must be set if OperatorsEip712Salt is set")
+		}
 		switch salt := pc.OperatorsEip712Salt.(type) {
 		case *ProverConfig_EvmChainEip712Salt:
 			if salt.EvmChainEip712Salt.ChainId == 0 {
