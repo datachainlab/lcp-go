@@ -27,7 +27,7 @@ func (avr AttestationVerificationReport) GetTimestamp() time.Time {
 	return tm.Truncate(time.Second)
 }
 
-func VerifyReport(report string, signature []byte, signingCertDer []byte, currentTime time.Time) error {
+func VerifyReport(report []byte, signature []byte, signingCertDer []byte, currentTime time.Time) error {
 	rootCert := GetRARootCert()
 	signingCert, err := x509.ParseCertificate(signingCertDer)
 	if err != nil {
@@ -50,15 +50,15 @@ func VerifyReport(report string, signature []byte, signingCertDer []byte, curren
 		return fmt.Errorf("unexpected root cert: %v", chains[0][1])
 	}
 
-	if err = signingCert.CheckSignature(x509.SHA256WithRSA, []byte(report), signature); err != nil {
+	if err = signingCert.CheckSignature(x509.SHA256WithRSA, report, signature); err != nil {
 		return fmt.Errorf("failed to verify AVR signature: %w", err)
 	}
 
 	return nil
 }
 
-func ParseAndValidateAVR(report string) (*AttestationVerificationReport, error) {
-	avr, err := ias.UnsafeDecodeAVR([]byte(report))
+func ParseAndValidateAVR(report []byte) (*AttestationVerificationReport, error) {
+	avr, err := ias.UnsafeDecodeAVR(report)
 	if err != nil {
 		return nil, err
 	}

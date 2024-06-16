@@ -218,10 +218,10 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 	}
 
 	for _, eki := range res.Keys {
-		if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
+		if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 			return nil, err
 		}
-		avr, err := ias.ParseAndValidateAVR(eki.Report)
+		avr, err := ias.ParseAndValidateAVR([]byte(eki.Report))
 		if err != nil {
 			return nil, err
 		}
@@ -320,14 +320,14 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 
 func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
-	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
+	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, err
 	}
-	if _, err := ias.ParseAndValidateAVR(eki.Report); err != nil {
+	if _, err := ias.ParseAndValidateAVR([]byte(eki.Report)); err != nil {
 		return nil, err
 	}
 	message := &lcptypes.RegisterEnclaveKeyMessage{
-		Report:            eki.Report,
+		Report:            []byte(eki.Report),
 		Signature:         eki.Signature,
 		SigningCert:       eki.SigningCert,
 		OperatorSignature: nil,
