@@ -26,6 +26,14 @@
     "allowed_advisory_ids": ["INTEL-SA-00219","INTEL-SA-00289","INTEL-SA-00334","INTEL-SA-00477","INTEL-SA-00614","INTEL-SA-00615","INTEL-SA-00617"],
     "key_expiration": 604800,
     "elc_client_id": "07-tendermint-0",
-    "is_debug_enclave": true
+    "is_debug_enclave": true,
+    "operators": [
+      "0x9722414d09f43fb02235d739B50F4C027F43e657"
+    ],
+    "operator_private_key": "0x8a94e9f944a297c402a997aa9a60026ce47a6e018192d111c1703176bbc26651",
+    "cosmos_chain_eip712_salt": {
+      "chain_id": "ibc0",
+      "prefix": "ibc"
+    }
   }
 }

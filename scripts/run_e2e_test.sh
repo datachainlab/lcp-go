@@ -1,6 +1,15 @@
 #!/bin/sh
 set -ex
 
+# Usage: run_e2e_test.sh <--operators_enabled>
+
+export OPERATORS_ENABLED=false
+if [ "$1" = "--operators_enabled" ]; then
+    OPERATORS_ENABLED=true
+fi
+
+echo "OPERATORS_ENABLED: $OPERATORS_ENABLED"
+
 LCP_BIN=./bin/lcp
 ENCLAVE_PATH=./bin/enclave.signed.so
 CERTS_DIR=./lcp/tests/certs
@@ -31,6 +40,8 @@ make -C tests/e2e/cases/tm2tm restore
 
 make -C tests/e2e/cases/tm2tm test-relay
 make -C tests/e2e/cases/tm2tm test-elc-cmd
-make -C tests/e2e/cases/tm2tm test-operators
+if [ "$OPERATORS_ENABLED" = true ]; then
+    make -C tests/e2e/cases/tm2tm test-operators
+fi
 make -C tests/e2e/cases/tm2tm network-down
 kill $LCP_PID

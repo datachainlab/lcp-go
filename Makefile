@@ -23,7 +23,7 @@ tendermint-images:
 
 .PHONY: e2e-test
 e2e-test: yrly lcp
-	./scripts/run_e2e_test.sh
+	./scripts/run_e2e_test.sh $(E2E_OPTIONS)
 
 .PHONY: proto-gen proto-update-deps
 proto-gen:
