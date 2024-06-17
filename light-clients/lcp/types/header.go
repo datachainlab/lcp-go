@@ -86,6 +86,9 @@ func (m UpdateOperatorsMessage) ValidateBasic() error {
 	if m.NewOperatorsThresholdDenominator == 0 {
 		return fmt.Errorf("new operators threshold denominator cannot be zero")
 	}
+	if m.NewOperatorsThresholdNumerator > m.NewOperatorsThresholdDenominator {
+		return fmt.Errorf("new operators threshold numerator cannot be greater than denominator")
+	}
 	if len(m.Signatures) == 0 {
 		return fmt.Errorf("signatures cannot be empty")
 	}
