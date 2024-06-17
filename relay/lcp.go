@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
@@ -323,13 +324,41 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
+		return nil, fmt.Errorf("failed to verify AVR signature: %w", err)
+	}
+	avr, err := ias.ParseAndValidateAVR([]byte(eki.Report))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse and validate AVR: %w", err)
+	}
+	quote, err := avr.Quote()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get quote from AVR: %w", err)
+	}
+	_, expectedOperator, err := ias.GetEKAndOperator(quote)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get EK and operator: %w", err)
+	}
+	cplatestHeight, err := counterparty.LatestHeight()
+	if err != nil {
 		return nil, err
 	}
-	if _, err := ias.ParseAndValidateAVR([]byte(eki.Report)); err != nil {
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	if err != nil {
 		return nil, err
+	}
+	var cs ibcexported.ClientState
+	if err := pr.codec.UnpackAny(counterpartyClientRes.ClientState, &cs); err != nil {
+		return nil, fmt.Errorf("failed to unpack client state: client_state=%v %w", counterpartyClientRes.ClientState, err)
+	}
+	clientState, ok := cs.(*lcptypes.ClientState)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast client state: %T", cs)
+	}
+	if !bytes.Equal(clientState.Mrenclave, quote.Report.MRENCLAVE[:]) {
+		return nil, fmt.Errorf("MRENCLAVE mismatch: expected 0x%x, but got 0x%x", clientState.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
 	message := &lcptypes.RegisterEnclaveKeyMessage{
 		Report:            []byte(eki.Report),
@@ -338,6 +367,16 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		OperatorSignature: nil,
 	}
 	if pr.IsOperatorEnabled() {
+		operator, err := pr.eip712Signer.GetSignerAddress()
+		if err != nil {
+			return nil, err
+		}
+		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
+		}
+		if expectedOperator != [20]byte{} && operator != expectedOperator {
+			return nil, fmt.Errorf("operator mismatch: expected 0x%x, but got 0x%x", expectedOperator, operator)
+		}
 		commitment, err := pr.ComputeEIP712RegisterEnclaveKeyHash(eki.Report)
 		if err != nil {
 			return nil, err
@@ -347,17 +386,17 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 			return nil, err
 		}
 		message.OperatorSignature = sig
-		clientLogger.Info("operator signature", "signature", hex.EncodeToString(sig))
+		clientLogger.Info("operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
 	}
-	signer, err := verifier.GetAddress()
+	signer, err := counterparty.GetAddress()
 	if err != nil {
 		return nil, err
 	}
-	msg, err := clienttypes.NewMsgUpdateClient(pr.path.ClientID, message, signer.String())
+	msg, err := clienttypes.NewMsgUpdateClient(counterparty.Path().ClientID, message, signer.String())
 	if err != nil {
 		return nil, err
 	}
-	ids, err := verifier.SendMsgs([]sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs([]sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -502,6 +541,15 @@ func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwar
 	return &UpdateELCResult{
 		Messages: msgs,
 	}, nil
+}
+
+func containsOperator(operators []common.Address, operator common.Address) bool {
+	for _, op := range operators {
+		if op == operator {
+			return true
+		}
+	}
+	return false
 }
 
 type QueryELCResult struct {
