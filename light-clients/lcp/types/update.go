@@ -165,6 +165,16 @@ func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KV
 	if err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get new operators: %v clientID=%v", err, clientID)
 	}
+	var zeroAddr common.Address
+	for i, op := range newOperators {
+		if op == zeroAddr {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: operator address must not be zero: clientID=%v", clientID)
+		}
+		// check if the operators are ordered
+		if i > 0 && bytes.Compare(newOperators[i-1].Bytes(), op.Bytes()) > 0 {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "operator addresses must be ordered: clientID=%v op0=%v op1=%v", clientID, newOperators[i-1].String(), op.String())
+		}
+	}
 	signBytes, err := ComputeEIP712UpdateOperators(
 		ctx.ChainID(),
 		[]byte(exported.StoreKey),

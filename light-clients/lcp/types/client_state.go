@@ -79,9 +79,14 @@ func (cs ClientState) Initialize(_ sdk.Context, cdc codec.BinaryCodec, clientSto
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsThresholdNumerator` and `OperatorsThresholdDenominator` must be non-zero")
 	}
 	var zeroAddr common.Address
-	for _, op := range cs.GetOperators() {
+	operators := cs.GetOperators()
+	for i, op := range operators {
 		if op == zeroAddr {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "operator address cannot be empty")
+		}
+		// check if the operator is ordered correctly
+		if i > 0 && bytes.Compare(operators[i-1].Bytes(), op.Bytes()) > 0 {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "operator addresses must be ordered: %v > %v", operators[i-1].String(), op.String())
 		}
 	}
 	if cs.OperatorsThresholdNumerator > cs.OperatorsThresholdDenominator {
