@@ -30,10 +30,10 @@ type EIP712DomainParams struct {
 }
 
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
-func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAwareChain) error {
-	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, verifier)
+func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
+	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, counterparty)
 	if err != nil {
-		return fmt.Errorf("failed loadEKIAndCheckUpdateNeeded: %w", err)
+		return fmt.Errorf("failed to call loadEKIAndCheckUpdateNeeded: %w", err)
 	}
 	pr.getLogger().Info("loadEKIAndCheckUpdateNeeded", "updateNeeded", updateNeeded)
 	if !updateNeeded {
@@ -49,20 +49,23 @@ func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAw
 
 	eki, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
-		return fmt.Errorf("failed selectNewEnclaveKey: %w", err)
+		return fmt.Errorf("failed to call selectNewEnclaveKey: %w", err)
 	}
-	pr.getLogger().Info("selected available enclave key", "eki", eki)
 
-	msgID, err := pr.registerEnclaveKey(verifier, eki)
+	pr.getLogger().Info("try to register a new enclave key", "eki", eki)
+
+	msgID, err := pr.registerEnclaveKey(counterparty, eki)
 	if err != nil {
-		return fmt.Errorf("failed registerEnclaveKey: %w", err)
+		return fmt.Errorf("failed to call registerEnclaveKey: %w", err)
 	}
-	finalized, success, err := pr.checkMsgStatus(verifier, msgID)
+	pr.getLogger().Info("registered a new enclave key", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "msg_id", msgID.String())
+	finalized, success, err := pr.checkMsgStatus(counterparty, msgID)
 	if err != nil {
-		return fmt.Errorf("failed checkMsgStatus: %w", err)
+		return fmt.Errorf("failed to call checkMsgStatus: %w", err)
 	} else if !success {
 		return fmt.Errorf("msg(id=%v) execution failed", msgID)
 	}
+	pr.getLogger().Info("check the msg status", "msg_id", msgID.String(), "finalized", finalized, "success", success)
 
 	if finalized {
 		// this path is for chans have instant finality
@@ -111,12 +114,12 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time,
 // finalized: true if the msg is finalized
 // success: true if the msg is successfully executed in the origin chain
 // error: non-nil if the msg may not exist in the origin chain
-func (pr *Prover) checkMsgStatus(verifier core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
-	lfHeader, err := verifier.GetLatestFinalizedHeader()
+func (pr *Prover) checkMsgStatus(counterparty core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
+	lfHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
 		return false, false, err
 	}
-	msgRes, err := verifier.GetMsgResult(msgID)
+	msgRes, err := counterparty.GetMsgResult(msgID)
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
@@ -127,7 +130,7 @@ func (pr *Prover) checkMsgStatus(verifier core.FinalityAwareChain, msgID core.Ms
 }
 
 // if returns true, query new key and register key and set it to memory
-func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core.FinalityAwareChain) (bool, error) {
+func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
 	now := time.Now()
 
 	// no active enclave key in memory
@@ -171,7 +174,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core
 
 	pr.getLogger().Info("active enclave key is unfinalized")
 
-	if _, err := verifier.GetMsgResult(pr.unfinalizedMsgID); err != nil {
+	if _, err := counterparty.GetMsgResult(pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		pr.getLogger().Info("the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
@@ -180,7 +183,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core
 		return true, nil
 	}
 
-	finalized, success, err := pr.checkMsgStatus(verifier, pr.unfinalizedMsgID)
+	finalized, success, err := pr.checkMsgStatus(counterparty, pr.unfinalizedMsgID)
 	pr.getLogger().Info("check the unfinalized msg status", "msg_id", pr.unfinalizedMsgID.String(), "finalized", finalized, "success", success, "error", err)
 	if err != nil {
 		return false, err
@@ -337,10 +340,12 @@ func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.Encla
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quote from AVR: %w", err)
 	}
-	_, expectedOperator, err := ias.GetEKAndOperator(quote)
+	ek, expectedOperator, err := ias.GetEKAndOperator(quote)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EK and operator: %w", err)
 	}
+	clientLogger.Info("got EK and operator from report data", "ek", ek.String(), "operator", expectedOperator.String())
+
 	cplatestHeight, err := counterparty.LatestHeight()
 	if err != nil {
 		return nil, err
