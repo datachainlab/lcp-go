@@ -10,6 +10,7 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 )
 
 const (
@@ -47,6 +48,11 @@ func (cfg *ProverConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error
 	}
 	if err := unpacker.UnpackAny(cfg.OriginProver, new(core.ProverConfig)); err != nil {
 		return err
+	}
+	if cfg.OperatorSigner != nil {
+		if err := unpacker.UnpackAny(cfg.OperatorSigner, new(signer.SignerConfig)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -121,8 +127,14 @@ func (pc ProverConfig) Validate() error {
 		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
 	}
 	if pc.OperatorsEip712Params != nil {
-		if len(pc.OperatorPrivateKey) == 0 {
-			return fmt.Errorf("OperatorPrivateKey must be set if OperatorsEip712Salt is set")
+		if pc.OperatorSigner == nil {
+			return fmt.Errorf("OperatorSigner must be set if OperatorsEip712Params is set")
+		}
+		signerConfig, ok := pc.OperatorSigner.GetCachedValue().(signer.SignerConfig)
+		if !ok {
+			return fmt.Errorf("failed to cast OperatorSigner's config: %T", pc.OperatorSigner.GetCachedValue())
+		} else if err := signerConfig.Validate(); err != nil {
+			return fmt.Errorf("failed to validate the OperatorSigner's config: %v", err)
 		}
 		switch salt := pc.OperatorsEip712Params.(type) {
 		case *ProverConfig_OperatorsEvmChainEip712Params:
@@ -144,10 +156,6 @@ func (pc ProverConfig) Validate() error {
 		}
 	}
 	return nil
-}
-
-func (f Fraction) String() string {
-	return fmt.Sprintf("%v/%v", f.Numerator, f.Denominator)
 }
 
 func decodeMrenclaveHex(s string) ([]byte, error) {

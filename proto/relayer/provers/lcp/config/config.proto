@@ -31,9 +31,9 @@ message ProverConfig {
     // this only works when operators is not empty
     // the value must be less than or equal to 1
     Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
-    // TODO use signer module instead
-    // hex string
-    string operator_private_key = 14;
+    // signer for eip712 commitment
+    google.protobuf.Any operator_signer = 14;
+    // eip712 params
     oneof operators_eip712_params {
         EVMChainEIP712Params operators_evm_chain_eip712_params = 31;
         CosmosChainEIP712Params operators_cosmos_chain_eip712_params = 32;

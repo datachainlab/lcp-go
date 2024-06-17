@@ -3,8 +3,6 @@ package relay
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -14,37 +12,12 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 )
 
-func (pr *Prover) OperatorSign(commitment [32]byte) ([]byte, error) {
-	privKey, err := pr.getOperatorPrivateKey()
-	if err != nil {
-		return nil, err
-	}
-	return secp256k1.Sign(commitment[:], privKey)
-}
-
-func (pr *Prover) GetSignOperator() (common.Address, error) {
-	privKey, err := pr.getOperatorPrivateKey()
-	if err != nil {
-		return common.Address{}, err
-	}
-	pk, err := crypto.ToECDSA(privKey)
-	if err != nil {
-		return common.Address{}, err
-	}
-	pubKey := pk.Public().(*ecdsa.PublicKey)
-	return common.BytesToAddress(crypto.PubkeyToAddress(*pubKey).Bytes()), nil
-}
-
-func (pr *Prover) getOperatorPrivateKey() ([]byte, error) {
-	return hex.DecodeString(strings.TrimPrefix(pr.config.OperatorPrivateKey, "0x"))
-}
-
 func (pr *Prover) IsOperatorEnabled() bool {
-	return len(pr.config.OperatorPrivateKey) > 0 && pr.config.OperatorsEip712Params != nil
+	return pr.eip712Signer != nil && pr.config.OperatorsEip712Params != nil
 }
 
 func (pr *Prover) GetOperators() ([]common.Address, error) {
@@ -71,8 +44,11 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if nonce == 0 {
 		return fmt.Errorf("invalid nonce: %v", nonce)
 	}
-	if threshold.Numerator == 0 || threshold.Denominator == 0 || threshold.Numerator > threshold.Denominator {
+	if threshold.Numerator == 0 || threshold.Denominator == 0 {
 		return fmt.Errorf("invalid threshold: %s", threshold.String())
+	}
+	if threshold.Numerator > threshold.Denominator {
+		return fmt.Errorf("new operators threshold numerator cannot be greater than denominator: %s", threshold.String())
 	}
 	cplatestHeight, err := counterparty.LatestHeight()
 	if err != nil {
@@ -95,7 +71,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	} else if l > 1 {
 		return fmt.Errorf("currently only one operator is supported, but got %v", l)
 	}
-	opSigner, err := pr.GetSignOperator()
+	opSigner, err := pr.eip712Signer.GetSignerAddress()
 	if err != nil {
 		return err
 	}
@@ -111,7 +87,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if err != nil {
 		return err
 	}
-	sig, err := pr.OperatorSign(commitment)
+	sig, err := pr.eip712Signer.Sign(commitment)
 	if err != nil {
 		return err
 	}
@@ -138,4 +114,28 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 		return err
 	}
 	return nil
+}
+
+type EIP712Signer struct {
+	signer signer.Signer
+}
+
+func NewEIP712Signer(signer signer.Signer) *EIP712Signer {
+	return &EIP712Signer{signer: signer}
+}
+
+func (s EIP712Signer) Sign(commitment [32]byte) ([]byte, error) {
+	return s.signer.Sign(commitment[:])
+}
+
+func (s EIP712Signer) GetSignerAddress() (common.Address, error) {
+	pub, err := s.signer.GetPublicKey()
+	if err != nil {
+		return common.Address{}, err
+	}
+	pubKey, err := crypto.DecompressPubkey(pub)
+	if err != nil {
+		return common.Address{}, err
+	}
+	return crypto.PubkeyToAddress(*pubKey), nil
 }

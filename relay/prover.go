@@ -15,6 +15,7 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -29,6 +30,8 @@ type Prover struct {
 	path     *core.PathEnd
 
 	lcpServiceClient LCPServiceClient
+
+	eip712Signer *EIP712Signer
 
 	// state
 	// registered key info for requesting lcp to generate proof.
@@ -52,7 +55,15 @@ func NewProver(config ProverConfig, originChain core.Chain, originProver core.Pr
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to LCP service: %w", err)
 	}
-	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn)}, nil
+	var eip712Signer *EIP712Signer
+	if config.OperatorSigner != nil {
+		signer, err := config.OperatorSigner.GetCachedValue().(signer.SignerConfig).Build()
+		if err != nil {
+			return nil, err
+		}
+		eip712Signer = NewEIP712Signer(signer)
+	}
+	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn), eip712Signer: eip712Signer}, nil
 }
 
 func (pr *Prover) GetOriginProver() core.Prover {

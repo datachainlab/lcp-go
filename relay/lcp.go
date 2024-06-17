@@ -342,7 +342,7 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		if err != nil {
 			return nil, err
 		}
-		sig, err := pr.OperatorSign(commitment)
+		sig, err := pr.eip712Signer.Sign(commitment)
 		if err != nil {
 			return nil, err
 		}

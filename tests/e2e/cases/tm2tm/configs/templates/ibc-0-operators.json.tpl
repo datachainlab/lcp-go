@@ -34,6 +34,9 @@
       "chain_id": "ibc1",
       "prefix": "ibc"
     },
-    "operator_private_key": "0x99b107441d0bce8e5b0078450f10f309910d8c0a2cc91671bd6cc1a284809642"
+    "operator_signer": {
+      "@type": "/relayer.provers.lcp.signers.raw.SignerConfig",
+      "private_key": "0x99b107441d0bce8e5b0078450f10f309910d8c0a2cc91671bd6cc1a284809642"
+    }
   }
 }
