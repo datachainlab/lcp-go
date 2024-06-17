@@ -118,7 +118,7 @@ func (pc ProverConfig) Validate() error {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
 	if l := len(pc.Operators); l > 1 {
-		return fmt.Errorf("Operators: greater than 1 operator is not supported yet")
+		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
 	}
 	if pc.OperatorsEip712Params != nil {
 		if len(pc.OperatorPrivateKey) == 0 {
