@@ -26,7 +26,7 @@ func (pr *Prover) getOperatorPrivateKey() ([]byte, error) {
 }
 
 func (pr *Prover) IsOperatorEnabled() bool {
-	return len(pr.config.OperatorPrivateKey) > 0 && pr.config.OperatorsEip712Salt != nil
+	return len(pr.config.OperatorPrivateKey) > 0 && pr.config.OperatorsEip712Params != nil
 }
 
 func (pr *Prover) GetOperators() ([]common.Address, error) {

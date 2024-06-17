@@ -30,10 +30,10 @@
     "operators": [
       "0x9722414d09f43fb02235d739B50F4C027F43e657"
     ],
-    "operator_private_key": "0x8a94e9f944a297c402a997aa9a60026ce47a6e018192d111c1703176bbc26651",
-    "cosmos_chain_eip712_salt": {
+    "operators_cosmos_chain_eip712_params": {
       "chain_id": "ibc0",
       "prefix": "ibc"
-    }
+    },
+    "operator_private_key": "0x8a94e9f944a297c402a997aa9a60026ce47a6e018192d111c1703176bbc26651"
   }
 }

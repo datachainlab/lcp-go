@@ -23,6 +23,8 @@ message ProverConfig {
     bool message_aggregation = 9;
     uint64 message_aggregation_batch_size = 10;
     bool is_debug_enclave = 11;
+
+    // --- Operator Config --- //
     // if empty, any operator is allowed (default)
     // otherwise, only operators in this list are allowed
     repeated string operators = 12;
@@ -32,9 +34,9 @@ message ProverConfig {
     // TODO use signer module instead
     // hex string
     string operator_private_key = 14;
-    oneof operators_eip712_salt {
-        EVMChainSalt evm_chain_eip712_salt = 31;
-        CosmosChainSalt cosmos_chain_eip712_salt = 32;
+    oneof operators_eip712_params {
+        EVMChainEIP712Params operators_evm_chain_eip712_params = 31;
+        CosmosChainEIP712Params operators_cosmos_chain_eip712_params = 32;
     }
 }
 
@@ -43,12 +45,12 @@ message Fraction {
     uint64 denominator = 2;
 }
 
-message EVMChainSalt {
+message EVMChainEIP712Params {
     uint64 chain_id = 1;
     string verifying_contract_address = 2;
 }
 
-message CosmosChainSalt {
+message CosmosChainEIP712Params {
     string chain_id = 1;
     string prefix = 2;
 }
