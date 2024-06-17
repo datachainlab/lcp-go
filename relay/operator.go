@@ -1,14 +1,19 @@
 package relay
 
 import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
@@ -19,6 +24,19 @@ func (pr *Prover) OperatorSign(commitment [32]byte) ([]byte, error) {
 		return nil, err
 	}
 	return secp256k1.Sign(commitment[:], privKey)
+}
+
+func (pr *Prover) GetSignOperator() (common.Address, error) {
+	privKey, err := pr.getOperatorPrivateKey()
+	if err != nil {
+		return common.Address{}, err
+	}
+	pk, err := crypto.ToECDSA(privKey)
+	if err != nil {
+		return common.Address{}, err
+	}
+	pubKey := pk.Public().(*ecdsa.PublicKey)
+	return common.BytesToAddress(crypto.PubkeyToAddress(*pubKey).Bytes()), nil
 }
 
 func (pr *Prover) getOperatorPrivateKey() ([]byte, error) {
@@ -49,12 +67,39 @@ func (pr *Prover) GetOperatorsThreshold() Fraction {
 	return pr.config.OperatorsThreshold
 }
 
-func (pr *Prover) updateOperators(verifier core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
+func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
 	if nonce == 0 {
 		return fmt.Errorf("invalid nonce: %v", nonce)
 	}
 	if threshold.Numerator == 0 || threshold.Denominator == 0 {
 		return fmt.Errorf("invalid threshold: %v", threshold)
+	}
+
+	cplatestHeight, err := counterparty.LatestHeight()
+	if err != nil {
+		return err
+	}
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	if err != nil {
+		return err
+	}
+	var cs ibcexported.ClientState
+	if err := pr.codec.UnpackAny(counterpartyClientRes.ClientState, &cs); err != nil {
+		return fmt.Errorf("failed to unpack client state: client_state=%v %w", counterpartyClientRes.ClientState, err)
+	}
+	clientState, ok := cs.(*lcptypes.ClientState)
+	if !ok {
+		return fmt.Errorf("failed to cast client state: %T", cs)
+	}
+	if len(clientState.Operators) != 1 {
+		return fmt.Errorf("currently only one operator is supported, but got %v", len(clientState.Operators))
+	}
+	opSigner, err := pr.GetSignOperator()
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(clientState.Operators[0], opSigner.Bytes()) {
+		return fmt.Errorf("operator mismatch: expected 0x%x, but got 0x%x", clientState.Operators[0], opSigner)
 	}
 	commitment, err := pr.ComputeEIP712UpdateOperatorsHash(
 		nonce,
@@ -80,15 +125,15 @@ func (pr *Prover) updateOperators(verifier core.Chain, nonce uint64, newOperator
 		NewOperatorsThresholdDenominator: threshold.Denominator,
 		Signatures:                       [][]byte{sig},
 	}
-	signer, err := verifier.GetAddress()
+	signer, err := counterparty.GetAddress()
 	if err != nil {
 		return err
 	}
-	msg, err := clienttypes.NewMsgUpdateClient(verifier.Path().ClientID, message, signer.String())
+	msg, err := clienttypes.NewMsgUpdateClient(counterparty.Path().ClientID, message, signer.String())
 	if err != nil {
 		return err
 	}
-	if _, err := verifier.SendMsgs([]sdk.Msg{msg}); err != nil {
+	if _, err := counterparty.SendMsgs([]sdk.Msg{msg}); err != nil {
 		return err
 	}
 	return nil
