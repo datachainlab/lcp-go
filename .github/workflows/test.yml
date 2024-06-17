@@ -31,3 +31,4 @@ jobs:
       - run: echo -e 'no\n/opt' | ./sgx_linux_x64_sdk_2.19.100.3.bin
       - run: make tendermint-images
       - run: source /opt/sgxsdk/environment && make e2e-test
+      - run: source /opt/sgxsdk/environment && make E2E_OPTIONS=--operators_enabled e2e-test
