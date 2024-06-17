@@ -71,10 +71,9 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if nonce == 0 {
 		return fmt.Errorf("invalid nonce: %v", nonce)
 	}
-	if threshold.Numerator == 0 || threshold.Denominator == 0 {
-		return fmt.Errorf("invalid threshold: %v", threshold)
+	if threshold.Numerator == 0 || threshold.Denominator == 0 || threshold.Numerator > threshold.Denominator {
+		return fmt.Errorf("invalid threshold: %s", threshold.String())
 	}
-
 	cplatestHeight, err := counterparty.LatestHeight()
 	if err != nil {
 		return err
@@ -91,8 +90,10 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if !ok {
 		return fmt.Errorf("failed to cast client state: %T", cs)
 	}
-	if len(clientState.Operators) != 1 {
-		return fmt.Errorf("currently only one operator is supported, but got %v", len(clientState.Operators))
+	if l := len(clientState.Operators); l == 0 {
+		return fmt.Errorf("updateOperators is not supported in permissionless operator mode")
+	} else if l > 1 {
+		return fmt.Errorf("currently only one operator is supported, but got %v", l)
 	}
 	opSigner, err := pr.GetSignOperator()
 	if err != nil {

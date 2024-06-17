@@ -146,6 +146,10 @@ func (pc ProverConfig) Validate() error {
 	return nil
 }
 
+func (f Fraction) String() string {
+	return fmt.Sprintf("%v/%v", f.Numerator, f.Denominator)
+}
+
 func decodeMrenclaveHex(s string) ([]byte, error) {
 	trimmed := strings.ToLower(strings.TrimPrefix(s, "0x"))
 	bz, err := hex.DecodeString(trimmed)
