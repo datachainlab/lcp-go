@@ -371,11 +371,24 @@ func (pr *Prover) ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Has
 }
 
 func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []common.Address, thresholdNumerator, thresholdDenominator uint64) (common.Hash, error) {
-	bz, err := lcptypes.ComputeEIP712UpdateOperatorsWithSalt(pr.computeEIP712ChainSalt(), pr.path.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
+	chainId, verifyingContract := pr.getDomainParams()
+	bz, err := lcptypes.ComputeEIP712UpdateOperators(chainId, verifyingContract, pr.computeEIP712ChainSalt(), pr.path.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
 	if err != nil {
 		return common.Hash{}, err
 	}
 	return crypto.Keccak256Hash(bz), nil
+}
+
+func (pr *Prover) getDomainParams() (int64, common.Address) {
+	switch pr.config.ChainType() {
+	case ChainTypeEVM:
+		salt := pr.config.GetEvmChainEip712Salt()
+		return int64(salt.ChainId), common.HexToAddress(salt.VerifyingContractAddress)
+	case ChainTypeCosmos:
+		return 0, common.Address{}
+	default:
+		panic(fmt.Sprintf("unsupported chain type: %v", pr.config.ChainType()))
+	}
 }
 
 func (pr *Prover) computeEIP712ChainSalt() common.Hash {

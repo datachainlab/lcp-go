@@ -67,12 +67,12 @@ func ComputeChainSalt(chainID string, prefix []byte) common.Hash {
 	return crypto.Keccak256Hash(msg)
 }
 
-func LCPClientDomain(salt common.Hash) apitypes.TypedDataDomain {
+func LCPClientDomain(chainId int64, verifyingContract common.Address, salt common.Hash) apitypes.TypedDataDomain {
 	return apitypes.TypedDataDomain{
 		Name:              "LCPClient",
 		Version:           "1",
-		ChainId:           math.NewHexOrDecimal256(0),
-		VerifyingContract: "0x0000000000000000000000000000000000000000",
+		ChainId:           math.NewHexOrDecimal256(chainId),
+		VerifyingContract: verifyingContract.Hex(),
 		Salt:              salt.Hex(),
 	}
 }
@@ -81,7 +81,7 @@ func GetRegisterEnclaveKeyTypedData(salt common.Hash, avr string) apitypes.Typed
 	return apitypes.TypedData{
 		PrimaryType: "RegisterEnclaveKey",
 		Types:       RegisterEnclaveKeyTypes,
-		Domain:      LCPClientDomain(salt),
+		Domain:      LCPClientDomain(0, common.Address{}, salt),
 		Message: apitypes.TypedDataMessage{
 			"avr": avr,
 		},
@@ -89,6 +89,8 @@ func GetRegisterEnclaveKeyTypedData(salt common.Hash, avr string) apitypes.Typed
 }
 
 func GetUpdateOperatorsTypedData(
+	chainId int64,
+	verifyingContract common.Address,
 	salt common.Hash,
 	clientID string,
 	nonce uint64,
@@ -103,7 +105,7 @@ func GetUpdateOperatorsTypedData(
 	return apitypes.TypedData{
 		PrimaryType: "UpdateOperators",
 		Types:       UpdateOperatorsTypes,
-		Domain:      LCPClientDomain(salt),
+		Domain:      LCPClientDomain(chainId, verifyingContract, salt),
 		Message: apitypes.TypedDataMessage{
 			"clientId":             clientID,
 			"nonce":                fmt.Sprint(nonce),
@@ -134,7 +136,7 @@ func ComputeEIP712RegisterEnclaveKeyHash(chainID string, prefix []byte, report s
 	return crypto.Keccak256Hash(bz), nil
 }
 
-func ComputeEIP712UpdateOperators(
+func ComputeEIP712UpdateOperatorsCosmos(
 	chainID string,
 	prefix []byte,
 	clientID string,
@@ -143,10 +145,12 @@ func ComputeEIP712UpdateOperators(
 	newOperatorThresholdNumerator uint64,
 	newOperatorThresholdDenominator uint64,
 ) ([]byte, error) {
-	return ComputeEIP712UpdateOperatorsWithSalt(ComputeChainSalt(chainID, prefix), clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator)
+	return ComputeEIP712UpdateOperators(0, common.Address{}, ComputeChainSalt(chainID, prefix), clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator)
 }
 
-func ComputeEIP712UpdateOperatorsWithSalt(
+func ComputeEIP712UpdateOperators(
+	chainId int64,
+	verifyingContract common.Address,
 	salt common.Hash,
 	clientID string,
 	nonce uint64,
@@ -155,7 +159,7 @@ func ComputeEIP712UpdateOperatorsWithSalt(
 	newOperatorThresholdDenominator uint64,
 ) ([]byte, error) {
 	_, raw, err := apitypes.TypedDataAndHash(
-		GetUpdateOperatorsTypedData(salt, clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator),
+		GetUpdateOperatorsTypedData(chainId, verifyingContract, salt, clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator),
 	)
 	if err != nil {
 		return nil, err

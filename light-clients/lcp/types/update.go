@@ -175,7 +175,7 @@ func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KV
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "operator addresses must be ordered: clientID=%v op0=%v op1=%v", clientID, newOperators[i-1].String(), op.String())
 		}
 	}
-	signBytes, err := ComputeEIP712UpdateOperators(
+	signBytes, err := ComputeEIP712UpdateOperatorsCosmos(
 		ctx.ChainID(),
 		[]byte(exported.StoreKey),
 		clientID,
