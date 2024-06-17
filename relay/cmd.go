@@ -14,13 +14,14 @@ import (
 )
 
 const (
-	flagSrc                  = "src"
-	flagHeight               = "height"
-	flagELCClientID          = "elc_client_id"
-	flagNewOperators         = "new_operators"
-	flagNonce                = "nonce"
-	flagThresholdNumerator   = "threshold_numerator"
-	flagThresholdDenominator = "threshold_denominator"
+	flagSrc                     = "src"
+	flagHeight                  = "height"
+	flagELCClientID             = "elc_client_id"
+	flagNewOperators            = "new_operators"
+	flagNonce                   = "nonce"
+	flagThresholdNumerator      = "threshold_numerator"
+	flagThresholdDenominator    = "threshold_denominator"
+	flagPermissionlessOperators = "permissionless_operators"
 )
 
 func LCPCmd(ctx *config.Context) *cobra.Command {
@@ -304,13 +305,14 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				counterparty = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			newOperators := viper.GetStringSlice(flagNewOperators)
-			threshold := Fraction{
-				Numerator:   viper.GetUint64(flagThresholdNumerator),
-				Denominator: viper.GetUint64(flagThresholdDenominator),
-			}
-			nonce := viper.GetUint64(flagNonce)
 
+			newOperators := viper.GetStringSlice(flagNewOperators)
+			viper.GetBool(flagPermissionlessOperators)
+			if len(newOperators) == 0 && !viper.GetBool(flagPermissionlessOperators) {
+				return fmt.Errorf("either new operators or permissionless operators must be provided")
+			} else if len(newOperators) > 0 && viper.GetBool(flagPermissionlessOperators) {
+				return fmt.Errorf("both new operators and permissionless operators cannot be provided")
+			}
 			var newOpAddrs []common.Address
 			for _, op := range newOperators {
 				if !common.IsHexAddress(op) {
@@ -318,11 +320,23 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				}
 				newOpAddrs = append(newOpAddrs, common.HexToAddress(op))
 			}
+			threshold := Fraction{
+				Numerator:   viper.GetUint64(flagThresholdNumerator),
+				Denominator: viper.GetUint64(flagThresholdDenominator),
+			}
+			nonce := viper.GetUint64(flagNonce)
 			return prover.updateOperators(counterparty, nonce, newOpAddrs, threshold)
 		},
 	}
-	cmd = thresholdFlag(nonceFlag(newOperatorsFlag(srcFlag(cmd))))
-	cmd.MarkFlagRequired(flagNewOperators)
+	cmd = thresholdFlag(
+		nonceFlag(
+			permissionlessOperatorsFlag(
+				newOperatorsFlag(
+					srcFlag(cmd),
+				),
+			),
+		),
+	)
 	cmd.MarkFlagRequired(flagThresholdNumerator)
 	cmd.MarkFlagRequired(flagThresholdDenominator)
 	cmd.MarkFlagRequired(flagNonce)
@@ -376,6 +390,14 @@ func thresholdFlag(cmd *cobra.Command) *cobra.Command {
 		panic(err)
 	}
 	if err := viper.BindPFlag(flagThresholdDenominator, cmd.Flags().Lookup(flagThresholdDenominator)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func permissionlessOperatorsFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().BoolP(flagPermissionlessOperators, "", false, "a boolean value whether the new operators are permissionless")
+	if err := viper.BindPFlag(flagPermissionlessOperators, cmd.Flags().Lookup(flagPermissionlessOperators)); err != nil {
 		panic(err)
 	}
 	return cmd

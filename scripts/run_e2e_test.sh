@@ -31,5 +31,6 @@ make -C tests/e2e/cases/tm2tm restore
 
 make -C tests/e2e/cases/tm2tm test-relay
 make -C tests/e2e/cases/tm2tm test-elc-cmd
+make -C tests/e2e/cases/tm2tm test-operators
 make -C tests/e2e/cases/tm2tm network-down
 kill $LCP_PID
