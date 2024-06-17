@@ -23,7 +23,8 @@ const (
 	QuoteSwHardeningNeeded                 = "SW_HARDENING_NEEDED"
 	QuoteConfigurationAndSwHardeningNeeded = "CONFIGURATION_AND_SW_HARDENING_NEEDED"
 
-	ChainTypeCosmos uint16 = 2
+	ChainTypeEVM    ChainType = 1
+	ChainTypeCosmos ChainType = 2
 )
 
 var (
@@ -58,9 +59,26 @@ var (
 	}
 )
 
+type ChainType uint16
+
+func (t ChainType) String() string {
+	switch t {
+	case ChainTypeEVM:
+		return "EVM"
+	case ChainTypeCosmos:
+		return "Cosmos"
+	default:
+		return fmt.Sprintf("UnknownChainType(%d)", t.Uint16())
+	}
+}
+
+func (t ChainType) Uint16() uint16 {
+	return uint16(t)
+}
+
 func ComputeChainSalt(chainID string, prefix []byte) common.Hash {
 	msg := make([]byte, 2)
-	binary.BigEndian.PutUint16(msg, ChainTypeCosmos)
+	binary.BigEndian.PutUint16(msg, ChainTypeCosmos.Uint16())
 	// TODO abi encode?
 	msg = append(msg, []byte(chainID)...)
 	msg = append(msg, prefix...)

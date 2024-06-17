@@ -430,13 +430,13 @@ func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []
 
 func (pr *Prover) getDomainParams() EIP712DomainParams {
 	switch pr.config.ChainType() {
-	case ChainTypeEVM:
+	case lcptypes.ChainTypeEVM:
 		params := pr.config.GetOperatorsEvmChainEip712Params()
 		return EIP712DomainParams{
 			ChainId:               params.ChainId,
 			VerifyingContractAddr: common.HexToAddress(params.VerifyingContractAddress),
 		}
-	case ChainTypeCosmos:
+	case lcptypes.ChainTypeCosmos:
 		return EIP712DomainParams{
 			ChainId:               0,
 			VerifyingContractAddr: common.Address{},
@@ -448,9 +448,9 @@ func (pr *Prover) getDomainParams() EIP712DomainParams {
 
 func (pr *Prover) computeEIP712ChainSalt() common.Hash {
 	switch pr.config.ChainType() {
-	case ChainTypeEVM:
+	case lcptypes.ChainTypeEVM:
 		return pr.computeEIP712EVMChainSalt()
-	case ChainTypeCosmos:
+	case lcptypes.ChainTypeCosmos:
 		return pr.computeEIP712CosmosChainSalt()
 	default:
 		panic(fmt.Sprintf("unsupported chain type: %v", pr.config.ChainType()))
@@ -459,7 +459,7 @@ func (pr *Prover) computeEIP712ChainSalt() common.Hash {
 
 func (pr *Prover) computeEIP712EVMChainSalt() common.Hash {
 	var bz [2]byte
-	binary.BigEndian.PutUint16(bz[:], ChainTypeEVM.Uint16())
+	binary.BigEndian.PutUint16(bz[:], lcptypes.ChainTypeEVM.Uint16())
 	return crypto.Keccak256Hash(bz[:])
 }
 

@@ -16,27 +16,7 @@ import (
 const (
 	DefaultDialTimeout                 = 20 // seconds
 	DefaultMessageAggregationBatchSize = 8
-
-	ChainTypeEVM    ChainType = 1
-	ChainTypeCosmos ChainType = 2
 )
-
-type ChainType uint16
-
-func (t ChainType) String() string {
-	switch t {
-	case ChainTypeEVM:
-		return "EVM"
-	case ChainTypeCosmos:
-		return "Cosmos"
-	default:
-		return fmt.Sprintf("UnknownChainType(%d)", t.Uint16())
-	}
-}
-
-func (t ChainType) Uint16() uint16 {
-	return uint16(t)
-}
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
 
@@ -92,12 +72,12 @@ func (pc ProverConfig) GetMessageAggregationBatchSize() uint64 {
 	}
 }
 
-func (pc ProverConfig) ChainType() ChainType {
+func (pc ProverConfig) ChainType() lcptypes.ChainType {
 	switch pc.OperatorsEip712Params.(type) {
 	case *ProverConfig_OperatorsEvmChainEip712Params:
-		return ChainTypeEVM
+		return lcptypes.ChainTypeEVM
 	case *ProverConfig_OperatorsCosmosChainEip712Params:
-		return ChainTypeCosmos
+		return lcptypes.ChainTypeCosmos
 	default:
 		panic(fmt.Sprintf("unknown chain params: %v", pc.OperatorsEip712Params))
 	}
