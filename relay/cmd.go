@@ -17,7 +17,7 @@ const (
 	flagSrc                  = "src"
 	flagHeight               = "height"
 	flagELCClientID          = "elc_client_id"
-	flagOperators            = "operators"
+	flagNewOperators         = "new_operators"
 	flagNonce                = "nonce"
 	flagThresholdNumerator   = "threshold_numerator"
 	flagThresholdDenominator = "threshold_denominator"
@@ -304,25 +304,25 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				counterparty = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			operators := viper.GetStringSlice(flagOperators)
+			newOperators := viper.GetStringSlice(flagNewOperators)
 			threshold := Fraction{
 				Numerator:   viper.GetUint64(flagThresholdNumerator),
 				Denominator: viper.GetUint64(flagThresholdDenominator),
 			}
 			nonce := viper.GetUint64(flagNonce)
 
-			var newOperators []common.Address
-			for _, op := range operators {
+			var newOpAddrs []common.Address
+			for _, op := range newOperators {
 				if !common.IsHexAddress(op) {
 					return fmt.Errorf("invalid operator address: %s", op)
 				}
-				newOperators = append(newOperators, common.HexToAddress(op))
+				newOpAddrs = append(newOpAddrs, common.HexToAddress(op))
 			}
-			return prover.updateOperators(counterparty, nonce, newOperators, threshold)
+			return prover.updateOperators(counterparty, nonce, newOpAddrs, threshold)
 		},
 	}
-	cmd = thresholdFlag(nonceFlag(operatorsFlag(srcFlag(cmd))))
-	cmd.MarkFlagRequired(flagOperators)
+	cmd = thresholdFlag(nonceFlag(newOperatorsFlag(srcFlag(cmd))))
+	cmd.MarkFlagRequired(flagNewOperators)
 	cmd.MarkFlagRequired(flagThresholdNumerator)
 	cmd.MarkFlagRequired(flagThresholdDenominator)
 	cmd.MarkFlagRequired(flagNonce)
@@ -353,9 +353,9 @@ func elcClientIDFlag(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-func operatorsFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().StringSliceP(flagOperators, "", nil, "new operator addresses")
-	if err := viper.BindPFlag(flagOperators, cmd.Flags().Lookup(flagOperators)); err != nil {
+func newOperatorsFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().StringSliceP(flagNewOperators, "", nil, "new operator addresses")
+	if err := viper.BindPFlag(flagNewOperators, cmd.Flags().Lookup(flagNewOperators)); err != nil {
 		panic(err)
 	}
 	return cmd
