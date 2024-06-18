@@ -8,7 +8,9 @@ import (
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/signer"
 )
 
 const (
@@ -26,6 +28,11 @@ func (cfg *ProverConfig) UnpackInterfaces(unpacker codectypes.AnyUnpacker) error
 	}
 	if err := unpacker.UnpackAny(cfg.OriginProver, new(core.ProverConfig)); err != nil {
 		return err
+	}
+	if cfg.OperatorSigner != nil {
+		if err := unpacker.UnpackAny(cfg.OperatorSigner, new(signer.SignerConfig)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -65,6 +72,17 @@ func (pc ProverConfig) GetMessageAggregationBatchSize() uint64 {
 	}
 }
 
+func (pc ProverConfig) ChainType() lcptypes.ChainType {
+	switch pc.OperatorsEip712Params.(type) {
+	case *ProverConfig_OperatorsEip712EvmChainParams:
+		return lcptypes.ChainTypeEVM
+	case *ProverConfig_OperatorsEip712CosmosChainParams:
+		return lcptypes.ChainTypeCosmos
+	default:
+		panic(fmt.Sprintf("unknown chain params: %v", pc.OperatorsEip712Params))
+	}
+}
+
 func (pc ProverConfig) Validate() error {
 	// origin prover config validation
 	if err := pc.OriginProver.GetCachedValue().(core.ProverConfig).Validate(); err != nil {
@@ -84,6 +102,38 @@ func (pc ProverConfig) Validate() error {
 	}
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
+	}
+	if l := len(pc.Operators); l > 1 {
+		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
+	}
+	if pc.OperatorsEip712Params != nil {
+		if pc.OperatorSigner == nil {
+			return fmt.Errorf("OperatorSigner must be set if OperatorsEip712Params is set")
+		}
+		signerConfig, ok := pc.OperatorSigner.GetCachedValue().(signer.SignerConfig)
+		if !ok {
+			return fmt.Errorf("failed to cast OperatorSigner's config: %T", pc.OperatorSigner.GetCachedValue())
+		} else if err := signerConfig.Validate(); err != nil {
+			return fmt.Errorf("failed to validate the OperatorSigner's config: %v", err)
+		}
+		switch params := pc.OperatorsEip712Params.(type) {
+		case *ProverConfig_OperatorsEip712EvmChainParams:
+			if params.OperatorsEip712EvmChainParams.ChainId == 0 {
+				return fmt.Errorf("OperatorsEip712EvmChainParams.ChainId must be set")
+			}
+			if !common.IsHexAddress(params.OperatorsEip712EvmChainParams.VerifyingContractAddress) {
+				return fmt.Errorf("OperatorsEip712EvmChainParams.VerifyingContractAddress must be a valid hex address")
+			}
+		case *ProverConfig_OperatorsEip712CosmosChainParams:
+			if params.OperatorsEip712CosmosChainParams.ChainId == "" {
+				return fmt.Errorf("OperatorsEip712CosmosChainParams.ChainId must be set")
+			}
+			if params.OperatorsEip712CosmosChainParams.Prefix == "" {
+				return fmt.Errorf("OperatorsEip712CosmosChainParams.Prefix must be set")
+			}
+		default:
+			return fmt.Errorf("OperatorsEip712Params: unknown type")
+		}
 	}
 	return nil
 }

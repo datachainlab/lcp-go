@@ -39,3 +39,7 @@ restore:
 .PHONY: test-elc-cmd
 test-elc-cmd:
 	RLY_BIN=$(RLY_BIN) ./scripts/test-elc-cmd
+
+.PHONY: test-operators
+test-operators:
+	RLY_BIN=$(RLY_BIN) ./scripts/test-operators

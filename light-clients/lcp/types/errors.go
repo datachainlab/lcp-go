@@ -12,4 +12,5 @@ var (
 	ErrProcessedHeightNotFound     = errorsmod.Register(ModuleName, 5, "processed height not found")
 	ErrDelayPeriodNotPassed        = errorsmod.Register(ModuleName, 6, "packet-specified delay period has not been reached")
 	ErrInvalidMisbehaviour         = errorsmod.Register(ModuleName, 7, "invalid misbehaviour")
+	ErrRetrieveClientID            = errorsmod.Register(ModuleName, 8, "failed to retrieve client id")
 )

@@ -17,7 +17,7 @@ if [ "${dst_elc_exists}" != "false" ]; then
   exit 1
 fi
 
-echo "create a new ELCs"
+echo "create new ELCs"
 
 src_elc_created=$(${RLY} lcp create-elc ibc01 --elc_client_id=07-tendermint-2 --src | jq -r '.created')
 if [ "${src_elc_created}" != "true" ]; then

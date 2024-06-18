@@ -1,7 +1,9 @@
 package relay
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,6 +13,8 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 
@@ -20,11 +24,16 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 )
 
+type EIP712DomainParams struct {
+	ChainId               uint64
+	VerifyingContractAddr common.Address
+}
+
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
-func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAwareChain) error {
-	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, verifier)
+func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
+	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, counterparty)
 	if err != nil {
-		return fmt.Errorf("failed loadEKIAndCheckUpdateNeeded: %w", err)
+		return fmt.Errorf("failed to call loadEKIAndCheckUpdateNeeded: %w", err)
 	}
 	pr.getLogger().Info("loadEKIAndCheckUpdateNeeded", "updateNeeded", updateNeeded)
 	if !updateNeeded {
@@ -40,20 +49,23 @@ func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, verifier core.FinalityAw
 
 	eki, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
-		return fmt.Errorf("failed selectNewEnclaveKey: %w", err)
+		return fmt.Errorf("failed to call selectNewEnclaveKey: %w", err)
 	}
-	pr.getLogger().Info("selected available enclave key", "eki", eki)
 
-	msgID, err := pr.registerEnclaveKey(verifier, eki)
+	pr.getLogger().Info("try to register a new enclave key", "eki", eki)
+
+	msgID, err := pr.registerEnclaveKey(counterparty, eki)
 	if err != nil {
-		return fmt.Errorf("failed registerEnclaveKey: %w", err)
+		return fmt.Errorf("failed to call registerEnclaveKey: %w", err)
 	}
-	finalized, success, err := pr.checkMsgStatus(verifier, msgID)
+	pr.getLogger().Info("registered a new enclave key", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "msg_id", msgID.String())
+	finalized, success, err := pr.checkMsgStatus(counterparty, msgID)
 	if err != nil {
-		return fmt.Errorf("failed checkMsgStatus: %w", err)
+		return fmt.Errorf("failed to call checkMsgStatus: %w", err)
 	} else if !success {
 		return fmt.Errorf("msg(id=%v) execution failed", msgID)
 	}
+	pr.getLogger().Info("check the msg status", "msg_id", msgID.String(), "finalized", finalized, "success", success)
 
 	if finalized {
 		// this path is for chans have instant finality
@@ -102,12 +114,12 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time,
 // finalized: true if the msg is finalized
 // success: true if the msg is successfully executed in the origin chain
 // error: non-nil if the msg may not exist in the origin chain
-func (pr *Prover) checkMsgStatus(verifier core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
-	lfHeader, err := verifier.GetLatestFinalizedHeader()
+func (pr *Prover) checkMsgStatus(counterparty core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
+	lfHeader, err := counterparty.GetLatestFinalizedHeader()
 	if err != nil {
 		return false, false, err
 	}
-	msgRes, err := verifier.GetMsgResult(msgID)
+	msgRes, err := counterparty.GetMsgResult(msgID)
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
@@ -118,7 +130,7 @@ func (pr *Prover) checkMsgStatus(verifier core.FinalityAwareChain, msgID core.Ms
 }
 
 // if returns true, query new key and register key and set it to memory
-func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core.FinalityAwareChain) (bool, error) {
+func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
 	now := time.Now()
 
 	// no active enclave key in memory
@@ -162,7 +174,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core
 
 	pr.getLogger().Info("active enclave key is unfinalized")
 
-	if _, err := verifier.GetMsgResult(pr.unfinalizedMsgID); err != nil {
+	if _, err := counterparty.GetMsgResult(pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		pr.getLogger().Info("the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
@@ -171,7 +183,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, verifier core
 		return true, nil
 	}
 
-	finalized, success, err := pr.checkMsgStatus(verifier, pr.unfinalizedMsgID)
+	finalized, success, err := pr.checkMsgStatus(counterparty, pr.unfinalizedMsgID)
 	pr.getLogger().Info("check the unfinalized msg status", "msg_id", pr.unfinalizedMsgID.String(), "finalized", finalized, "success", success, "error", err)
 	if err != nil {
 		return false, err
@@ -215,10 +227,10 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 	}
 
 	for _, eki := range res.Keys {
-		if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
+		if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 			return nil, err
 		}
-		avr, err := ias.ParseAndValidateAVR(eki.Report)
+		avr, err := ias.ParseAndValidateAVR([]byte(eki.Report))
 		if err != nil {
 			return nil, err
 		}
@@ -315,27 +327,81 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
-	if err := ias.VerifyReport(eki.Report, eki.Signature, eki.SigningCert, time.Now()); err != nil {
+func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
+	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
+		return nil, fmt.Errorf("failed to verify AVR signature: %w", err)
+	}
+	avr, err := ias.ParseAndValidateAVR([]byte(eki.Report))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse and validate AVR: %w", err)
+	}
+	quote, err := avr.Quote()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get quote from AVR: %w", err)
+	}
+	ek, expectedOperator, err := ias.GetEKAndOperator(quote)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get EK and operator: %w", err)
+	}
+	clientLogger.Info("got EK and operator from report data", "ek", ek.String(), "operator", expectedOperator.String())
+
+	cplatestHeight, err := counterparty.LatestHeight()
+	if err != nil {
 		return nil, err
 	}
-	if _, err := ias.ParseAndValidateAVR(eki.Report); err != nil {
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	if err != nil {
 		return nil, err
+	}
+	var cs ibcexported.ClientState
+	if err := pr.codec.UnpackAny(counterpartyClientRes.ClientState, &cs); err != nil {
+		return nil, fmt.Errorf("failed to unpack client state: client_state=%v %w", counterpartyClientRes.ClientState, err)
+	}
+	clientState, ok := cs.(*lcptypes.ClientState)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast client state: %T", cs)
+	}
+	if !bytes.Equal(clientState.Mrenclave, quote.Report.MRENCLAVE[:]) {
+		return nil, fmt.Errorf("MRENCLAVE mismatch: expected 0x%x, but got 0x%x", clientState.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
 	message := &lcptypes.RegisterEnclaveKeyMessage{
-		Report:      eki.Report,
-		Signature:   eki.Signature,
-		SigningCert: eki.SigningCert,
+		Report:            []byte(eki.Report),
+		Signature:         eki.Signature,
+		SigningCert:       eki.SigningCert,
+		OperatorSignature: nil,
 	}
-	signer, err := verifier.GetAddress()
+	if pr.IsOperatorEnabled() {
+		operator, err := pr.eip712Signer.GetSignerAddress()
+		if err != nil {
+			return nil, err
+		}
+		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
+		}
+		if expectedOperator != [20]byte{} && operator != expectedOperator {
+			return nil, fmt.Errorf("operator mismatch: expected 0x%x, but got 0x%x", expectedOperator, operator)
+		}
+		commitment, err := pr.ComputeEIP712RegisterEnclaveKeyHash(eki.Report)
+		if err != nil {
+			return nil, err
+		}
+		sig, err := pr.eip712Signer.Sign(commitment)
+		if err != nil {
+			return nil, err
+		}
+		message.OperatorSignature = sig
+		clientLogger.Info("operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
+	}
+	signer, err := counterparty.GetAddress()
 	if err != nil {
 		return nil, err
 	}
-	msg, err := clienttypes.NewMsgUpdateClient(pr.path.ClientID, message, signer.String())
+	msg, err := clienttypes.NewMsgUpdateClient(counterparty.Path().ClientID, message, signer.String())
 	if err != nil {
 		return nil, err
 	}
-	ids, err := verifier.SendMsgs([]sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs([]sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +409,63 @@ func (pr *Prover) registerEnclaveKey(verifier core.Chain, eki *enclave.EnclaveKe
 		return nil, fmt.Errorf("unexpected number of msgIDs: %v", ids)
 	}
 	return ids[0], nil
+}
+
+func (pr *Prover) ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
+	bz, err := lcptypes.ComputeEIP712RegisterEnclaveKeyWithSalt(pr.computeEIP712ChainSalt(), report)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
+}
+
+func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []common.Address, thresholdNumerator, thresholdDenominator uint64) (common.Hash, error) {
+	params := pr.getDomainParams()
+	bz, err := lcptypes.ComputeEIP712UpdateOperators(int64(params.ChainId), params.VerifyingContractAddr, pr.computeEIP712ChainSalt(), pr.path.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
+}
+
+func (pr *Prover) getDomainParams() EIP712DomainParams {
+	switch pr.config.ChainType() {
+	case lcptypes.ChainTypeEVM:
+		params := pr.config.GetOperatorsEip712EvmChainParams()
+		return EIP712DomainParams{
+			ChainId:               params.ChainId,
+			VerifyingContractAddr: common.HexToAddress(params.VerifyingContractAddress),
+		}
+	case lcptypes.ChainTypeCosmos:
+		return EIP712DomainParams{
+			ChainId:               0,
+			VerifyingContractAddr: common.Address{},
+		}
+	default:
+		panic(fmt.Sprintf("unsupported chain type: %v", pr.config.ChainType()))
+	}
+}
+
+func (pr *Prover) computeEIP712ChainSalt() common.Hash {
+	switch pr.config.ChainType() {
+	case lcptypes.ChainTypeEVM:
+		return pr.computeEIP712EVMChainSalt()
+	case lcptypes.ChainTypeCosmos:
+		return pr.computeEIP712CosmosChainSalt()
+	default:
+		panic(fmt.Sprintf("unsupported chain type: %v", pr.config.ChainType()))
+	}
+}
+
+func (pr *Prover) computeEIP712EVMChainSalt() common.Hash {
+	var bz [2]byte
+	binary.BigEndian.PutUint16(bz[:], lcptypes.ChainTypeEVM.Uint16())
+	return crypto.Keccak256Hash(bz[:])
+}
+
+func (pr *Prover) computeEIP712CosmosChainSalt() common.Hash {
+	params := pr.config.GetOperatorsEip712CosmosChainParams()
+	return lcptypes.ComputeCosmosChainSalt(params.ChainId, []byte(params.Prefix))
 }
 
 type CreateELCResult struct {
@@ -423,6 +546,15 @@ func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwar
 	return &UpdateELCResult{
 		Messages: msgs,
 	}, nil
+}
+
+func containsOperator(operators []common.Address, operator common.Address) bool {
+	for _, op := range operators {
+		if op == operator {
+			return true
+		}
+	}
+	return false
 }
 
 type QueryELCResult struct {
@@ -534,8 +666,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	for _, update := range updates {
 		message := &lcptypes.UpdateClientMessage{
 			ProxyMessage: update.Message,
-			Signer:       update.Signer,
-			Signature:    update.Signature,
+			Signatures:   [][]byte{update.Signature},
 		}
 		if err := message.ValidateBasic(); err != nil {
 			return err

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type ProxyMessage interface{}
@@ -58,5 +59,38 @@ func (RegisterEnclaveKeyMessage) ClientType() string {
 }
 
 func (RegisterEnclaveKeyMessage) ValidateBasic() error {
+	return nil
+}
+
+var _ exported.ClientMessage = (*UpdateOperatorsMessage)(nil)
+
+func (UpdateOperatorsMessage) ClientType() string {
+	return ClientTypeLCP
+}
+
+func (m UpdateOperatorsMessage) GetNewOperators() ([]common.Address, error) {
+	ops := make([]common.Address, len(m.NewOperators))
+	for i, op := range m.NewOperators {
+		if len(op) != 20 {
+			return nil, fmt.Errorf("invalid operator address length: expected=%v actual=%v", 20, len(op))
+		}
+		ops[i] = common.BytesToAddress(op)
+	}
+	return ops, nil
+}
+
+func (m UpdateOperatorsMessage) ValidateBasic() error {
+	if m.NewOperatorsThresholdNumerator == 0 {
+		return fmt.Errorf("new operators threshold numerator cannot be zero")
+	}
+	if m.NewOperatorsThresholdDenominator == 0 {
+		return fmt.Errorf("new operators threshold denominator cannot be zero")
+	}
+	if m.NewOperatorsThresholdNumerator > m.NewOperatorsThresholdDenominator {
+		return fmt.Errorf("new operators threshold numerator cannot be greater than denominator")
+	}
+	if len(m.Signatures) == 0 {
+		return fmt.Errorf("signatures cannot be empty")
+	}
 	return nil
 }

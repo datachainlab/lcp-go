@@ -20,5 +20,6 @@ func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 		(*exported.ClientMessage)(nil),
 		&UpdateClientMessage{},
 		&RegisterEnclaveKeyMessage{},
+		&UpdateOperatorsMessage{},
 	)
 }

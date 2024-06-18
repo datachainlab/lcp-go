@@ -1,7 +1,11 @@
 package types
 
 import (
+	"reflect"
+	"strings"
+
 	errorsmod "cosmossdk.io/errors"
+	storeprefix "cosmossdk.io/store/prefix"
 	storetypes "cosmossdk.io/store/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -122,4 +126,55 @@ func GetProcessedHeight(clientStore storetypes.KVStore, height exported.Height) 
 func deleteProcessedHeight(clientStore storetypes.KVStore, height exported.Height) {
 	key := ProcessedHeightKey(height)
 	clientStore.Delete(key)
+}
+
+// getClientID extracts and validates the clientID from the clientStore's prefix.
+//
+// Due to the 02-client module not passing the clientID to the lcp module,
+// this function was devised to infer it from the store's prefix.
+// The expected format of the clientStore prefix is "<placeholder>/{clientID}/".
+// If the clientStore is of type migrateProposalWrappedStore, the subjectStore's prefix is utilized instead.
+func getClientID(clientStore storetypes.KVStore) (string, error) {
+	store, ok := clientStore.(storeprefix.Store)
+	if !ok {
+		return "", errorsmod.Wrap(ErrRetrieveClientID, "clientStore is not a prefix store")
+	}
+
+	// using reflect to retrieve the private prefix field
+	r := reflect.ValueOf(&store).Elem()
+
+	f := r.FieldByName("prefix")
+	if !f.IsValid() {
+		return "", errorsmod.Wrap(ErrRetrieveClientID, "prefix field not found")
+	}
+
+	prefix := string(f.Bytes())
+
+	split := strings.Split(prefix, "/")
+	if len(split) < 3 {
+		return "", errorsmod.Wrap(ErrRetrieveClientID, "prefix is not of the expected form")
+	}
+
+	// the clientID is the second to last element of the prefix
+	// the prefix is expected to be of the form "<placeholder>/{clientID}/"
+	clientID := split[len(split)-2]
+	if err := ValidateClientID(clientID); err != nil {
+		return "", errorsmod.Wrapf(ErrRetrieveClientID, "prefix does not contain a valid clientID: %s", err.Error())
+	}
+
+	return clientID, nil
+}
+
+// ValidateClientID validates the client identifier by ensuring that it conforms
+// to the 02-client identifier format and that it is a lcp clientID.
+func ValidateClientID(clientID string) error {
+	if !clienttypes.IsValidClientID(clientID) {
+		return errorsmod.Wrapf(host.ErrInvalidID, "invalid client identifier %s", clientID)
+	}
+
+	if !strings.HasPrefix(clientID, ClientTypeLCP) {
+		return errorsmod.Wrapf(host.ErrInvalidID, "client identifier %s does not contain %s prefix", clientID, ClientTypeLCP)
+	}
+
+	return nil
 }

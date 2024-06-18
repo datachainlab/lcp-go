@@ -25,9 +25,8 @@ var _ = math.Inf
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 type UpdateClientMessage struct {
-	ProxyMessage []byte `protobuf:"bytes,1,opt,name=proxy_message,json=proxyMessage,proto3" json:"proxy_message,omitempty"`
-	Signer       []byte `protobuf:"bytes,2,opt,name=signer,proto3" json:"signer,omitempty"`
-	Signature    []byte `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	ProxyMessage []byte   `protobuf:"bytes,1,opt,name=proxy_message,json=proxyMessage,proto3" json:"proxy_message,omitempty"`
+	Signatures   [][]byte `protobuf:"bytes,2,rep,name=signatures,proto3" json:"signatures,omitempty"`
 }
 
 func (m *UpdateClientMessage) Reset()         { *m = UpdateClientMessage{} }
@@ -64,9 +63,10 @@ func (m *UpdateClientMessage) XXX_DiscardUnknown() {
 var xxx_messageInfo_UpdateClientMessage proto.InternalMessageInfo
 
 type RegisterEnclaveKeyMessage struct {
-	Report      string `protobuf:"bytes,1,opt,name=report,proto3" json:"report,omitempty"`
-	Signature   []byte `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
-	SigningCert []byte `protobuf:"bytes,3,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
+	Report            []byte `protobuf:"bytes,1,opt,name=report,proto3" json:"report,omitempty"`
+	Signature         []byte `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	SigningCert       []byte `protobuf:"bytes,3,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
+	OperatorSignature []byte `protobuf:"bytes,4,opt,name=operator_signature,json=operatorSignature,proto3" json:"operator_signature,omitempty"`
 }
 
 func (m *RegisterEnclaveKeyMessage) Reset()         { *m = RegisterEnclaveKeyMessage{} }
@@ -102,6 +102,47 @@ func (m *RegisterEnclaveKeyMessage) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_RegisterEnclaveKeyMessage proto.InternalMessageInfo
 
+type UpdateOperatorsMessage struct {
+	Nonce                            uint64   `protobuf:"varint,1,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	NewOperators                     [][]byte `protobuf:"bytes,2,rep,name=new_operators,json=newOperators,proto3" json:"new_operators,omitempty"`
+	NewOperatorsThresholdNumerator   uint64   `protobuf:"varint,3,opt,name=new_operators_threshold_numerator,json=newOperatorsThresholdNumerator,proto3" json:"new_operators_threshold_numerator,omitempty"`
+	NewOperatorsThresholdDenominator uint64   `protobuf:"varint,4,opt,name=new_operators_threshold_denominator,json=newOperatorsThresholdDenominator,proto3" json:"new_operators_threshold_denominator,omitempty"`
+	Signatures                       [][]byte `protobuf:"bytes,5,rep,name=signatures,proto3" json:"signatures,omitempty"`
+}
+
+func (m *UpdateOperatorsMessage) Reset()         { *m = UpdateOperatorsMessage{} }
+func (m *UpdateOperatorsMessage) String() string { return proto.CompactTextString(m) }
+func (*UpdateOperatorsMessage) ProtoMessage()    {}
+func (*UpdateOperatorsMessage) Descriptor() ([]byte, []int) {
+	return fileDescriptor_69f4c398e914fe8d, []int{2}
+}
+func (m *UpdateOperatorsMessage) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *UpdateOperatorsMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_UpdateOperatorsMessage.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *UpdateOperatorsMessage) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_UpdateOperatorsMessage.Merge(m, src)
+}
+func (m *UpdateOperatorsMessage) XXX_Size() int {
+	return m.Size()
+}
+func (m *UpdateOperatorsMessage) XXX_DiscardUnknown() {
+	xxx_messageInfo_UpdateOperatorsMessage.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_UpdateOperatorsMessage proto.InternalMessageInfo
+
 type ClientState struct {
 	Mrenclave     []byte       `protobuf:"bytes,1,opt,name=mrenclave,proto3" json:"mrenclave,omitempty"`
 	KeyExpiration uint64       `protobuf:"varint,2,opt,name=key_expiration,json=keyExpiration,proto3" json:"key_expiration,omitempty"`
@@ -110,14 +151,18 @@ type ClientState struct {
 	// e.g. SW_HARDENING_NEEDED, CONFIGURATION_AND_SW_HARDENING_NEEDED (except "OK")
 	AllowedQuoteStatuses []string `protobuf:"bytes,5,rep,name=allowed_quote_statuses,json=allowedQuoteStatuses,proto3" json:"allowed_quote_statuses,omitempty"`
 	// e.g. INTEL-SA-XXXXX
-	AllowedAdvisoryIds []string `protobuf:"bytes,6,rep,name=allowed_advisory_ids,json=allowedAdvisoryIds,proto3" json:"allowed_advisory_ids,omitempty"`
+	AllowedAdvisoryIds            []string `protobuf:"bytes,6,rep,name=allowed_advisory_ids,json=allowedAdvisoryIds,proto3" json:"allowed_advisory_ids,omitempty"`
+	Operators                     [][]byte `protobuf:"bytes,7,rep,name=operators,proto3" json:"operators,omitempty"`
+	OperatorsNonce                uint64   `protobuf:"varint,8,opt,name=operators_nonce,json=operatorsNonce,proto3" json:"operators_nonce,omitempty"`
+	OperatorsThresholdNumerator   uint64   `protobuf:"varint,9,opt,name=operators_threshold_numerator,json=operatorsThresholdNumerator,proto3" json:"operators_threshold_numerator,omitempty"`
+	OperatorsThresholdDenominator uint64   `protobuf:"varint,10,opt,name=operators_threshold_denominator,json=operatorsThresholdDenominator,proto3" json:"operators_threshold_denominator,omitempty"`
 }
 
 func (m *ClientState) Reset()         { *m = ClientState{} }
 func (m *ClientState) String() string { return proto.CompactTextString(m) }
 func (*ClientState) ProtoMessage()    {}
 func (*ClientState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_69f4c398e914fe8d, []int{2}
+	return fileDescriptor_69f4c398e914fe8d, []int{3}
 }
 func (m *ClientState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -156,7 +201,7 @@ func (m *ConsensusState) Reset()         { *m = ConsensusState{} }
 func (m *ConsensusState) String() string { return proto.CompactTextString(m) }
 func (*ConsensusState) ProtoMessage()    {}
 func (*ConsensusState) Descriptor() ([]byte, []int) {
-	return fileDescriptor_69f4c398e914fe8d, []int{3}
+	return fileDescriptor_69f4c398e914fe8d, []int{4}
 }
 func (m *ConsensusState) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -188,6 +233,7 @@ var xxx_messageInfo_ConsensusState proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*UpdateClientMessage)(nil), "ibc.lightclients.lcp.v1.UpdateClientMessage")
 	proto.RegisterType((*RegisterEnclaveKeyMessage)(nil), "ibc.lightclients.lcp.v1.RegisterEnclaveKeyMessage")
+	proto.RegisterType((*UpdateOperatorsMessage)(nil), "ibc.lightclients.lcp.v1.UpdateOperatorsMessage")
 	proto.RegisterType((*ClientState)(nil), "ibc.lightclients.lcp.v1.ClientState")
 	proto.RegisterType((*ConsensusState)(nil), "ibc.lightclients.lcp.v1.ConsensusState")
 }
@@ -195,39 +241,49 @@ func init() {
 func init() { proto.RegisterFile("ibc/lightclients/lcp/v1/lcp.proto", fileDescriptor_69f4c398e914fe8d) }
 
 var fileDescriptor_69f4c398e914fe8d = []byte{
-	// 504 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x5c, 0x52, 0x4d, 0x6f, 0xd3, 0x40,
-	0x10, 0x8d, 0xd3, 0x10, 0x9a, 0x4d, 0xd2, 0x83, 0xa9, 0x8a, 0x1b, 0x21, 0x37, 0x0d, 0x42, 0xca,
-	0xa5, 0x36, 0x01, 0xc4, 0x9d, 0x46, 0x91, 0x88, 0x10, 0x07, 0x5c, 0xb8, 0x70, 0xb1, 0x36, 0xf6,
-	0xe0, 0xac, 0xea, 0x78, 0xcd, 0xee, 0x24, 0xd4, 0xfc, 0x0a, 0xae, 0xfc, 0xa3, 0x1c, 0x7b, 0xe4,
-	0x84, 0x20, 0xf9, 0x23, 0x68, 0x3f, 0x4a, 0x02, 0x27, 0xef, 0xbc, 0xf7, 0xf6, 0x3d, 0xef, 0xcc,
-	0x90, 0x73, 0x36, 0x4b, 0xc2, 0x9c, 0x65, 0x73, 0x4c, 0x72, 0x06, 0x05, 0xca, 0x30, 0x4f, 0xca,
-	0x70, 0x35, 0x52, 0x9f, 0xa0, 0x14, 0x1c, 0xb9, 0xfb, 0x90, 0xcd, 0x92, 0x60, 0x5f, 0x12, 0x28,
-	0x6e, 0x35, 0xea, 0x1d, 0x67, 0x3c, 0xe3, 0x5a, 0x13, 0xaa, 0x93, 0x91, 0xf7, 0xce, 0x94, 0x63,
-	0xc2, 0x05, 0x84, 0x46, 0xae, 0xcc, 0xcc, 0xc9, 0x08, 0x06, 0x25, 0x79, 0xf0, 0xa1, 0x4c, 0x29,
-	0xc2, 0x58, 0xa3, 0x6f, 0x41, 0x4a, 0x9a, 0x81, 0xfb, 0x98, 0x74, 0x4b, 0xc1, 0x6f, 0xaa, 0x78,
-	0x61, 0x00, 0xcf, 0xe9, 0x3b, 0xc3, 0x4e, 0xd4, 0xd1, 0xe0, 0x9d, 0xe8, 0x84, 0x34, 0x25, 0xcb,
-	0x0a, 0x10, 0x5e, 0x5d, 0xb3, 0xb6, 0x72, 0x1f, 0x91, 0x96, 0x3a, 0x51, 0x5c, 0x0a, 0xf0, 0x0e,
-	0x34, 0xb5, 0x03, 0x06, 0x48, 0x4e, 0x23, 0xc8, 0x98, 0x44, 0x10, 0x93, 0x22, 0xc9, 0xe9, 0x0a,
-	0xde, 0xc0, 0xbe, 0xa5, 0x80, 0x92, 0x0b, 0xd4, 0x81, 0xad, 0xc8, 0x56, 0xff, 0x5a, 0xd6, 0xff,
-	0xb3, 0x74, 0xcf, 0x49, 0x47, 0x15, 0xac, 0xc8, 0xe2, 0x04, 0x04, 0xda, 0xcc, 0xb6, 0xc5, 0xc6,
-	0x20, 0x70, 0xf0, 0xbd, 0x4e, 0xda, 0xe6, 0x89, 0x57, 0x48, 0x11, 0x94, 0xe1, 0x42, 0x80, 0xc9,
-	0xb7, 0x8f, 0xdb, 0x01, 0xee, 0x13, 0x72, 0x74, 0x0d, 0x55, 0x0c, 0x37, 0x25, 0x13, 0x14, 0x19,
-	0x2f, 0x74, 0x66, 0x23, 0xea, 0x5e, 0x43, 0x35, 0xf9, 0x0b, 0xaa, 0xbf, 0xfd, 0x24, 0xf8, 0x57,
-	0x28, 0x74, 0xe2, 0x61, 0x64, 0x2b, 0x77, 0x42, 0xba, 0x39, 0x45, 0x90, 0x18, 0xcf, 0x41, 0x8d,
-	0xca, 0x6b, 0xf4, 0x9d, 0x61, 0xfb, 0x59, 0x2f, 0x50, 0xc3, 0x53, 0xd3, 0x08, 0xec, 0x0c, 0x56,
-	0xa3, 0xe0, 0xb5, 0x56, 0x5c, 0x36, 0xd6, 0x3f, 0xcf, 0x6a, 0x51, 0xc7, 0x5c, 0x33, 0x98, 0xfb,
-	0x82, 0x9c, 0xd0, 0x3c, 0xe7, 0x5f, 0x20, 0x8d, 0x3f, 0x2f, 0x39, 0x42, 0x2c, 0x91, 0xe2, 0x52,
-	0x82, 0xf4, 0xee, 0xf5, 0x0f, 0x86, 0xad, 0xe8, 0xd8, 0xb2, 0xef, 0x14, 0x79, 0x65, 0x39, 0xf7,
-	0x29, 0xb9, 0xc3, 0x63, 0x9a, 0xae, 0x98, 0xe4, 0xa2, 0x8a, 0x59, 0x2a, 0xbd, 0xa6, 0xbe, 0xe3,
-	0x5a, 0xee, 0x95, 0xa5, 0xa6, 0xa9, 0x1c, 0x4c, 0xc9, 0xd1, 0x98, 0x17, 0x12, 0x0a, 0xb9, 0x94,
-	0xa6, 0x3b, 0xa7, 0xe4, 0x50, 0x65, 0x41, 0xcc, 0x52, 0xdb, 0x9c, 0xfb, 0xba, 0x9e, 0xa6, 0xaa,
-	0x71, 0xc8, 0x16, 0x20, 0x91, 0x2e, 0x4a, 0xdb, 0x95, 0x1d, 0x70, 0xf9, 0x7e, 0xfd, 0xdb, 0xaf,
-	0xad, 0x37, 0xbe, 0x73, 0xbb, 0xf1, 0x9d, 0x5f, 0x1b, 0xdf, 0xf9, 0xb6, 0xf5, 0x6b, 0xb7, 0x5b,
-	0xbf, 0xf6, 0x63, 0xeb, 0xd7, 0x3e, 0xbe, 0xcc, 0x18, 0xce, 0x97, 0xb3, 0x20, 0xe1, 0x8b, 0x30,
-	0xa5, 0x48, 0x93, 0x39, 0x65, 0x45, 0x4e, 0x67, 0x6a, 0xbf, 0x2f, 0x32, 0x6e, 0x56, 0xff, 0x62,
-	0x7f, 0xf7, 0xb1, 0x2a, 0x41, 0xce, 0x9a, 0x7a, 0x57, 0x9f, 0xff, 0x09, 0x00, 0x00, 0xff, 0xff,
-	0xc0, 0x21, 0xbe, 0x1a, 0x20, 0x03, 0x00, 0x00,
+	// 670 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x54, 0x5d, 0x4f, 0x13, 0x4d,
+	0x18, 0x6d, 0xa1, 0x7c, 0x0d, 0x85, 0x37, 0xef, 0x48, 0xb0, 0xa0, 0x2c, 0x50, 0x62, 0xe4, 0x86,
+	0xad, 0xa8, 0xf1, 0x5e, 0x10, 0x63, 0x63, 0xc0, 0xb8, 0xe0, 0x0d, 0x37, 0x9b, 0xe9, 0xee, 0xe3,
+	0x76, 0xc2, 0xee, 0xcc, 0x3a, 0x33, 0x2d, 0xd4, 0xff, 0x60, 0xe2, 0x7f, 0xf0, 0xcf, 0x70, 0xc9,
+	0xa5, 0x57, 0x46, 0xe1, 0xd6, 0x1f, 0x61, 0xe6, 0x63, 0xbb, 0xf5, 0xab, 0x5e, 0xb5, 0x73, 0xce,
+	0x99, 0x93, 0x7d, 0x9e, 0x73, 0x32, 0x68, 0x93, 0x76, 0xa2, 0x56, 0x4a, 0x93, 0xae, 0x8a, 0x52,
+	0x0a, 0x4c, 0xc9, 0x56, 0x1a, 0xe5, 0xad, 0xfe, 0xae, 0xfe, 0xf1, 0x73, 0xc1, 0x15, 0xc7, 0xb7,
+	0x69, 0x27, 0xf2, 0x47, 0x25, 0xbe, 0xe6, 0xfa, 0xbb, 0xab, 0x4b, 0x09, 0x4f, 0xb8, 0xd1, 0xb4,
+	0xf4, 0x3f, 0x2b, 0x5f, 0x5d, 0xd7, 0x8e, 0x11, 0x17, 0xd0, 0xb2, 0x72, 0x6d, 0x66, 0xff, 0x59,
+	0x41, 0xf3, 0x14, 0xdd, 0x7a, 0x93, 0xc7, 0x44, 0xc1, 0xbe, 0x41, 0x0f, 0x41, 0x4a, 0x92, 0x00,
+	0xde, 0x42, 0x0b, 0xb9, 0xe0, 0x17, 0x83, 0x30, 0xb3, 0x40, 0xa3, 0xba, 0x51, 0xdd, 0xae, 0x07,
+	0x75, 0x03, 0x16, 0x22, 0x0f, 0x21, 0x49, 0x13, 0x46, 0x54, 0x4f, 0x80, 0x6c, 0x4c, 0x6c, 0x4c,
+	0x6e, 0xd7, 0x83, 0x11, 0xa4, 0xf9, 0xa9, 0x8a, 0x56, 0x02, 0x48, 0xa8, 0x54, 0x20, 0x0e, 0x58,
+	0x94, 0x92, 0x3e, 0xbc, 0x84, 0xe1, 0xed, 0x65, 0x34, 0x2d, 0x20, 0xe7, 0x42, 0x39, 0x6f, 0x77,
+	0xc2, 0x77, 0xd1, 0xdc, 0xd0, 0xa3, 0x31, 0x61, 0xa8, 0x12, 0xc0, 0x9b, 0xa8, 0xae, 0x0f, 0x94,
+	0x25, 0x61, 0x04, 0x42, 0x35, 0x26, 0x8d, 0x60, 0xde, 0x61, 0xfb, 0x20, 0x14, 0xde, 0x41, 0x98,
+	0xe7, 0x20, 0x88, 0xe2, 0x22, 0x2c, 0x9d, 0x6a, 0x46, 0xf8, 0x7f, 0xc1, 0x1c, 0x17, 0x44, 0xf3,
+	0xc3, 0x04, 0x5a, 0xb6, 0x2b, 0x78, 0xe5, 0x38, 0x59, 0x7c, 0xe2, 0x12, 0x9a, 0x62, 0x9c, 0x45,
+	0x76, 0xfa, 0x5a, 0x60, 0x0f, 0x7a, 0x37, 0x0c, 0xce, 0xc3, 0xc2, 0xa9, 0x98, 0xbc, 0xce, 0xe0,
+	0x7c, 0xe8, 0x80, 0xdb, 0x68, 0xf3, 0x27, 0x51, 0xa8, 0xba, 0x02, 0x64, 0x97, 0xa7, 0x71, 0xc8,
+	0x7a, 0x99, 0x05, 0xcd, 0xc7, 0xd7, 0x02, 0x6f, 0xf4, 0xe2, 0x49, 0x21, 0x3b, 0x2a, 0x54, 0xf8,
+	0x10, 0x6d, 0xfd, 0xcd, 0x2a, 0x06, 0xc6, 0x33, 0xca, 0x8c, 0x59, 0xcd, 0x98, 0x6d, 0xfc, 0xd1,
+	0xec, 0x59, 0xa9, 0xfb, 0x25, 0xb5, 0xa9, 0xdf, 0x52, 0xfb, 0x3e, 0x89, 0xe6, 0x6d, 0x19, 0x8e,
+	0x15, 0x51, 0xa0, 0xf3, 0xc8, 0x04, 0xd8, 0xf8, 0x5c, 0x54, 0x25, 0x80, 0xef, 0xa1, 0xc5, 0x33,
+	0x18, 0x84, 0x70, 0x91, 0x53, 0x41, 0x14, 0xe5, 0xcc, 0x44, 0x56, 0x0b, 0x16, 0xce, 0x60, 0x70,
+	0x30, 0x04, 0x75, 0xd8, 0x6f, 0x05, 0x7f, 0x0f, 0xcc, 0xcc, 0x3c, 0x1b, 0xb8, 0x13, 0x3e, 0x40,
+	0x0b, 0x29, 0x51, 0x20, 0x55, 0xd8, 0x05, 0x5d, 0x6a, 0x33, 0xc5, 0xfc, 0xc3, 0x55, 0x5f, 0xd7,
+	0x5c, 0xf7, 0xd6, 0x77, 0x6d, 0xed, 0xef, 0xfa, 0x2f, 0x8c, 0x62, 0xaf, 0x76, 0xf9, 0x65, 0xbd,
+	0x12, 0xd4, 0xed, 0x35, 0x8b, 0xe1, 0xc7, 0x68, 0x99, 0xa4, 0x29, 0x3f, 0x87, 0x38, 0x7c, 0xd7,
+	0xe3, 0x0a, 0x42, 0xa9, 0x88, 0xea, 0x49, 0x37, 0xdf, 0x5c, 0xb0, 0xe4, 0xd8, 0xd7, 0x9a, 0x3c,
+	0x76, 0x1c, 0x7e, 0x80, 0x0a, 0x3c, 0x24, 0x71, 0x9f, 0x4a, 0x2e, 0x06, 0x21, 0x8d, 0x65, 0x63,
+	0xda, 0xdc, 0xc1, 0x8e, 0x7b, 0xea, 0xa8, 0x76, 0x2c, 0xf5, 0x2e, 0xca, 0xd8, 0x67, 0xcc, 0xea,
+	0x4a, 0x00, 0xdf, 0x47, 0xff, 0x95, 0x21, 0xd9, 0xe2, 0xcc, 0x9a, 0x65, 0x2c, 0x0e, 0xe1, 0x23,
+	0xd3, 0xa0, 0x3d, 0xb4, 0x36, 0xbe, 0x18, 0x73, 0xe6, 0xda, 0x1d, 0x3e, 0xa6, 0x15, 0xcf, 0xd1,
+	0xfa, 0xbf, 0x1a, 0x81, 0x8c, 0xcb, 0x1a, 0x1f, 0x57, 0x87, 0x66, 0x1b, 0x2d, 0xee, 0x73, 0x26,
+	0x81, 0xc9, 0x9e, 0xb4, 0x81, 0xaf, 0xa0, 0x59, 0xbd, 0x3e, 0x08, 0x69, 0xec, 0xf2, 0x9e, 0x31,
+	0xe7, 0x76, 0xac, 0xe7, 0x57, 0x34, 0x03, 0xa9, 0x48, 0x96, 0xbb, 0xa0, 0x4b, 0x60, 0xef, 0xe4,
+	0xf2, 0x9b, 0x57, 0xb9, 0xbc, 0xf6, 0xaa, 0x57, 0xd7, 0x5e, 0xf5, 0xeb, 0xb5, 0x57, 0xfd, 0x78,
+	0xe3, 0x55, 0xae, 0x6e, 0xbc, 0xca, 0xe7, 0x1b, 0xaf, 0x72, 0xfa, 0x24, 0xa1, 0xaa, 0xdb, 0xeb,
+	0xf8, 0x11, 0xcf, 0x5a, 0x31, 0x51, 0x24, 0xea, 0x12, 0xca, 0x52, 0xd2, 0xd1, 0x8f, 0xdb, 0x4e,
+	0xc2, 0xed, 0xbb, 0xb7, 0x33, 0xfa, 0xf0, 0xa9, 0x41, 0x0e, 0xb2, 0x33, 0x6d, 0x1e, 0xaa, 0x47,
+	0x3f, 0x02, 0x00, 0x00, 0xff, 0xff, 0x3b, 0xb1, 0x44, 0x28, 0x1d, 0x05, 0x00, 0x00,
 }
 
 func (m *UpdateClientMessage) Marshal() (dAtA []byte, err error) {
@@ -250,19 +306,14 @@ func (m *UpdateClientMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Signature) > 0 {
-		i -= len(m.Signature)
-		copy(dAtA[i:], m.Signature)
-		i = encodeVarintLcp(dAtA, i, uint64(len(m.Signature)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.Signer) > 0 {
-		i -= len(m.Signer)
-		copy(dAtA[i:], m.Signer)
-		i = encodeVarintLcp(dAtA, i, uint64(len(m.Signer)))
-		i--
-		dAtA[i] = 0x12
+	if len(m.Signatures) > 0 {
+		for iNdEx := len(m.Signatures) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Signatures[iNdEx])
+			copy(dAtA[i:], m.Signatures[iNdEx])
+			i = encodeVarintLcp(dAtA, i, uint64(len(m.Signatures[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
 	}
 	if len(m.ProxyMessage) > 0 {
 		i -= len(m.ProxyMessage)
@@ -294,6 +345,13 @@ func (m *RegisterEnclaveKeyMessage) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
+	if len(m.OperatorSignature) > 0 {
+		i -= len(m.OperatorSignature)
+		copy(dAtA[i:], m.OperatorSignature)
+		i = encodeVarintLcp(dAtA, i, uint64(len(m.OperatorSignature)))
+		i--
+		dAtA[i] = 0x22
+	}
 	if len(m.SigningCert) > 0 {
 		i -= len(m.SigningCert)
 		copy(dAtA[i:], m.SigningCert)
@@ -318,6 +376,62 @@ func (m *RegisterEnclaveKeyMessage) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	return len(dAtA) - i, nil
 }
 
+func (m *UpdateOperatorsMessage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UpdateOperatorsMessage) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *UpdateOperatorsMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Signatures) > 0 {
+		for iNdEx := len(m.Signatures) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Signatures[iNdEx])
+			copy(dAtA[i:], m.Signatures[iNdEx])
+			i = encodeVarintLcp(dAtA, i, uint64(len(m.Signatures[iNdEx])))
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
+	if m.NewOperatorsThresholdDenominator != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.NewOperatorsThresholdDenominator))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.NewOperatorsThresholdNumerator != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.NewOperatorsThresholdNumerator))
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.NewOperators) > 0 {
+		for iNdEx := len(m.NewOperators) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.NewOperators[iNdEx])
+			copy(dAtA[i:], m.NewOperators[iNdEx])
+			i = encodeVarintLcp(dAtA, i, uint64(len(m.NewOperators[iNdEx])))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if m.Nonce != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.Nonce))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *ClientState) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -338,6 +452,30 @@ func (m *ClientState) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.OperatorsThresholdDenominator != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.OperatorsThresholdDenominator))
+		i--
+		dAtA[i] = 0x50
+	}
+	if m.OperatorsThresholdNumerator != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.OperatorsThresholdNumerator))
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.OperatorsNonce != 0 {
+		i = encodeVarintLcp(dAtA, i, uint64(m.OperatorsNonce))
+		i--
+		dAtA[i] = 0x40
+	}
+	if len(m.Operators) > 0 {
+		for iNdEx := len(m.Operators) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.Operators[iNdEx])
+			copy(dAtA[i:], m.Operators[iNdEx])
+			i = encodeVarintLcp(dAtA, i, uint64(len(m.Operators[iNdEx])))
+			i--
+			dAtA[i] = 0x3a
+		}
+	}
 	if len(m.AllowedAdvisoryIds) > 0 {
 		for iNdEx := len(m.AllowedAdvisoryIds) - 1; iNdEx >= 0; iNdEx-- {
 			i -= len(m.AllowedAdvisoryIds[iNdEx])
@@ -447,13 +585,11 @@ func (m *UpdateClientMessage) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovLcp(uint64(l))
 	}
-	l = len(m.Signer)
-	if l > 0 {
-		n += 1 + l + sovLcp(uint64(l))
-	}
-	l = len(m.Signature)
-	if l > 0 {
-		n += 1 + l + sovLcp(uint64(l))
+	if len(m.Signatures) > 0 {
+		for _, b := range m.Signatures {
+			l = len(b)
+			n += 1 + l + sovLcp(uint64(l))
+		}
 	}
 	return n
 }
@@ -475,6 +611,40 @@ func (m *RegisterEnclaveKeyMessage) Size() (n int) {
 	l = len(m.SigningCert)
 	if l > 0 {
 		n += 1 + l + sovLcp(uint64(l))
+	}
+	l = len(m.OperatorSignature)
+	if l > 0 {
+		n += 1 + l + sovLcp(uint64(l))
+	}
+	return n
+}
+
+func (m *UpdateOperatorsMessage) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Nonce != 0 {
+		n += 1 + sovLcp(uint64(m.Nonce))
+	}
+	if len(m.NewOperators) > 0 {
+		for _, b := range m.NewOperators {
+			l = len(b)
+			n += 1 + l + sovLcp(uint64(l))
+		}
+	}
+	if m.NewOperatorsThresholdNumerator != 0 {
+		n += 1 + sovLcp(uint64(m.NewOperatorsThresholdNumerator))
+	}
+	if m.NewOperatorsThresholdDenominator != 0 {
+		n += 1 + sovLcp(uint64(m.NewOperatorsThresholdDenominator))
+	}
+	if len(m.Signatures) > 0 {
+		for _, b := range m.Signatures {
+			l = len(b)
+			n += 1 + l + sovLcp(uint64(l))
+		}
 	}
 	return n
 }
@@ -508,6 +678,21 @@ func (m *ClientState) Size() (n int) {
 			l = len(s)
 			n += 1 + l + sovLcp(uint64(l))
 		}
+	}
+	if len(m.Operators) > 0 {
+		for _, b := range m.Operators {
+			l = len(b)
+			n += 1 + l + sovLcp(uint64(l))
+		}
+	}
+	if m.OperatorsNonce != 0 {
+		n += 1 + sovLcp(uint64(m.OperatorsNonce))
+	}
+	if m.OperatorsThresholdNumerator != 0 {
+		n += 1 + sovLcp(uint64(m.OperatorsThresholdNumerator))
+	}
+	if m.OperatorsThresholdDenominator != 0 {
+		n += 1 + sovLcp(uint64(m.OperatorsThresholdDenominator))
 	}
 	return n
 }
@@ -599,7 +784,7 @@ func (m *UpdateClientMessage) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Signer", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Signatures", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -626,44 +811,8 @@ func (m *UpdateClientMessage) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Signer = append(m.Signer[:0], dAtA[iNdEx:postIndex]...)
-			if m.Signer == nil {
-				m.Signer = []byte{}
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowLcp
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthLcp
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthLcp
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Signature = append(m.Signature[:0], dAtA[iNdEx:postIndex]...)
-			if m.Signature == nil {
-				m.Signature = []byte{}
-			}
+			m.Signatures = append(m.Signatures, make([]byte, postIndex-iNdEx))
+			copy(m.Signatures[len(m.Signatures)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -719,7 +868,7 @@ func (m *RegisterEnclaveKeyMessage) Unmarshal(dAtA []byte) error {
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Report", wireType)
 			}
-			var stringLen uint64
+			var byteLen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowLcp
@@ -729,23 +878,25 @@ func (m *RegisterEnclaveKeyMessage) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
+			if byteLen < 0 {
 				return ErrInvalidLengthLcp
 			}
-			postIndex := iNdEx + intStringLen
+			postIndex := iNdEx + byteLen
 			if postIndex < 0 {
 				return ErrInvalidLengthLcp
 			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Report = string(dAtA[iNdEx:postIndex])
+			m.Report = append(m.Report[:0], dAtA[iNdEx:postIndex]...)
+			if m.Report == nil {
+				m.Report = []byte{}
+			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -814,6 +965,211 @@ func (m *RegisterEnclaveKeyMessage) Unmarshal(dAtA []byte) error {
 			if m.SigningCert == nil {
 				m.SigningCert = []byte{}
 			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperatorSignature", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLcp
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLcp
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.OperatorSignature = append(m.OperatorSignature[:0], dAtA[iNdEx:postIndex]...)
+			if m.OperatorSignature == nil {
+				m.OperatorSignature = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLcp(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLcp
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *UpdateOperatorsMessage) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLcp
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateOperatorsMessage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateOperatorsMessage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nonce", wireType)
+			}
+			m.Nonce = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Nonce |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NewOperators", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLcp
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLcp
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.NewOperators = append(m.NewOperators, make([]byte, postIndex-iNdEx))
+			copy(m.NewOperators[len(m.NewOperators)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NewOperatorsThresholdNumerator", wireType)
+			}
+			m.NewOperatorsThresholdNumerator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NewOperatorsThresholdNumerator |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NewOperatorsThresholdDenominator", wireType)
+			}
+			m.NewOperatorsThresholdDenominator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NewOperatorsThresholdDenominator |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signatures", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLcp
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLcp
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signatures = append(m.Signatures, make([]byte, postIndex-iNdEx))
+			copy(m.Signatures[len(m.Signatures)-1], dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -1035,6 +1391,95 @@ func (m *ClientState) Unmarshal(dAtA []byte) error {
 			}
 			m.AllowedAdvisoryIds = append(m.AllowedAdvisoryIds, string(dAtA[iNdEx:postIndex]))
 			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Operators", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthLcp
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthLcp
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Operators = append(m.Operators, make([]byte, postIndex-iNdEx))
+			copy(m.Operators[len(m.Operators)-1], dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperatorsNonce", wireType)
+			}
+			m.OperatorsNonce = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OperatorsNonce |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperatorsThresholdNumerator", wireType)
+			}
+			m.OperatorsThresholdNumerator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OperatorsThresholdNumerator |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 10:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperatorsThresholdDenominator", wireType)
+			}
+			m.OperatorsThresholdDenominator = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLcp
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.OperatorsThresholdDenominator |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLcp(dAtA[iNdEx:])

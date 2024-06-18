@@ -2,6 +2,8 @@ package types
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	errorsmod "cosmossdk.io/errors"
@@ -14,7 +16,21 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
+
+type EKInfo struct {
+	ExpiredAt uint64
+	Operator  common.Address
+}
+
+func (ei EKInfo) IsExpired(blockTime time.Time) bool {
+	return time.Unix(int64(ei.ExpiredAt), 0).Before(blockTime)
+}
+
+func (ei EKInfo) IsMatchOperator(operator common.Address) bool {
+	return ei.Operator == operator
+}
 
 func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, clientMsg exported.ClientMessage) error {
 	switch clientMsg := clientMsg.(type) {
@@ -22,6 +38,9 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 		pmsg, err := clientMsg.GetProxyMessage()
 		if err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
+		}
+		if err := cs.VerifySignatures(ctx, clientStore, crypto.Keccak256Hash(clientMsg.ProxyMessage), clientMsg.Signatures); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 		}
 		switch pmsg := pmsg.(type) {
 		case *UpdateStateProxyMessage:
@@ -32,7 +51,9 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg)
 		}
 	case *RegisterEnclaveKeyMessage:
-		return cs.verifyRegisterEnclaveKey(ctx, cdc, clientStore, clientMsg)
+		return cs.verifyRegisterEnclaveKey(ctx, clientStore, clientMsg)
+	case *UpdateOperatorsMessage:
+		return cs.verifyUpdateOperators(ctx, clientStore, clientMsg)
 	default:
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg)
 	}
@@ -54,20 +75,11 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 		}
 		prevConsensusState, err := GetConsensusState(store, cdc, pmsg.PrevHeight)
 		if err != nil {
-			return err
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get consensus state: %v", err)
 		}
 		if !bytes.Equal(prevConsensusState.StateId, pmsg.PrevStateID[:]) {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected StateID: expected=%v actual=%v", prevConsensusState.StateId, pmsg.PrevStateID[:])
 		}
-	}
-
-	signer := common.BytesToAddress(msg.Signer)
-	if !cs.IsActiveKey(ctx.BlockTime(), store, signer) {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "signer '%v' not found", signer)
-	}
-
-	if err := VerifySignatureWithSignBytes(msg.ProxyMessage, msg.Signature, signer); err != nil {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, err.Error())
 	}
 
 	if err := pmsg.Context.Validate(ctx.BlockTime()); err != nil {
@@ -77,7 +89,7 @@ func (cs ClientState) verifyUpdateClient(ctx sdk.Context, cdc codec.BinaryCodec,
 	return nil
 }
 
-func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, store storetypes.KVStore, message *RegisterEnclaveKeyMessage) error {
+func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes.KVStore, message *RegisterEnclaveKeyMessage) error {
 	// TODO define error types
 
 	if err := ias.VerifyReport(message.Report, message.Signature, message.SigningCert, ctx.BlockTime()); err != nil {
@@ -107,15 +119,91 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, cdc codec.Binary
 	if !bytes.Equal(cs.Mrenclave, quote.Report.MRENCLAVE[:]) {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
-	addr, err := ias.GetEnclaveKeyAddress(quote)
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712CosmosRegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err)
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err)
+		}
+	}
+	ek, expectedOperator, err := ias.GetEKAndOperator(quote)
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get enclave key and operator: %v", err)
+	}
+	if (expectedOperator != common.Address{}) && operator != expectedOperator {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v", expectedOperator, operator)
+	}
+	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
+	if cs.Contains(store, ek) {
+		if err := cs.ensureEKInfoMatch(store, ek, operator, expiredAt); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid enclave key info: %v", err)
+		}
+	}
+	return nil
+}
+
+func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KVStore, message *UpdateOperatorsMessage) error {
+	if err := message.ValidateBasic(); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid message: %v", err)
+	}
+	if len(cs.Operators) == 0 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "permissionless operators")
+	}
+	clientID, err := getClientID(store)
 	if err != nil {
 		return err
 	}
-	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
-	if e, found := cs.GetEnclaveKeyExpiredAt(store, addr); found {
-		if !e.Equal(expiredAt) {
-			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "enclave key '%v' already exists: expected=%v actual=%v", addr, e, expiredAt)
+	nextNonce := cs.OperatorsNonce + 1
+	if message.Nonce != nextNonce {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid nonce: expected=%v actual=%v clientID=%v", nextNonce, message.Nonce, clientID)
+	}
+	newOperators, err := message.GetNewOperators()
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get new operators: %v clientID=%v", err, clientID)
+	}
+	var zeroAddr common.Address
+	for i, op := range newOperators {
+		if op == zeroAddr {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: operator address must not be zero: clientID=%v", clientID)
 		}
+		// check if the operators are ordered
+		if i > 0 && bytes.Compare(newOperators[i-1].Bytes(), op.Bytes()) > 0 {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "operator addresses must be ordered: clientID=%v op0=%v op1=%v", clientID, newOperators[i-1].String(), op.String())
+		}
+	}
+	signBytes, err := ComputeEIP712CosmosUpdateOperators(
+		ctx.ChainID(),
+		[]byte(exported.StoreKey),
+		clientID,
+		message.Nonce,
+		newOperators,
+		message.NewOperatorsThresholdNumerator,
+		message.NewOperatorsThresholdDenominator,
+	)
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute sign bytes: err=%v clientID=%v", err, clientID)
+	}
+	commitment := crypto.Keccak256Hash(signBytes)
+	var success uint64 = 0
+	for i, op := range cs.GetOperators() {
+		if len(message.Signatures[i]) == 0 {
+			continue
+		}
+		addr, err := RecoverAddress(commitment, message.Signatures[i])
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: err=%v clientID=%v", err, clientID)
+		}
+		if addr != op {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v clientID=%v", op, addr, clientID)
+		}
+		success++
+	}
+	if success*cs.OperatorsThresholdDenominator < cs.OperatorsThresholdDenominator*uint64(len(cs.Operators)) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "insufficient signatures: expected=%v actual=%v clientID=%v", cs.OperatorsThresholdDenominator, success, clientID)
 	}
 	return nil
 }
@@ -129,18 +217,20 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 		}
 		switch pmsg := pmsg.(type) {
 		case *UpdateStateProxyMessage:
-			return cs.updateClient(ctx, cdc, clientStore, pmsg)
+			return cs.updateClient(cdc, clientStore, pmsg)
 		default:
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected message type: %T", pmsg))
 		}
 	case *RegisterEnclaveKeyMessage:
-		return cs.registerEnclaveKey(ctx, cdc, clientStore, clientMsg)
+		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
+	case *UpdateOperatorsMessage:
+		return cs.updateOperators(ctx, cdc, clientStore, clientMsg)
 	default:
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unknown client message %T", clientMsg))
 	}
 }
 
-func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
+func (cs ClientState) updateClient(cdc codec.BinaryCodec, clientStore storetypes.KVStore, msg *UpdateStateProxyMessage) []exported.Height {
 	if cs.LatestHeight.LT(msg.PostHeight) {
 		cs.LatestHeight = msg.PostHeight
 	}
@@ -151,7 +241,7 @@ func (cs ClientState) updateClient(ctx sdk.Context, cdc codec.BinaryCodec, clien
 	return nil
 }
 
-func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
+func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes.KVStore, message *RegisterEnclaveKeyMessage) []exported.Height {
 	avr, err := ias.ParseAndValidateAVR(message.Report)
 	if err != nil {
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err))
@@ -160,47 +250,170 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec,
 	if err != nil {
 		panic(err)
 	}
-	addr, err := ias.GetEnclaveKeyAddress(quote)
+	ek, _, err := ias.GetEKAndOperator(quote)
 	if err != nil {
 		panic(err)
 	}
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712CosmosRegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err))
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err))
+		}
+	}
 	expiredAt := avr.GetTimestamp().Add(cs.getKeyExpiration())
-	if cs.Contains(clientStore, addr) {
+	if cs.Contains(clientStore, ek) {
+		if err := cs.ensureEKInfoMatch(clientStore, ek, operator, expiredAt); err != nil {
+			panic(err)
+		}
+		return nil
+	} else {
 		ctx.EventManager().EmitEvent(
 			sdk.NewEvent(
-				EventTypeRegisteredEnclaveKey,
-				sdk.NewAttribute(AttributeKeyEnclaveKey, addr.Hex()),
-				sdk.NewAttribute(AttributeExpiredAt, expiredAt.String()),
+				EventTypeRegisterEnclaveKey,
+				sdk.NewAttribute(AttributeKeyEnclaveKey, ek.Hex()),
+				sdk.NewAttribute(AttributeKeyExpiredAt, expiredAt.String()),
+				sdk.NewAttribute(AttributeKeyOperator, operator.Hex()),
 			),
 		)
-		return nil
 	}
-	cs.AddEnclaveKey(clientStore, addr, expiredAt)
+	if err := cs.SetEKInfo(clientStore, ek, operator, expiredAt); err != nil {
+		panic(err)
+	}
 	return nil
 }
 
-func (cs ClientState) GetEnclaveKeyExpiredAt(clientStore storetypes.KVStore, key common.Address) (time.Time, bool) {
-	if !cs.Contains(clientStore, key) {
-		return time.Time{}, false
+func (cs ClientState) updateOperators(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *UpdateOperatorsMessage) []exported.Height {
+	cs.Operators = message.NewOperators
+	cs.OperatorsThresholdNumerator = message.NewOperatorsThresholdNumerator
+	cs.OperatorsThresholdDenominator = message.NewOperatorsThresholdDenominator
+	cs.OperatorsNonce = message.Nonce
+	setClientState(clientStore, cdc, &cs)
+
+	newOperators, err := message.GetNewOperators()
+	if err != nil {
+		panic(err)
 	}
-	expiredAt := sdk.BigEndianToUint64(clientStore.Get(enclaveKeyPath(key)))
-	return time.Unix(int64(expiredAt), 0), true
-}
-
-func (cs ClientState) Contains(clientStore storetypes.KVStore, key common.Address) bool {
-	return clientStore.Has(enclaveKeyPath(key))
-}
-
-func (cs ClientState) IsActiveKey(blockTime time.Time, clientStore storetypes.KVStore, key common.Address) bool {
-	if !cs.Contains(clientStore, key) {
-		return false
+	newOperatorsJSON, err := json.Marshal(newOperators)
+	if err != nil {
+		panic(err)
 	}
-	expiredAt := sdk.BigEndianToUint64(clientStore.Get(enclaveKeyPath(key)))
-	return time.Unix(int64(expiredAt), 0).After(blockTime)
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			EventTypeUpdateOperators,
+			sdk.NewAttribute(AttributeKeyNonce, fmt.Sprint(message.Nonce)),
+			sdk.NewAttribute(AttributeKeyNewOperators, string(newOperatorsJSON)),
+			sdk.NewAttribute(AttributeKeyThresholdNumerator, fmt.Sprint(message.NewOperatorsThresholdNumerator)),
+			sdk.NewAttribute(AttributeKeyThresholdDenominator, fmt.Sprint(message.NewOperatorsThresholdDenominator)),
+		),
+	)
+	return nil
 }
 
-func (cs ClientState) AddEnclaveKey(clientStore storetypes.KVStore, key common.Address, expiredAt time.Time) {
-	clientStore.Set(enclaveKeyPath(key), sdk.Uint64ToBigEndian(uint64(expiredAt.Unix())))
+func (cs ClientState) Contains(clientStore storetypes.KVStore, ek common.Address) bool {
+	return clientStore.Has(enclaveKeyPath(ek))
+}
+
+func (cs ClientState) GetEKInfo(clientStore storetypes.KVStore, ek common.Address) (*EKInfo, error) {
+	if !cs.Contains(clientStore, ek) {
+		return nil, nil
+	}
+	bz := clientStore.Get(enclaveKeyPath(ek))
+	if len(bz) != (8 + 20) {
+		return nil, fmt.Errorf("invalid enclave key info: expected=%v actual=%v", 8+20, len(bz))
+	}
+	return &EKInfo{
+		ExpiredAt: sdk.BigEndianToUint64(bz[:8]),
+		Operator:  common.BytesToAddress(bz[8:]),
+	}, nil
+}
+
+func (cs ClientState) ensureEKInfoMatch(clientStore storetypes.KVStore, ek common.Address, operator common.Address, expiredAt time.Time) error {
+	ekInfo, err := cs.GetEKInfo(clientStore, ek)
+	if err != nil {
+		return err
+	}
+	if ekInfo == nil {
+		return fmt.Errorf("enclave key '%v' not found", ek)
+	}
+	if ekInfo.Operator != operator {
+		return fmt.Errorf("enclave key '%v' operator mismatch: expected=%v actual=%v", ek, operator, ekInfo.Operator)
+	}
+	if ekInfo.ExpiredAt != uint64(expiredAt.Unix()) {
+		return fmt.Errorf("enclave key '%v' expiredAt mismatch: expected=%v actual=%v", ek, expiredAt, time.Unix(int64(ekInfo.ExpiredAt), 0))
+	}
+	return nil
+}
+
+func (cs ClientState) SetEKInfo(clientStore storetypes.KVStore, ek, operator common.Address, expiredAt time.Time) error {
+	clientStore.Set(enclaveKeyPath(ek), append(sdk.Uint64ToBigEndian(uint64(expiredAt.Unix())), operator.Bytes()...))
+	return nil
+}
+
+func (cs ClientState) VerifySignatures(ctx sdk.Context, clientStore storetypes.KVStore, commitment [32]byte, signatures [][]byte) error {
+	operators := cs.GetOperators()
+	sigNum := len(signatures)
+	opNum := len(operators)
+	if opNum == 0 {
+		if sigNum != 1 {
+			return fmt.Errorf("invalid signature length: expected=%v actual=%v", 1, sigNum)
+		}
+		ek, err := RecoverAddress(commitment, signatures[0])
+		if err != nil {
+			return err
+		}
+		ekInfo, err := cs.GetEKInfo(clientStore, ek)
+		if err != nil {
+			return err
+		} else if ekInfo == nil {
+			return fmt.Errorf("enclave key '%v' not found", ek)
+		} else if ekInfo.IsExpired(ctx.BlockTime()) {
+			return fmt.Errorf("enclave key '%v' is expired", ek)
+		}
+		return nil
+	} else if opNum != sigNum {
+		return fmt.Errorf("invalid signature length: expected=%v actual=%v", opNum, sigNum)
+	}
+
+	var success uint64 = 0
+	for i, op := range operators {
+		if len(signatures[i]) == 0 {
+			continue
+		}
+		ek, err := RecoverAddress(commitment, signatures[i])
+		if err != nil {
+			return err
+		}
+		ekInfo, err := cs.GetEKInfo(clientStore, ek)
+		if err != nil {
+			return err
+		} else if ekInfo == nil {
+			return fmt.Errorf("enclave key '%v' not found", ek)
+		} else if ekInfo.IsExpired(ctx.BlockTime()) {
+			return fmt.Errorf("enclave key '%v' is expired", ek)
+		} else if !ekInfo.IsMatchOperator(op) {
+			return fmt.Errorf("enclave key '%v' operator mismatch: expected=%v actual=%v", ek, op, ekInfo.Operator)
+		}
+		success++
+	}
+
+	if success*cs.OperatorsThresholdDenominator < cs.OperatorsThresholdDenominator*uint64(opNum) {
+		return fmt.Errorf("insufficient signatures: expected=%v actual=%v", cs.OperatorsThresholdDenominator, success)
+	}
+
+	return nil
+}
+
+func (cs ClientState) GetOperators() []common.Address {
+	var operators []common.Address
+	for _, op := range cs.Operators {
+		operators = append(operators, common.BytesToAddress(op))
+	}
+	return operators
 }
 
 func (cs ClientState) getKeyExpiration() time.Duration {

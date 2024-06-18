@@ -1,8 +1,14 @@
 package types
 
 const (
-	EventTypeRegisteredEnclaveKey = "registered_enclave_key"
+	EventTypeRegisterEnclaveKey = "register_enclave_key"
+	AttributeKeyEnclaveKey      = "enclave_key"
+	AttributeKeyExpiredAt       = "expired_at"
+	AttributeKeyOperator        = "operator"
 
-	AttributeKeyEnclaveKey = "enclave_key"
-	AttributeExpiredAt     = "expired_at"
+	EventTypeUpdateOperators         = "update_operators"
+	AttributeKeyNonce                = "nonce"
+	AttributeKeyNewOperators         = "new_operators"
+	AttributeKeyThresholdNumerator   = "threshold_numerator"
+	AttributeKeyThresholdDenominator = "threshold_denominator"
 )

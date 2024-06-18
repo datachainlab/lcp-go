@@ -5,8 +5,6 @@ LCP_BIN=./bin/lcp
 ENCLAVE_PATH=./bin/enclave.signed.so
 CERTS_DIR=./lcp/tests/certs
 
-export LCP_ENCLAVE_DEBUG=1
-
 rm -rf ~/.lcp
 
 enclave_key=$(${LCP_BIN} --log_level=off enclave generate-key --enclave=${ENCLAVE_PATH})

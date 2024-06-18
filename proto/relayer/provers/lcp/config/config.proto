@@ -23,4 +23,34 @@ message ProverConfig {
     bool message_aggregation = 9;
     uint64 message_aggregation_batch_size = 10;
     bool is_debug_enclave = 11;
+
+    // --- Operator Config --- //
+    // if empty, any operator is allowed (default)
+    // otherwise, only operators in this list are allowed
+    repeated string operators = 12;
+    // this only works when operators is not empty
+    // the value must be less than or equal to 1
+    Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
+    // signer for eip712 commitment
+    google.protobuf.Any operator_signer = 14;
+    // eip712 params
+    oneof operators_eip712_params {
+        EIP712EVMChainParams operators_eip712_evm_chain_params = 31;
+        EIP712CosmosChainParams operators_eip712_cosmos_chain_params = 32;
+    }
+}
+
+message Fraction {
+    uint64 numerator = 1;
+    uint64 denominator = 2;
+}
+
+message EIP712EVMChainParams {
+    uint64 chain_id = 1;
+    string verifying_contract_address = 2;
+}
+
+message EIP712CosmosChainParams {
+    string chain_id = 1;
+    string prefix = 2;
 }

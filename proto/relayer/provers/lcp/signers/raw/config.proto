@@ -1,0 +1,11 @@
+syntax = "proto3";
+package relayer.provers.lcp.signers.raw;
+
+import "gogoproto/gogo.proto";
+
+option go_package = "github.com/datachainlab/lcp-go/relay/signers/raw";
+option (gogoproto.goproto_getters_all) = false;
+
+message SignerConfig {
+    string private_key = 1;
+}
