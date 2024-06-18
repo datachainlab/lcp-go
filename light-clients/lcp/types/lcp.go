@@ -77,11 +77,11 @@ func (t ChainType) Uint16() uint16 {
 }
 
 func ComputeChainSalt(chainID string, prefix []byte) common.Hash {
+	// salt = Hash(| ChainType | Hash(ChainID) | Hash(Prefix) |)
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, ChainTypeCosmos.Uint16())
-	// TODO abi encode?
-	msg = append(msg, []byte(chainID)...)
-	msg = append(msg, prefix...)
+	msg = append(msg, crypto.Keccak256Hash([]byte(chainID)).Bytes()...)
+	msg = append(msg, crypto.Keccak256Hash(prefix).Bytes()...)
 	return crypto.Keccak256Hash(msg)
 }
 
