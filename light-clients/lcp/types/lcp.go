@@ -76,15 +76,6 @@ func (t ChainType) Uint16() uint16 {
 	return uint16(t)
 }
 
-func ComputeChainSalt(chainID string, prefix []byte) common.Hash {
-	// salt = Hash(| ChainType | Hash(ChainID) | Hash(Prefix) |)
-	msg := make([]byte, 2)
-	binary.BigEndian.PutUint16(msg, ChainTypeCosmos.Uint16())
-	msg = append(msg, crypto.Keccak256Hash([]byte(chainID)).Bytes()...)
-	msg = append(msg, crypto.Keccak256Hash(prefix).Bytes()...)
-	return crypto.Keccak256Hash(msg)
-}
-
 func LCPClientDomain(chainId int64, verifyingContract common.Address, salt common.Hash) apitypes.TypedDataDomain {
 	return apitypes.TypedDataDomain{
 		Name:              "LCPClient",
@@ -142,30 +133,6 @@ func ComputeEIP712RegisterEnclaveKeyWithSalt(salt common.Hash, report string) ([
 	return []byte(raw), nil
 }
 
-func ComputeEIP712RegisterEnclaveKey(chainID string, prefix []byte, report string) ([]byte, error) {
-	return ComputeEIP712RegisterEnclaveKeyWithSalt(ComputeChainSalt(chainID, prefix), report)
-}
-
-func ComputeEIP712RegisterEnclaveKeyHash(chainID string, prefix []byte, report string) (common.Hash, error) {
-	bz, err := ComputeEIP712RegisterEnclaveKey(chainID, prefix, report)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return crypto.Keccak256Hash(bz), nil
-}
-
-func ComputeEIP712UpdateOperatorsCosmos(
-	chainID string,
-	prefix []byte,
-	clientID string,
-	nonce uint64,
-	newOperators []common.Address,
-	newOperatorThresholdNumerator uint64,
-	newOperatorThresholdDenominator uint64,
-) ([]byte, error) {
-	return ComputeEIP712UpdateOperators(0, common.Address{}, ComputeChainSalt(chainID, prefix), clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator)
-}
-
 func ComputeEIP712UpdateOperators(
 	chainId int64,
 	verifyingContract common.Address,
@@ -203,4 +170,39 @@ func RecoverAddress(commitment [32]byte, signature []byte) (common.Address, erro
 func VerifySignature(signBytes []byte, signature []byte) (common.Address, error) {
 	msg := crypto.Keccak256Hash(signBytes)
 	return RecoverAddress(msg, signature)
+}
+
+// ----------- Cosmos Specific ------------
+
+func ComputeCosmosChainSalt(chainID string, prefix []byte) common.Hash {
+	// salt = Hash(| ChainType | Hash(ChainID) | Hash(Prefix) |)
+	msg := make([]byte, 2)
+	binary.BigEndian.PutUint16(msg, ChainTypeCosmos.Uint16())
+	msg = append(msg, crypto.Keccak256Hash([]byte(chainID)).Bytes()...)
+	msg = append(msg, crypto.Keccak256Hash(prefix).Bytes()...)
+	return crypto.Keccak256Hash(msg)
+}
+
+func ComputeEIP712CosmosRegisterEnclaveKey(chainID string, prefix []byte, report string) ([]byte, error) {
+	return ComputeEIP712RegisterEnclaveKeyWithSalt(ComputeCosmosChainSalt(chainID, prefix), report)
+}
+
+func ComputeEIP712CosmosRegisterEnclaveKeyHash(chainID string, prefix []byte, report string) (common.Hash, error) {
+	bz, err := ComputeEIP712CosmosRegisterEnclaveKey(chainID, prefix, report)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
+}
+
+func ComputeEIP712CosmosUpdateOperators(
+	chainID string,
+	prefix []byte,
+	clientID string,
+	nonce uint64,
+	newOperators []common.Address,
+	newOperatorThresholdNumerator uint64,
+	newOperatorThresholdDenominator uint64,
+) ([]byte, error) {
+	return ComputeEIP712UpdateOperators(0, common.Address{}, ComputeCosmosChainSalt(chainID, prefix), clientID, nonce, newOperators, newOperatorThresholdNumerator, newOperatorThresholdDenominator)
 }

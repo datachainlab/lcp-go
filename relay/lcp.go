@@ -431,7 +431,7 @@ func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []
 func (pr *Prover) getDomainParams() EIP712DomainParams {
 	switch pr.config.ChainType() {
 	case lcptypes.ChainTypeEVM:
-		params := pr.config.GetOperatorsEvmChainEip712Params()
+		params := pr.config.GetOperatorsEip712EvmChainParams()
 		return EIP712DomainParams{
 			ChainId:               params.ChainId,
 			VerifyingContractAddr: common.HexToAddress(params.VerifyingContractAddress),
@@ -464,8 +464,8 @@ func (pr *Prover) computeEIP712EVMChainSalt() common.Hash {
 }
 
 func (pr *Prover) computeEIP712CosmosChainSalt() common.Hash {
-	params := pr.config.GetOperatorsCosmosChainEip712Params()
-	return lcptypes.ComputeChainSalt(params.ChainId, []byte(params.Prefix))
+	params := pr.config.GetOperatorsEip712CosmosChainParams()
+	return lcptypes.ComputeCosmosChainSalt(params.ChainId, []byte(params.Prefix))
 }
 
 type CreateELCResult struct {

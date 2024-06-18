@@ -35,8 +35,8 @@ message ProverConfig {
     google.protobuf.Any operator_signer = 14;
     // eip712 params
     oneof operators_eip712_params {
-        EVMChainEIP712Params operators_evm_chain_eip712_params = 31;
-        CosmosChainEIP712Params operators_cosmos_chain_eip712_params = 32;
+        EIP712EVMChainParams operators_eip712_evm_chain_params = 31;
+        EIP712CosmosChainParams operators_eip712_cosmos_chain_params = 32;
     }
 }
 
@@ -45,12 +45,12 @@ message Fraction {
     uint64 denominator = 2;
 }
 
-message EVMChainEIP712Params {
+message EIP712EVMChainParams {
     uint64 chain_id = 1;
     string verifying_contract_address = 2;
 }
 
-message CosmosChainEIP712Params {
+message EIP712CosmosChainParams {
     string chain_id = 1;
     string prefix = 2;
 }

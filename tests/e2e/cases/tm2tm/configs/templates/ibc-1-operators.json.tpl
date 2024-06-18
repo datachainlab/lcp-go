@@ -30,7 +30,7 @@
     "operators": [
       "0x9722414d09f43fb02235d739B50F4C027F43e657"
     ],
-    "operators_cosmos_chain_eip712_params": {
+    "operators_eip712_cosmos_chain_params": {
       "chain_id": "ibc0",
       "prefix": "ibc"
     },

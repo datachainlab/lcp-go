@@ -74,9 +74,9 @@ func (pc ProverConfig) GetMessageAggregationBatchSize() uint64 {
 
 func (pc ProverConfig) ChainType() lcptypes.ChainType {
 	switch pc.OperatorsEip712Params.(type) {
-	case *ProverConfig_OperatorsEvmChainEip712Params:
+	case *ProverConfig_OperatorsEip712EvmChainParams:
 		return lcptypes.ChainTypeEVM
-	case *ProverConfig_OperatorsCosmosChainEip712Params:
+	case *ProverConfig_OperatorsEip712CosmosChainParams:
 		return lcptypes.ChainTypeCosmos
 	default:
 		panic(fmt.Sprintf("unknown chain params: %v", pc.OperatorsEip712Params))
@@ -116,20 +116,20 @@ func (pc ProverConfig) Validate() error {
 		} else if err := signerConfig.Validate(); err != nil {
 			return fmt.Errorf("failed to validate the OperatorSigner's config: %v", err)
 		}
-		switch salt := pc.OperatorsEip712Params.(type) {
-		case *ProverConfig_OperatorsEvmChainEip712Params:
-			if salt.OperatorsEvmChainEip712Params.ChainId == 0 {
-				return fmt.Errorf("OperatorsEvmChainEip712Params.ChainId must be set")
+		switch params := pc.OperatorsEip712Params.(type) {
+		case *ProverConfig_OperatorsEip712EvmChainParams:
+			if params.OperatorsEip712EvmChainParams.ChainId == 0 {
+				return fmt.Errorf("OperatorsEip712EvmChainParams.ChainId must be set")
 			}
-			if !common.IsHexAddress(salt.OperatorsEvmChainEip712Params.VerifyingContractAddress) {
-				return fmt.Errorf("OperatorsEvmChainEip712Params.VerifyingContractAddress must be a valid hex address")
+			if !common.IsHexAddress(params.OperatorsEip712EvmChainParams.VerifyingContractAddress) {
+				return fmt.Errorf("OperatorsEip712EvmChainParams.VerifyingContractAddress must be a valid hex address")
 			}
-		case *ProverConfig_OperatorsCosmosChainEip712Params:
-			if salt.OperatorsCosmosChainEip712Params.ChainId == "" {
-				return fmt.Errorf("OperatorsCosmosChainEip712Params.ChainId must be set")
+		case *ProverConfig_OperatorsEip712CosmosChainParams:
+			if params.OperatorsEip712CosmosChainParams.ChainId == "" {
+				return fmt.Errorf("OperatorsEip712CosmosChainParams.ChainId must be set")
 			}
-			if salt.OperatorsCosmosChainEip712Params.Prefix == "" {
-				return fmt.Errorf("OperatorsCosmosChainEip712Params.Prefix must be set")
+			if params.OperatorsEip712CosmosChainParams.Prefix == "" {
+				return fmt.Errorf("OperatorsEip712CosmosChainParams.Prefix must be set")
 			}
 		default:
 			return fmt.Errorf("OperatorsEip712Params: unknown type")

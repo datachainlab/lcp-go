@@ -121,7 +121,7 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes
 	}
 	var operator common.Address
 	if len(message.OperatorSignature) > 0 {
-		commitment, err := ComputeEIP712RegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
+		commitment, err := ComputeEIP712CosmosRegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
 		if err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err)
 		}
@@ -175,7 +175,7 @@ func (cs ClientState) verifyUpdateOperators(ctx sdk.Context, store storetypes.KV
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "operator addresses must be ordered: clientID=%v op0=%v op1=%v", clientID, newOperators[i-1].String(), op.String())
 		}
 	}
-	signBytes, err := ComputeEIP712UpdateOperatorsCosmos(
+	signBytes, err := ComputeEIP712CosmosUpdateOperators(
 		ctx.ChainID(),
 		[]byte(exported.StoreKey),
 		clientID,
@@ -256,7 +256,7 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 	}
 	var operator common.Address
 	if len(message.OperatorSignature) > 0 {
-		commitment, err := ComputeEIP712RegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
+		commitment, err := ComputeEIP712CosmosRegisterEnclaveKeyHash(ctx.ChainID(), []byte(exported.StoreKey), string(message.Report))
 		if err != nil {
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err))
 		}
