@@ -86,11 +86,11 @@ func LCPClientDomain(chainId int64, verifyingContract common.Address, salt commo
 	}
 }
 
-func GetRegisterEnclaveKeyTypedData(salt common.Hash, avr string) apitypes.TypedData {
+func GetRegisterEnclaveKeyTypedData(avr string) apitypes.TypedData {
 	return apitypes.TypedData{
 		PrimaryType: "RegisterEnclaveKey",
 		Types:       RegisterEnclaveKeyTypes,
-		Domain:      LCPClientDomain(0, common.Address{}, salt),
+		Domain:      LCPClientDomain(0, common.Address{}, common.Hash{}),
 		Message: apitypes.TypedDataMessage{
 			"avr": avr,
 		},
@@ -125,12 +125,20 @@ func GetUpdateOperatorsTypedData(
 	}
 }
 
-func ComputeEIP712RegisterEnclaveKeyWithSalt(salt common.Hash, report string) ([]byte, error) {
-	_, raw, err := apitypes.TypedDataAndHash(GetRegisterEnclaveKeyTypedData(salt, report))
+func ComputeEIP712RegisterEnclaveKey(report string) ([]byte, error) {
+	_, raw, err := apitypes.TypedDataAndHash(GetRegisterEnclaveKeyTypedData(report))
 	if err != nil {
 		return nil, err
 	}
 	return []byte(raw), nil
+}
+
+func ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
+	bz, err := ComputeEIP712RegisterEnclaveKey(report)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
 }
 
 func ComputeEIP712UpdateOperators(
@@ -181,18 +189,6 @@ func ComputeCosmosChainSalt(chainID string, prefix []byte) common.Hash {
 	msg = append(msg, crypto.Keccak256Hash([]byte(chainID)).Bytes()...)
 	msg = append(msg, crypto.Keccak256Hash(prefix).Bytes()...)
 	return crypto.Keccak256Hash(msg)
-}
-
-func ComputeEIP712CosmosRegisterEnclaveKey(chainID string, prefix []byte, report string) ([]byte, error) {
-	return ComputeEIP712RegisterEnclaveKeyWithSalt(ComputeCosmosChainSalt(chainID, prefix), report)
-}
-
-func ComputeEIP712CosmosRegisterEnclaveKeyHash(chainID string, prefix []byte, report string) (common.Hash, error) {
-	bz, err := ComputeEIP712CosmosRegisterEnclaveKey(chainID, prefix, report)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return crypto.Keccak256Hash(bz), nil
 }
 
 func ComputeEIP712CosmosUpdateOperators(

@@ -382,7 +382,7 @@ func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.Encla
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
 			return nil, fmt.Errorf("operator mismatch: expected 0x%x, but got 0x%x", expectedOperator, operator)
 		}
-		commitment, err := pr.ComputeEIP712RegisterEnclaveKeyHash(eki.Report)
+		commitment, err := lcptypes.ComputeEIP712RegisterEnclaveKeyHash(eki.Report)
 		if err != nil {
 			return nil, err
 		}
@@ -409,14 +409,6 @@ func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.Encla
 		return nil, fmt.Errorf("unexpected number of msgIDs: %v", ids)
 	}
 	return ids[0], nil
-}
-
-func (pr *Prover) ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
-	bz, err := lcptypes.ComputeEIP712RegisterEnclaveKeyWithSalt(pr.computeEIP712ChainSalt(), report)
-	if err != nil {
-		return common.Hash{}, err
-	}
-	return crypto.Keccak256Hash(bz), nil
 }
 
 func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []common.Address, thresholdNumerator, thresholdDenominator uint64) (common.Hash, error) {
