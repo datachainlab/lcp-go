@@ -106,10 +106,12 @@ func (pc ProverConfig) Validate() error {
 	if l := len(pc.Operators); l > 1 {
 		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
 	}
-	if pc.OperatorsEip712Params != nil {
+	if len(pc.Operators) > 0 || pc.OperatorsEip712Params != nil {
 		if pc.OperatorSigner == nil {
-			return fmt.Errorf("OperatorSigner must be set if OperatorsEip712Params is set")
+			return fmt.Errorf("OperatorSigner must be set if Operators or OperatorsEip712Params is set")
 		}
+	}
+	if pc.OperatorsEip712Params != nil {
 		signerConfig, ok := pc.OperatorSigner.GetCachedValue().(signer.SignerConfig)
 		if !ok {
 			return fmt.Errorf("failed to cast OperatorSigner's config: %T", pc.OperatorSigner.GetCachedValue())

@@ -17,7 +17,7 @@ import (
 )
 
 func (pr *Prover) IsOperatorEnabled() bool {
-	return pr.eip712Signer != nil && pr.config.OperatorsEip712Params != nil
+	return len(pr.config.Operators) > 0
 }
 
 func (pr *Prover) GetOperators() ([]common.Address, error) {
@@ -41,6 +41,11 @@ func (pr *Prover) GetOperatorsThreshold() Fraction {
 }
 
 func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
+	if !pr.IsOperatorEnabled() {
+		return fmt.Errorf("operator is not enabled")
+	} else if pr.config.OperatorsEip712Params == nil {
+		return fmt.Errorf("operator EIP712 parameters are not set")
+	}
 	if nonce == 0 {
 		return fmt.Errorf("invalid nonce: %v", nonce)
 	}
