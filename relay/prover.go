@@ -109,12 +109,6 @@ func (pr *Prover) GetChainID() string {
 // These states will be submitted to the counterparty chain as MsgCreateClient.
 // If `height` is nil, the latest finalized height is selected automatically.
 func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
-	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
-		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
-	} else if res == nil {
-		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
-	}
-
 	ops, err := pr.GetOperators()
 	if err != nil {
 		return nil, nil, err
@@ -123,6 +117,7 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 	for _, op := range ops {
 		operators = append(operators, op.Bytes())
 	}
+
 	clientState := &lcptypes.ClientState{
 		LatestHeight:                  clienttypes.Height{},
 		Mrenclave:                     pr.config.GetMrenclave(),
@@ -135,6 +130,13 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 		OperatorsThresholdDenominator: pr.GetOperatorsThreshold().Denominator,
 	}
 	consensusState := &lcptypes.ConsensusState{}
+
+	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
+		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
+	} else if res == nil {
+		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
+	}
+
 	// NOTE after creates client, register an enclave key into the client state
 	return clientState, consensusState, nil
 }
