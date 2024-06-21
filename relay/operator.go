@@ -17,17 +17,16 @@ import (
 )
 
 func (pr *Prover) IsOperatorEnabled() bool {
-	return pr.eip712Signer != nil && pr.config.OperatorsEip712Params != nil
+	return len(pr.config.Operators) > 0
 }
 
 func (pr *Prover) GetOperators() ([]common.Address, error) {
 	var operators []common.Address
-	for _, operator := range pr.config.Operators {
-		addrStr := strings.TrimPrefix(operator, "0x")
-		if len(addrStr) != 40 {
-			return nil, fmt.Errorf("invalid operator address length %v", len(addrStr))
+	for i, operator := range pr.config.Operators {
+		addr, err := decodeOperatorAddress(operator)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode operator address: index=%v, operator=%v %w", i, operator, err)
 		}
-		addr := common.HexToAddress(operator)
 		operators = append(operators, addr)
 	}
 	return operators, nil
@@ -41,6 +40,11 @@ func (pr *Prover) GetOperatorsThreshold() Fraction {
 }
 
 func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
+	if !pr.IsOperatorEnabled() {
+		return fmt.Errorf("operator is not enabled")
+	} else if pr.config.OperatorsEip712Params == nil {
+		return fmt.Errorf("operator EIP712 parameters are not set")
+	}
 	if nonce == 0 {
 		return fmt.Errorf("invalid nonce: %v", nonce)
 	}
@@ -138,4 +142,12 @@ func (s EIP712Signer) GetSignerAddress() (common.Address, error) {
 		return common.Address{}, err
 	}
 	return crypto.PubkeyToAddress(*pubKey), nil
+}
+
+func decodeOperatorAddress(s string) (common.Address, error) {
+	addrStr := strings.TrimPrefix(s, "0x")
+	if len(addrStr) != 40 {
+		return common.Address{}, fmt.Errorf("invalid operator address length %v", len(addrStr))
+	}
+	return common.HexToAddress(s), nil
 }
