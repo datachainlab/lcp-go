@@ -105,19 +105,39 @@ func (pc ProverConfig) Validate() error {
 	}
 	if l := len(pc.Operators); l > 1 {
 		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
+	} else if l == 0 {
+		return nil
 	}
-	if len(pc.Operators) > 0 || pc.OperatorsEip712Params != nil {
-		if pc.OperatorSigner == nil {
-			return fmt.Errorf("OperatorSigner must be set if Operators or OperatorsEip712Params is set")
-		}
+
+	// ----- operators config validation -----
+
+	if pc.OperatorSigner == nil {
+		return fmt.Errorf("OperatorSigner must be set if Operators or OperatorsEip712Params is set")
 	}
-	if pc.OperatorsEip712Params != nil {
+	{
 		signerConfig, ok := pc.OperatorSigner.GetCachedValue().(signer.SignerConfig)
 		if !ok {
 			return fmt.Errorf("failed to cast OperatorSigner's config: %T", pc.OperatorSigner.GetCachedValue())
 		} else if err := signerConfig.Validate(); err != nil {
 			return fmt.Errorf("failed to validate the OperatorSigner's config: %v", err)
 		}
+		signer, err := signerConfig.Build()
+		if err != nil {
+			return fmt.Errorf("failed to build the OperatorSigner: %v", err)
+		}
+		addr, err := NewEIP712Signer(signer).GetSignerAddress()
+		if err != nil {
+			return fmt.Errorf("failed to get the OperatorSigner's address: %v", err)
+		}
+		op, err := decodeOperatorAddress(pc.Operators[0])
+		if err != nil {
+			return fmt.Errorf("failed to decode operator address: %v", err)
+		}
+		if addr != op {
+			return fmt.Errorf("OperatorSigner's address must be equal to the first operator's address: %v != %v", addr, op)
+		}
+	}
+	if pc.OperatorsEip712Params != nil {
 		switch params := pc.OperatorsEip712Params.(type) {
 		case *ProverConfig_OperatorsEip712EvmChainParams:
 			if params.OperatorsEip712EvmChainParams.ChainId == 0 {
