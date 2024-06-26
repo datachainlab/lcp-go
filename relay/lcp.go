@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/avast/retry-go"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
@@ -290,10 +291,11 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 		return nil, err
 	}
 	if clientState.GetLatestHeight().GTE(latestHeader.GetHeight()) {
+		pr.getLogger().Info("no need to update the client", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 		return nil, nil
 	}
 
-	pr.getLogger().Info("try to setup headers", "elc_client_id", elcClientID, "current", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
+	pr.getLogger().Info("try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 
 	// 2. query the header from the upstream chain
 
@@ -636,15 +638,26 @@ func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc
 	})
 }
 
-func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
+func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
 	srcProver := src.Prover.(*Prover)
 	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
 		return err
 	}
 
-	// 1. LCP synchronises with the latest header of the upstream chain
-	updates, err := srcProver.updateELC(srcProver.config.ElcClientId, true)
-	if err != nil {
+	srcProver.getLogger().Info("try to activate the LCP client", "elc_client_id", srcProver.config.ElcClientId)
+
+	// 1. LCP client synchronises with the latest header of the upstream chain
+	var updates []*elc.MsgUpdateClientResponse
+	if err := retry.Do(func() error {
+		var err error
+		updates, err = srcProver.updateELC(srcProver.config.ElcClientId, true)
+		if err != nil {
+			return err
+		} else if len(updates) == 0 {
+			return fmt.Errorf("no available updates: elc_client_id=%v", srcProver.config.ElcClientId)
+		}
+		return nil
+	}, retry.Attempts(retryMaxAttempts+1), retry.Delay(retryInterval)); err != nil {
 		return err
 	}
 
