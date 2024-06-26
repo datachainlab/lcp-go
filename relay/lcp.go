@@ -646,6 +646,8 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain) error {
 	updates, err := srcProver.updateELC(srcProver.config.ElcClientId, true)
 	if err != nil {
 		return err
+	} else if len(updates) == 0 {
+		return fmt.Errorf("no available updates: elc_client_id=%v", srcProver.config.ElcClientId)
 	}
 
 	signer, err := dst.Chain.GetAddress()
