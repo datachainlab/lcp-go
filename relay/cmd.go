@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/ethereum/go-ethereum/common"
@@ -16,6 +17,8 @@ import (
 const (
 	flagSrc                     = "src"
 	flagHeight                  = "height"
+	flagRetryInterval           = "retry_interval"
+	flagRetryMaxAttempts        = "retry_max_attempts"
 	flagELCClientID             = "elc_client_id"
 	flagNewOperators            = "new_operators"
 	flagNonce                   = "nonce"
@@ -99,10 +102,10 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				pathEnd = path.Dst
 				target, counterparty = c[dst], c[src]
 			}
-			return activateClient(pathEnd, target, counterparty)
+			return activateClient(pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
 		},
 	}
-	return srcFlag(cmd)
+	return retryMaxAttemptsFlag(retryIntervalFlag(srcFlag(cmd)))
 }
 
 func createELCCmd(ctx *config.Context) *cobra.Command {
@@ -354,6 +357,22 @@ func srcFlag(cmd *cobra.Command) *cobra.Command {
 func heightFlag(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().Uint64P(flagHeight, "", 0, "a height to restore")
 	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func retryIntervalFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().DurationP(flagRetryInterval, "", time.Second, "a retry interval duration")
+	if err := viper.BindPFlag(flagRetryInterval, cmd.Flags().Lookup(flagRetryInterval)); err != nil {
+		panic(err)
+	}
+	return cmd
+}
+
+func retryMaxAttemptsFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().IntP(flagRetryMaxAttempts, "", 0, "a maximum number of retry attempts")
+	if err := viper.BindPFlag(flagRetryMaxAttempts, cmd.Flags().Lookup(flagRetryMaxAttempts)); err != nil {
 		panic(err)
 	}
 	return cmd
