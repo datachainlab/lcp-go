@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -460,6 +461,51 @@ func (pr *Prover) computeEIP712EVMChainSalt() common.Hash {
 func (pr *Prover) computeEIP712CosmosChainSalt() common.Hash {
 	params := pr.config.GetOperatorsEip712CosmosChainParams()
 	return lcptypes.ComputeCosmosChainSalt(params.ChainId, []byte(params.Prefix))
+}
+
+type AvailableEnclaveKeysResult struct {
+	Keys []*enclave.EnclaveKeyInfo `json:"keys"`
+}
+
+func (res *AvailableEnclaveKeysResult) MarshalJSON() ([]byte, error) {
+	type enclaveKeyInfo struct {
+		EnclaveKeyAddress string `json:"enclave_key_address,omitempty"`
+		AttestationTime   uint64 `json:"attestation_time,omitempty"`
+		Report            string `json:"report,omitempty"`
+		Signature         string `json:"signature,omitempty"`
+		SigningCert       string `json:"signing_cert,omitempty"`
+		Extension         string `json:"extension,omitempty"`
+	}
+	type availableEnclaveKeysResult struct {
+		Keys []*enclaveKeyInfo `json:"keys"`
+	}
+	var keys []*enclaveKeyInfo
+	for _, key := range res.Keys {
+		keys = append(keys, &enclaveKeyInfo{
+			EnclaveKeyAddress: common.BytesToAddress(key.EnclaveKeyAddress).Hex(),
+			AttestationTime:   key.AttestationTime,
+			Report:            key.Report,
+			Signature:         bytes2Hex(key.Signature),
+			SigningCert:       bytes2Hex(key.SigningCert),
+			Extension:         bytes2Hex(key.Extension),
+		})
+	}
+	return json.Marshal(&availableEnclaveKeysResult{Keys: keys})
+}
+
+func bytes2Hex(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return "0x" + hex.EncodeToString(b)
+}
+
+func (pr *Prover) doAvailableEnclaveKeys(ctx context.Context) (*AvailableEnclaveKeysResult, error) {
+	res, err := pr.lcpServiceClient.AvailableEnclaveKeys(ctx, &enclave.QueryAvailableEnclaveKeysRequest{Mrenclave: pr.config.GetMrenclave()})
+	if err != nil {
+		return nil, err
+	}
+	return &AvailableEnclaveKeysResult{Keys: res.Keys}, nil
 }
 
 type CreateELCResult struct {

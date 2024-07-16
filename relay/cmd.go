@@ -39,6 +39,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 		restoreELCCmd(ctx),
 		queryELCCmd(ctx),
 		flags.LineBreak,
+		availableEnclaveKeysCmd(ctx),
 		updateEnclaveKeyCmd(ctx),
 		activateClientCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
@@ -46,6 +47,38 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 	)
 
 	return cmd
+}
+
+func availableEnclaveKeysCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "available-enclave-keys [path]",
+		Short: "List available enclave keys",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, src, dst, err := ctx.Config.ChainsFromPath(args[0])
+			if err != nil {
+				return err
+			}
+			var target *core.ProvableChain
+			if viper.GetBool(flagSrc) {
+				target = c[src]
+			} else {
+				target = c[dst]
+			}
+			prover := target.Prover.(*Prover)
+			ekis, err := prover.doAvailableEnclaveKeys(context.TODO())
+			if err != nil {
+				return err
+			}
+			bz, err := json.Marshal(ekis)
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(bz))
+			return nil
+		},
+	}
+	return srcFlag(cmd)
 }
 
 func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
