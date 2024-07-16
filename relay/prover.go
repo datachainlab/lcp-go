@@ -261,17 +261,23 @@ func aggregateMessages(
 		messages = nil
 		signatures = nil
 		for i, b := range batches {
-			m := elc.MsgAggregateMessages{
-				Signer:     b.Signer,
-				Messages:   b.Messages,
-				Signatures: b.Signatures,
+			logger.Info("aggregateMessages", "batch_index", i, "num_messages", len(b.Messages))
+			if len(b.Messages) == 1 {
+				messages = append(messages, b.Messages[0])
+				signatures = append(signatures, b.Signatures[0])
+			} else {
+				m := elc.MsgAggregateMessages{
+					Signer:     b.Signer,
+					Messages:   b.Messages,
+					Signatures: b.Signatures,
+				}
+				resp, err := messageAggregator(context.TODO(), &m)
+				if err != nil {
+					return nil, fmt.Errorf("failed to aggregate messages: batch_index=%v msg=%v %w", i, m, err)
+				}
+				messages = append(messages, resp.Message)
+				signatures = append(signatures, resp.Signature)
 			}
-			resp, err := messageAggregator(context.TODO(), &m)
-			if err != nil {
-				return nil, fmt.Errorf("failed to aggregate messages: i=%v msg=%v %w", i, m, err)
-			}
-			messages = append(messages, resp.Message)
-			signatures = append(signatures, resp.Signature)
 		}
 	}
 }
