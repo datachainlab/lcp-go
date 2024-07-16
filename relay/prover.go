@@ -193,7 +193,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().Info("aggregate messages", "num_messages", len(messages))
-		update, err := pr.aggregateMessages(messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
+		update, err := aggregateMessages(pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
 		if err != nil {
 			return nil, err
 		}
@@ -210,14 +210,23 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	return updates, nil
 }
 
-func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, signer []byte) (*lcptypes.UpdateClientMessage, error) {
+type MessageAggregator func(ctx context.Context, in *elc.MsgAggregateMessages, opts ...grpc.CallOption) (*elc.MsgAggregateMessagesResponse, error)
+
+func aggregateMessages(
+	logger *log.RelayLogger,
+	batchSize uint64,
+	messageAggregator MessageAggregator,
+	messages [][]byte,
+	signatures [][]byte,
+	signer []byte,
+) (*lcptypes.UpdateClientMessage, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("aggregateMessages: messages must not be empty")
 	} else if len(messages) != len(signatures) {
 		return nil, fmt.Errorf("aggregateMessages: messages and signatures must have the same length: messages=%v signatures=%v", len(messages), len(signatures))
 	}
 	for {
-		batches, err := splitIntoMultiBatch(messages, signatures, signer, pr.config.GetMessageAggregationBatchSize())
+		batches, err := splitIntoMultiBatch(messages, signatures, signer, batchSize)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +244,7 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 					Messages:   batches[0].Messages,
 					Signatures: batches[0].Signatures,
 				}
-				resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &m)
+				resp, err := messageAggregator(context.TODO(), &m)
 				if err != nil {
 					return nil, fmt.Errorf("failed to aggregate messages: msg=%v %w", m, err)
 				}
@@ -247,22 +256,28 @@ func (pr *Prover) aggregateMessages(messages [][]byte, signatures [][]byte, sign
 		} else if n == 0 {
 			return nil, fmt.Errorf("unexpected error: batches must not be empty")
 		} else {
-			pr.getLogger().Info("aggregateMessages", "num_batches", n)
+			logger.Info("aggregateMessages", "num_batches", n)
 		}
 		messages = nil
 		signatures = nil
 		for i, b := range batches {
-			m := elc.MsgAggregateMessages{
-				Signer:     b.Signer,
-				Messages:   b.Messages,
-				Signatures: b.Signatures,
+			logger.Info("aggregateMessages", "batch_index", i, "num_messages", len(b.Messages))
+			if len(b.Messages) == 1 {
+				messages = append(messages, b.Messages[0])
+				signatures = append(signatures, b.Signatures[0])
+			} else {
+				m := elc.MsgAggregateMessages{
+					Signer:     b.Signer,
+					Messages:   b.Messages,
+					Signatures: b.Signatures,
+				}
+				resp, err := messageAggregator(context.TODO(), &m)
+				if err != nil {
+					return nil, fmt.Errorf("failed to aggregate messages: batch_index=%v msg=%v %w", i, m, err)
+				}
+				messages = append(messages, resp.Message)
+				signatures = append(signatures, resp.Signature)
 			}
-			resp, err := pr.lcpServiceClient.AggregateMessages(context.TODO(), &m)
-			if err != nil {
-				return nil, fmt.Errorf("failed to aggregate messages: i=%v msg=%v %w", i, m, err)
-			}
-			messages = append(messages, resp.Message)
-			signatures = append(signatures, resp.Signature)
 		}
 	}
 }
