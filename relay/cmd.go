@@ -129,10 +129,10 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				counterparty *core.ProvableChain
 			)
 			if viper.GetBool(flagSrc) {
-				pathEnd = path.Src
+				pathEnd = path.Dst
 				target, counterparty = c[src], c[dst]
 			} else {
-				pathEnd = path.Dst
+				pathEnd = path.Src
 				target, counterparty = c[dst], c[src]
 			}
 			return activateClient(pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
