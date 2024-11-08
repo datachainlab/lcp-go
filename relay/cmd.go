@@ -192,15 +192,12 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target       *core.ProvableChain
-				counterparty *core.ProvableChain
+				target *core.ProvableChain
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
-				counterparty = c[dst]
 			} else {
 				target = c[dst]
-				counterparty = c[src]
 			}
 			prover := target.Prover.(*Prover)
 			var elcClientID string
@@ -209,7 +206,7 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doUpdateELC(elcClientID, counterparty)
+			out, err := prover.doUpdateELC(elcClientID)
 			if err != nil {
 				return err
 			}

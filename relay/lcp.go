@@ -555,9 +555,14 @@ type UpdateELCResult struct {
 	Messages []*lcptypes.UpdateStateProxyMessage `json:"messages"`
 }
 
-func (pr *Prover) doUpdateELC(elcClientID string, counterparty core.FinalityAwareChain) (*UpdateELCResult, error) {
-	if err := pr.UpdateEKIfNeeded(context.TODO(), counterparty); err != nil {
-		return nil, err
+func (pr *Prover) doUpdateELC(elcClientID string) (*UpdateELCResult, error) {
+	if pr.activeEnclaveKey == nil {
+		eki, err := pr.selectNewEnclaveKey(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+		pr.getLogger().Info("use a new enclave key", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress))
+		pr.activeEnclaveKey = eki
 	}
 	pr.getLogger().Info("try to update the ELC client", "elc_client_id", elcClientID)
 	updates, err := pr.updateELC(elcClientID, false)
