@@ -282,6 +282,9 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 	if err != nil {
 		return nil, err
 	}
+	if !res.Found {
+		return nil, fmt.Errorf("client not found: client_id=%v", elcClientID)
+	}
 	latestHeader, err := pr.originProver.GetLatestFinalizedHeader()
 	if err != nil {
 		return nil, err
