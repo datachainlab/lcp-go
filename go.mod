@@ -13,7 +13,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.1.0
 	github.com/ethereum/go-ethereum v1.12.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/hyperledger-labs/yui-relayer v0.5.4
+	github.com/hyperledger-labs/yui-relayer v0.5.9
 	github.com/oasisprotocol/oasis-core/go v0.2201.11
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
