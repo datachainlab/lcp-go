@@ -12,7 +12,7 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/enclave"
-	"github.com/datachainlab/lcp-go/sgx/ias"
+	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"github.com/hyperledger-labs/yui-relayer/signer"
@@ -75,7 +75,7 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 	pr.homePath = homePath
 	pr.codec = codec
 	if pr.config.IsDebugEnclave {
-		ias.SetAllowDebugEnclaves()
+		sgx.SetAllowDebugEnclaves()
 	}
 	if err := pr.originChain.Init(homePath, timeout, codec, debug); err != nil {
 		return err
@@ -117,7 +117,10 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 	for _, op := range ops {
 		operators = append(operators, op.Bytes())
 	}
-
+	zkDCAPVerifierInfos, err := pr.getZKDCAPVerifierInfos()
+	if err != nil {
+		return nil, nil, err
+	}
 	clientState := &lcptypes.ClientState{
 		LatestHeight:                  clienttypes.Height{},
 		Mrenclave:                     pr.config.GetMrenclave(),
@@ -128,7 +131,9 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 		OperatorsNonce:                0,
 		OperatorsThresholdNumerator:   pr.GetOperatorsThreshold().Numerator,
 		OperatorsThresholdDenominator: pr.GetOperatorsThreshold().Denominator,
+		ZkdcapVerifierInfos:           zkDCAPVerifierInfos,
 	}
+
 	consensusState := &lcptypes.ConsensusState{}
 
 	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
@@ -175,7 +180,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 			ClientId:     pr.config.ElcClientId,
 			Header:       anyHeader,
 			IncludeState: false,
-			Signer:       pr.activeEnclaveKey.EnclaveKeyAddress,
+			Signer:       pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
 		}
 		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &m)
 		if err != nil {
@@ -193,7 +198,7 @@ func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latest
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().Info("aggregate messages", "num_messages", len(messages))
-		update, err := aggregateMessages(pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.EnclaveKeyAddress)
+		update, err := aggregateMessages(pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
 			return nil, err
 		}
@@ -327,7 +332,7 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 		Value:       value,
 		ProofHeight: proofHeight,
 		Proof:       proof,
-		Signer:      pr.activeEnclaveKey.EnclaveKeyAddress,
+		Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
 	}
 	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
 	if err != nil {

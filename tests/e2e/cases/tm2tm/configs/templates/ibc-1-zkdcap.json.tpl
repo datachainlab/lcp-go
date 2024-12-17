@@ -2,8 +2,8 @@
   "chain": {
     "@type": "/relayer.chains.tendermint.config.ChainConfig",
     "key": "testkey",
-    "chain_id": "ibc0",
-    "rpc_addr": "http://localhost:26657",
+    "chain_id": "ibc1",
+    "rpc_addr": "http://localhost:26557",
     "account_prefix": "cosmos",
     "gas_adjustment": 1.5,
     "gas_prices": "0.025stake",
@@ -22,10 +22,13 @@
     },
     "lcp_service_address": "localhost:50051",
     "mrenclave": $MRENCLAVE,
-    "allowed_quote_statuses": ["GROUP_OUT_OF_DATE", "SW_HARDENING_NEEDED"],
+    "allowed_quote_statuses": ["SWHardeningNeeded"],
     "allowed_advisory_ids": ["INTEL-SA-00219","INTEL-SA-00289","INTEL-SA-00334","INTEL-SA-00477","INTEL-SA-00614","INTEL-SA-00615","INTEL-SA-00617"],
     "key_expiration": 604800,
-    "elc_client_id": "07-tendermint-1",
-    "is_debug_enclave": $IS_DEBUG_ENCLAVE
+    "elc_client_id": "07-tendermint-0",
+    "is_debug_enclave": $IS_DEBUG_ENCLAVE,
+    "risc0_zkvm_config": {
+      "image_id": $RISC0_IMAGE_ID
+    }
   }
 }

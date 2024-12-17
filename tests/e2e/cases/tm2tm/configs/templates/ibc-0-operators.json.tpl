@@ -21,12 +21,12 @@
       }
     },
     "lcp_service_address": "localhost:50051",
-    "mrenclave": "$MRENCLAVE",
-    "allowed_quote_statuses": ["GROUP_OUT_OF_DATE"],
+    "mrenclave": $MRENCLAVE,
+    "allowed_quote_statuses": ["SWHardeningNeeded"],
     "allowed_advisory_ids": ["INTEL-SA-00219","INTEL-SA-00289","INTEL-SA-00334","INTEL-SA-00477","INTEL-SA-00614","INTEL-SA-00615","INTEL-SA-00617"],
     "key_expiration": 604800,
     "elc_client_id": "07-tendermint-1",
-    "is_debug_enclave": true,
+    "is_debug_enclave": $IS_DEBUG_ENCLAVE,
     "operators": [
       "0xcb96F8d6C2d543102184d679D7829b39434E4EEc"
     ],

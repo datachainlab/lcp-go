@@ -4,6 +4,8 @@ LCP_PROTO ?= $(LCP_REPO)/proto/definitions
 DOCKER        ?= docker
 DOCKER_BUILD  ?= $(DOCKER) build --rm --no-cache --pull
 
+E2E_OPTIONS=""
+
 protoVer=0.14.0
 protoImageName=ghcr.io/cosmos/proto-builder:$(protoVer)
 protoImage=docker run --user 0 --rm -v $(CURDIR):/workspace --workdir /workspace $(protoImageName)
@@ -24,6 +26,10 @@ tendermint-images:
 .PHONY: e2e-test
 e2e-test: yrly lcp
 	./scripts/run_e2e_test.sh $(E2E_OPTIONS)
+
+.PHONY: network-down
+network-down:
+	$(MAKE) -C ./tests/e2e/cases/tm2tm network-down
 
 .PHONY: proto-gen proto-update-deps
 proto-gen:

@@ -33,6 +33,10 @@ message ProverConfig {
     Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
     // signer for eip712 commitment
     google.protobuf.Any operator_signer = 14;
+    // zkvm config
+    oneof zkvm_config {
+        Risc0ZKVMConfig risc0_zkvm_config = 15;
+    }
     // eip712 params
     oneof operators_eip712_params {
         EIP712EVMChainParams operators_eip712_evm_chain_params = 31;
@@ -43,6 +47,10 @@ message ProverConfig {
 message Fraction {
     uint64 numerator = 1;
     uint64 denominator = 2;
+}
+
+message Risc0ZKVMConfig {
+    string image_id = 1;
 }
 
 message EIP712EVMChainParams {

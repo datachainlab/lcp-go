@@ -10,6 +10,7 @@ services:
     image: tendermint-chain0:${TAG}
     environment:
       - LCP_RA_ROOT_CERT_HEX=${LCP_RA_ROOT_CERT_HEX}
+      - LCP_ENCLAVE_DEBUG=${LCP_ENCLAVE_DEBUG}
     ports:
       - 26656:26656
       - 26657:26657
@@ -27,6 +28,7 @@ services:
     image: tendermint-chain1:${TAG}
     environment:
       - LCP_RA_ROOT_CERT_HEX=${LCP_RA_ROOT_CERT_HEX}
+      - LCP_ENCLAVE_DEBUG=${LCP_ENCLAVE_DEBUG}
     ports:
       - 26566:26656
       - 26557:26657

@@ -13,6 +13,9 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/go-risc0-verifier/groth16"
+	"github.com/datachainlab/lcp-go/sgx"
+	"github.com/datachainlab/lcp-go/sgx/dcap"
 	"github.com/datachainlab/lcp-go/sgx/ias"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
@@ -52,6 +55,8 @@ func (cs ClientState) VerifyClientMessage(ctx sdk.Context, cdc codec.BinaryCodec
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.verifyRegisterEnclaveKey(ctx, clientStore, clientMsg)
+	case *ZKDCAPRegisterEnclaveKeyMessage:
+		return cs.verifyZKDCAPRegisterEnclaveKey(ctx, clientStore, clientMsg)
 	case *UpdateOperatorsMessage:
 		return cs.verifyUpdateOperators(ctx, clientStore, clientMsg)
 	default:
@@ -100,7 +105,7 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid AVR: report=%v err=%v", message.Report, err)
 	}
 	quoteStatus := avr.ISVEnclaveQuoteStatus.String()
-	if quoteStatus == QuoteOK {
+	if quoteStatus == ias.QuoteOK {
 		if len(avr.AdvisoryIDs) != 0 {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "advisory IDs should be empty when status is OK: actual=%v", avr.AdvisoryIDs)
 		}
@@ -142,6 +147,108 @@ func (cs ClientState) verifyRegisterEnclaveKey(ctx sdk.Context, store storetypes
 		if err := cs.ensureEKInfoMatch(store, ek, operator, expiredAt); err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid enclave key info: %v", err)
 		}
+	}
+	return nil
+}
+
+func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store storetypes.KVStore, message *ZKDCAPRegisterEnclaveKeyMessage) error {
+	if !cs.IsZKDCAPEnabled() {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "zkDCAP is not enabled")
+	}
+	vis, err := cs.GetZKDCAPVerifierInfos()
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get zkDCAP verifier info: %v", err)
+	}
+	vi := vis[0]
+	if message.ZkvmType != uint32(vi.ZKVMType) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", vi.ZKVMType, message.ZkvmType)
+	}
+	commit, err := dcap.ParseDCAPVerifierCommit(message.Commit)
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse DCAP verifier commit: %v", err)
+	}
+	_, _, err = sgx.ParseReportData2(commit.ReportData())
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse report data: %v", err)
+	}
+	mrenclave := commit.GetEnclaveIdentity().MrEnclave
+	if !bytes.Equal(cs.Mrenclave, mrenclave[:]) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, mrenclave)
+	}
+	if debug, err := commit.IsDebug(); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to check debug: %v", err)
+	} else if debug != dcap.GetAllowDebugEnclaves() {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: unexpected debug flag: expected=%v actual=%v", dcap.GetAllowDebugEnclaves(), debug)
+	}
+	if err := cs.ValidateRisc0DCAPVerifierCommit(ctx.BlockTime(), commit); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: %v", err)
+	}
+	if err := cs.VerifyRisc0ZKDCAPProof(vi, commit, message.Proof); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify ZKP: %v", err)
+	}
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vi.ToBytes(), crypto.Keccak256Hash(message.Commit))
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err)
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err)
+		}
+	}
+	ek, expectedOperator, err := sgx.ParseReportData2(commit.ReportData())
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse report data: %v", err)
+	}
+	if (expectedOperator != common.Address{}) && operator != expectedOperator {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v", expectedOperator, operator)
+	}
+	if cs.Contains(store, ek) {
+		if err := cs.ensureEKInfoMatch(store, ek, operator, commit.GetExpiredAt()); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid enclave key info: %v", err)
+		}
+	}
+	return nil
+}
+
+func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.VerifiedOutput, proof []byte) error {
+	if verifierInfo.ZKVMType != dcap.Risc0ZKVMType {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", dcap.Risc0ZKVMType, verifierInfo.ZKVMType)
+	}
+	if len(proof) < 4 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid proof length: expected>=4 actual=%v", len(proof))
+	}
+	var sel [4]byte
+	copy(sel[:], proof[:4])
+	if err := groth16.VerifyRISC0SealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 proof: %v", err)
+	}
+	return nil
+}
+
+func (cs ClientState) ValidateRisc0DCAPVerifierCommit(blockTimestamp time.Time, commit *dcap.VerifiedOutput) error {
+	if commit.QuoteVersion != dcap.QEVersion3 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported quote version: expected=%v actual=%v", dcap.QEVersion3, commit.QuoteVersion)
+	}
+	if commit.TeeType != dcap.TEETypeSGX {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported TEE type: expected=%v actual=%v", dcap.TEETypeSGX, commit.TeeType)
+	}
+	mrenclave := commit.GetEnclaveIdentity().MrEnclave
+	if !bytes.Equal(cs.Mrenclave, mrenclave[:]) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, mrenclave)
+	}
+	if !cs.isAllowedStatus(commit.TcbStatus.String()) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed TCB status: allowed=%v actual=%v", cs.AllowedQuoteStatuses, commit.TcbStatus)
+	}
+	if !cs.isAllowedAdvisoryIDs(commit.AdvisoryIds) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed advisory ID(s) exists: allowed=%v actual=%v", cs.AllowedAdvisoryIds, commit.AdvisoryIds)
+	}
+	if commit.SGXIntelRootCAHash != dcap.HashTrustRootCert() {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: SGXIntelRootCAHash mismatch: expected=%x actual=%x", dcap.HashTrustRootCert(), commit.SGXIntelRootCAHash)
+	}
+	if !commit.Validity.ValidateTime(blockTimestamp) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid current time: expected=%v-%v actual=%v", commit.Validity.NotBeforeMax, commit.Validity.NotAfterMin, blockTimestamp.Unix())
 	}
 	return nil
 }
@@ -223,6 +330,8 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 		}
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
+	case *ZKDCAPRegisterEnclaveKeyMessage:
+		return cs.registerZKDCAPEnclaveKey(ctx, clientStore, clientMsg)
 	case *UpdateOperatorsMessage:
 		return cs.updateOperators(ctx, cdc, clientStore, clientMsg)
 	default:
@@ -275,6 +384,52 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 		ctx.EventManager().EmitEvent(
 			sdk.NewEvent(
 				EventTypeRegisterEnclaveKey,
+				sdk.NewAttribute(AttributeKeyEnclaveKey, ek.Hex()),
+				sdk.NewAttribute(AttributeKeyExpiredAt, expiredAt.String()),
+				sdk.NewAttribute(AttributeKeyOperator, operator.Hex()),
+			),
+		)
+	}
+	if err := cs.SetEKInfo(clientStore, ek, operator, expiredAt); err != nil {
+		panic(err)
+	}
+	return nil
+}
+
+func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore storetypes.KVStore, message *ZKDCAPRegisterEnclaveKeyMessage) []exported.Height {
+	commit, err := dcap.ParseDCAPVerifierCommit(message.Commit)
+	if err != nil {
+		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse DCAP verifier commit: %v", err))
+	}
+	ek, _, err := sgx.ParseReportData2(commit.ReportData())
+	if err != nil {
+		panic(err)
+	}
+	vis, err := cs.GetZKDCAPVerifierInfos()
+	if err != nil {
+		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get zkDCAP verifier info: %v", err))
+	}
+	var operator common.Address
+	if len(message.OperatorSignature) > 0 {
+		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vis[0].ToBytes(), crypto.Keccak256Hash(message.Commit))
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err))
+		}
+		operator, err = RecoverAddress(commitment, message.OperatorSignature)
+		if err != nil {
+			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err))
+		}
+	}
+	expiredAt := commit.GetExpiredAt()
+	if cs.Contains(clientStore, ek) {
+		if err := cs.ensureEKInfoMatch(clientStore, ek, operator, expiredAt); err != nil {
+			panic(err)
+		}
+		return nil
+	} else {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				EventTypeZKDCAPRegisterEnclaveKey,
 				sdk.NewAttribute(AttributeKeyEnclaveKey, ek.Hex()),
 				sdk.NewAttribute(AttributeKeyExpiredAt, expiredAt.String()),
 				sdk.NewAttribute(AttributeKeyOperator, operator.Hex()),
@@ -372,7 +527,7 @@ func (cs ClientState) VerifySignatures(ctx sdk.Context, clientStore storetypes.K
 		} else if ekInfo == nil {
 			return fmt.Errorf("enclave key '%v' not found", ek)
 		} else if ekInfo.IsExpired(ctx.BlockTime()) {
-			return fmt.Errorf("enclave key '%v' is expired", ek)
+			return fmt.Errorf("enclave key '%v' is expired: expired_at=%v block_time=%v", ek, time.Unix(int64(ekInfo.ExpiredAt), 0).String(), ctx.BlockTime().String())
 		}
 		return nil
 	} else if opNum != sigNum {
@@ -421,7 +576,7 @@ func (cs ClientState) getKeyExpiration() time.Duration {
 }
 
 func (cs ClientState) isAllowedStatus(status string) bool {
-	if status == QuoteOK {
+	if status == ias.QuoteOK || status == dcap.UpToDate.String() {
 		return true
 	}
 	for _, s := range cs.AllowedQuoteStatuses {
@@ -438,6 +593,10 @@ func (cs ClientState) isAllowedAdvisoryIDs(advIDs []string) bool {
 	}
 	set := mapset.NewThreadUnsafeSet(cs.AllowedAdvisoryIds...)
 	return set.Contains(advIDs...)
+}
+
+func (cs ClientState) IsZKDCAPEnabled() bool {
+	return len(cs.ZkdcapVerifierInfos) > 0
 }
 
 func enclaveKeyPath(key common.Address) []byte {
