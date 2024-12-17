@@ -95,7 +95,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		ClientId:       elcClientID,
 		ClientState:    originAnyClientState,
 		ConsensusState: originAnyConsensusState,
-		Signer:         tmpEKI.EnclaveKeyAddress,
+		Signer:         tmpEKI.GetEnclaveKeyAddress().Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create ELC client: elc_client_id=%v %w", elcClientID, err)

@@ -103,12 +103,11 @@ func (m *QueryAvailableEnclaveKeysResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_QueryAvailableEnclaveKeysResponse proto.InternalMessageInfo
 
 type EnclaveKeyInfo struct {
-	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
-	AttestationTime   uint64 `protobuf:"varint,2,opt,name=attestation_time,json=attestationTime,proto3" json:"attestation_time,omitempty"`
-	Report            string `protobuf:"bytes,3,opt,name=report,proto3" json:"report,omitempty"`
-	Signature         []byte `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
-	SigningCert       []byte `protobuf:"bytes,5,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
-	Extension         []byte `protobuf:"bytes,6,opt,name=extension,proto3" json:"extension,omitempty"`
+	// Types that are valid to be assigned to KeyInfo:
+	//
+	//	*EnclaveKeyInfo_Ias
+	//	*EnclaveKeyInfo_Dcap
+	KeyInfo isEnclaveKeyInfo_KeyInfo `protobuf_oneof:"key_info"`
 }
 
 func (m *EnclaveKeyInfo) Reset()         { *m = EnclaveKeyInfo{} }
@@ -144,6 +143,131 @@ func (m *EnclaveKeyInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_EnclaveKeyInfo proto.InternalMessageInfo
 
+type isEnclaveKeyInfo_KeyInfo interface {
+	isEnclaveKeyInfo_KeyInfo()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type EnclaveKeyInfo_Ias struct {
+	Ias *IASEnclaveKeyInfo `protobuf:"bytes,1,opt,name=ias,proto3,oneof" json:"ias,omitempty"`
+}
+type EnclaveKeyInfo_Dcap struct {
+	Dcap *DCAPEnclaveKeyInfo `protobuf:"bytes,2,opt,name=dcap,proto3,oneof" json:"dcap,omitempty"`
+}
+
+func (*EnclaveKeyInfo_Ias) isEnclaveKeyInfo_KeyInfo()  {}
+func (*EnclaveKeyInfo_Dcap) isEnclaveKeyInfo_KeyInfo() {}
+
+func (m *EnclaveKeyInfo) GetKeyInfo() isEnclaveKeyInfo_KeyInfo {
+	if m != nil {
+		return m.KeyInfo
+	}
+	return nil
+}
+
+func (m *EnclaveKeyInfo) GetIas() *IASEnclaveKeyInfo {
+	if x, ok := m.GetKeyInfo().(*EnclaveKeyInfo_Ias); ok {
+		return x.Ias
+	}
+	return nil
+}
+
+func (m *EnclaveKeyInfo) GetDcap() *DCAPEnclaveKeyInfo {
+	if x, ok := m.GetKeyInfo().(*EnclaveKeyInfo_Dcap); ok {
+		return x.Dcap
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*EnclaveKeyInfo) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*EnclaveKeyInfo_Ias)(nil),
+		(*EnclaveKeyInfo_Dcap)(nil),
+	}
+}
+
+type IASEnclaveKeyInfo struct {
+	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
+	Report            string `protobuf:"bytes,2,opt,name=report,proto3" json:"report,omitempty"`
+	AttestationTime   uint64 `protobuf:"varint,3,opt,name=attestation_time,json=attestationTime,proto3" json:"attestation_time,omitempty"`
+	Signature         []byte `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
+	SigningCert       []byte `protobuf:"bytes,5,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
+}
+
+func (m *IASEnclaveKeyInfo) Reset()         { *m = IASEnclaveKeyInfo{} }
+func (m *IASEnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
+func (*IASEnclaveKeyInfo) ProtoMessage()    {}
+func (*IASEnclaveKeyInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{3}
+}
+func (m *IASEnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IASEnclaveKeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_IASEnclaveKeyInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *IASEnclaveKeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IASEnclaveKeyInfo.Merge(m, src)
+}
+func (m *IASEnclaveKeyInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *IASEnclaveKeyInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_IASEnclaveKeyInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IASEnclaveKeyInfo proto.InternalMessageInfo
+
+type DCAPEnclaveKeyInfo struct {
+	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
+	Quote             []byte `protobuf:"bytes,2,opt,name=quote,proto3" json:"quote,omitempty"`
+	AttestationTime   uint64 `protobuf:"varint,3,opt,name=attestation_time,json=attestationTime,proto3" json:"attestation_time,omitempty"`
+}
+
+func (m *DCAPEnclaveKeyInfo) Reset()         { *m = DCAPEnclaveKeyInfo{} }
+func (m *DCAPEnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
+func (*DCAPEnclaveKeyInfo) ProtoMessage()    {}
+func (*DCAPEnclaveKeyInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{4}
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DCAPEnclaveKeyInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DCAPEnclaveKeyInfo.Merge(m, src)
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *DCAPEnclaveKeyInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_DCAPEnclaveKeyInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DCAPEnclaveKeyInfo proto.InternalMessageInfo
+
 type QueryEnclaveKeyRequest struct {
 	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
 }
@@ -152,7 +276,7 @@ func (m *QueryEnclaveKeyRequest) Reset()         { *m = QueryEnclaveKeyRequest{}
 func (m *QueryEnclaveKeyRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryEnclaveKeyRequest) ProtoMessage()    {}
 func (*QueryEnclaveKeyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{3}
+	return fileDescriptor_17b0894e959bbc62, []int{5}
 }
 func (m *QueryEnclaveKeyRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -189,7 +313,7 @@ func (m *QueryEnclaveKeyResponse) Reset()         { *m = QueryEnclaveKeyResponse
 func (m *QueryEnclaveKeyResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryEnclaveKeyResponse) ProtoMessage()    {}
 func (*QueryEnclaveKeyResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{4}
+	return fileDescriptor_17b0894e959bbc62, []int{6}
 }
 func (m *QueryEnclaveKeyResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -222,6 +346,8 @@ func init() {
 	proto.RegisterType((*QueryAvailableEnclaveKeysRequest)(nil), "lcp.service.enclave.v1.QueryAvailableEnclaveKeysRequest")
 	proto.RegisterType((*QueryAvailableEnclaveKeysResponse)(nil), "lcp.service.enclave.v1.QueryAvailableEnclaveKeysResponse")
 	proto.RegisterType((*EnclaveKeyInfo)(nil), "lcp.service.enclave.v1.EnclaveKeyInfo")
+	proto.RegisterType((*IASEnclaveKeyInfo)(nil), "lcp.service.enclave.v1.IASEnclaveKeyInfo")
+	proto.RegisterType((*DCAPEnclaveKeyInfo)(nil), "lcp.service.enclave.v1.DCAPEnclaveKeyInfo")
 	proto.RegisterType((*QueryEnclaveKeyRequest)(nil), "lcp.service.enclave.v1.QueryEnclaveKeyRequest")
 	proto.RegisterType((*QueryEnclaveKeyResponse)(nil), "lcp.service.enclave.v1.QueryEnclaveKeyResponse")
 }
@@ -231,36 +357,41 @@ func init() {
 }
 
 var fileDescriptor_17b0894e959bbc62 = []byte{
-	// 457 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0xcf, 0x6f, 0xd3, 0x30,
-	0x14, 0xae, 0xd7, 0xae, 0xd2, 0xbc, 0x89, 0x1f, 0x66, 0x2a, 0x51, 0x85, 0xa2, 0x2c, 0x07, 0x54,
-	0x24, 0xb0, 0xb5, 0x71, 0x19, 0x9c, 0x18, 0x08, 0x89, 0x1f, 0x27, 0x02, 0x27, 0x2e, 0x91, 0x9b,
-	0x3e, 0x32, 0xab, 0x89, 0x9d, 0xd9, 0x6e, 0x44, 0xee, 0xdc, 0xb8, 0xf0, 0x67, 0xed, 0xb8, 0x23,
-	0x47, 0x68, 0xff, 0x11, 0x94, 0xc4, 0x6b, 0x41, 0x1b, 0xa3, 0xec, 0x16, 0x7f, 0xfe, 0xbe, 0x2f,
-	0xef, 0x7d, 0xcf, 0x0f, 0x87, 0x59, 0x52, 0x30, 0x03, 0xba, 0x14, 0x09, 0x30, 0x90, 0x49, 0xc6,
-	0x4b, 0x60, 0xe5, 0x3e, 0x3b, 0x99, 0x81, 0xae, 0x68, 0xa1, 0x95, 0x55, 0x64, 0x90, 0x25, 0x05,
-	0x75, 0x1c, 0xea, 0x38, 0xb4, 0xdc, 0x1f, 0xee, 0xa6, 0x2a, 0x55, 0x0d, 0x85, 0xd5, 0x5f, 0x2d,
-	0x3b, 0x7c, 0x86, 0x83, 0x77, 0xb5, 0xf8, 0xa8, 0xe4, 0x22, 0xe3, 0xe3, 0x0c, 0x5e, 0xb6, 0x8a,
-	0xb7, 0x50, 0x99, 0x08, 0x4e, 0x66, 0x60, 0x2c, 0xb9, 0x87, 0xb7, 0x72, 0xed, 0x9c, 0x3c, 0x14,
-	0xa0, 0xd1, 0x4e, 0xb4, 0x02, 0xc2, 0x18, 0xef, 0x5d, 0xe1, 0x60, 0x0a, 0x25, 0x0d, 0x90, 0xa7,
-	0xb8, 0x37, 0x85, 0xca, 0x78, 0x28, 0xe8, 0x8e, 0xb6, 0x0f, 0xee, 0xd3, 0xcb, 0x6b, 0xa4, 0x2b,
-	0xe9, 0x6b, 0xf9, 0x49, 0x45, 0x8d, 0x26, 0x9c, 0x23, 0x7c, 0xe3, 0xcf, 0x0b, 0x42, 0xf1, 0x1d,
-	0xa7, 0x8a, 0xa7, 0x50, 0xc5, 0x7c, 0x32, 0xd1, 0x60, 0x8c, 0xab, 0xed, 0x36, 0x2c, 0xc9, 0x47,
-	0xed, 0x05, 0x79, 0x80, 0x6f, 0x71, 0x6b, 0xc1, 0x58, 0x6e, 0x85, 0x92, 0xb1, 0x15, 0x39, 0x78,
-	0x1b, 0x01, 0x1a, 0xf5, 0xa2, 0x9b, 0xbf, 0xe1, 0x1f, 0x44, 0x0e, 0x64, 0x80, 0xfb, 0x1a, 0x0a,
-	0xa5, 0xad, 0xd7, 0x0d, 0xd0, 0x68, 0x2b, 0x72, 0xa7, 0x3a, 0x04, 0x23, 0x52, 0xc9, 0xed, 0x4c,
-	0x83, 0xd7, 0x6b, 0x43, 0x58, 0x02, 0x64, 0x0f, 0xef, 0xd4, 0x07, 0x21, 0xd3, 0x38, 0x01, 0x6d,
-	0xbd, 0xcd, 0x86, 0xb0, 0xed, 0xb0, 0x17, 0xd0, 0x1a, 0xc0, 0x67, 0x0b, 0xd2, 0x08, 0x25, 0xbd,
-	0x7e, 0x6b, 0xb0, 0x04, 0xc2, 0x57, 0x78, 0xd0, 0xa4, 0xb8, 0x6a, 0xf4, 0x3c, 0xfd, 0xff, 0xec,
-	0x35, 0x7c, 0x8f, 0xef, 0x5e, 0x70, 0x72, 0x53, 0x38, 0xc4, 0xdd, 0x29, 0x54, 0x8d, 0x74, 0xfd,
-	0x21, 0xd4, 0x92, 0x83, 0x2f, 0x1b, 0x78, 0xb3, 0x71, 0x25, 0x5f, 0x11, 0xde, 0xbd, 0x6c, 0xd4,
-	0xe4, 0xf0, 0x6f, 0x7e, 0xff, 0x7a, 0x5f, 0xc3, 0x27, 0xd7, 0x50, 0xba, 0x8e, 0x72, 0x8c, 0x57,
-	0x30, 0xa1, 0x57, 0x1a, 0x5d, 0x88, 0x76, 0xc8, 0xd6, 0xe6, 0xb7, 0xbf, 0x7b, 0xfe, 0xe6, 0xf4,
-	0xa7, 0xdf, 0x39, 0x9d, 0xfb, 0xe8, 0x6c, 0xee, 0xa3, 0x1f, 0x73, 0x1f, 0x7d, 0x5b, 0xf8, 0x9d,
-	0xb3, 0x85, 0xdf, 0xf9, 0xbe, 0xf0, 0x3b, 0x1f, 0x1f, 0xa6, 0xc2, 0x1e, 0xcf, 0xc6, 0x34, 0x51,
-	0x39, 0x9b, 0x70, 0xcb, 0x93, 0x63, 0x2e, 0x64, 0xc6, 0xc7, 0x2c, 0x4b, 0x8a, 0x47, 0xa9, 0x62,
-	0x1a, 0x32, 0x5e, 0x9d, 0xaf, 0xed, 0xb8, 0xdf, 0x2c, 0xe0, 0xe3, 0x5f, 0x01, 0x00, 0x00, 0xff,
-	0xff, 0xd9, 0x19, 0x22, 0xaa, 0xd4, 0x03, 0x00, 0x00,
+	// 529 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x94, 0x41, 0x6f, 0xd3, 0x30,
+	0x14, 0xc7, 0x9b, 0xb5, 0x9d, 0xd8, 0x6b, 0x05, 0xcc, 0x54, 0x25, 0xaa, 0x50, 0xd4, 0xe5, 0x80,
+	0x3a, 0x04, 0x89, 0x56, 0x2e, 0x03, 0x09, 0x69, 0xdd, 0x40, 0xda, 0xe0, 0x02, 0x19, 0x27, 0x2e,
+	0x95, 0x9b, 0xbe, 0x65, 0x56, 0xd3, 0x38, 0xb5, 0xdd, 0x4a, 0xb9, 0xc3, 0x89, 0x0b, 0x5f, 0x80,
+	0xcf, 0xc3, 0x8e, 0x3b, 0x72, 0x84, 0xf6, 0x8b, 0xa0, 0x38, 0xd9, 0xca, 0xd4, 0x75, 0xac, 0xdc,
+	0xf2, 0x9e, 0xff, 0xbf, 0xbf, 0xdf, 0xb3, 0x5f, 0x0c, 0x76, 0xe8, 0xc7, 0xae, 0x44, 0x31, 0x61,
+	0x3e, 0xba, 0x18, 0xf9, 0x21, 0x9d, 0xa0, 0x3b, 0xd9, 0x71, 0x47, 0x63, 0x14, 0x89, 0x13, 0x0b,
+	0xae, 0x38, 0xa9, 0x87, 0x7e, 0xec, 0xe4, 0x1a, 0x27, 0xd7, 0x38, 0x93, 0x9d, 0x46, 0x2d, 0xe0,
+	0x01, 0xd7, 0x12, 0x37, 0xfd, 0xca, 0xd4, 0xf6, 0x1e, 0x34, 0x3f, 0xa4, 0x70, 0x67, 0x42, 0x59,
+	0x48, 0x7b, 0x21, 0xbe, 0xc9, 0x88, 0x77, 0x98, 0x48, 0x0f, 0x47, 0x63, 0x94, 0x8a, 0x3c, 0x82,
+	0x8d, 0xa1, 0xc8, 0x9d, 0x4c, 0xa3, 0x69, 0xb4, 0xaa, 0xde, 0x3c, 0x61, 0x77, 0x61, 0xeb, 0x06,
+	0x07, 0x19, 0xf3, 0x48, 0x22, 0x79, 0x09, 0xa5, 0x01, 0x26, 0xd2, 0x34, 0x9a, 0xc5, 0x56, 0xa5,
+	0xfd, 0xd8, 0xb9, 0xbe, 0x46, 0x67, 0x8e, 0x1e, 0x45, 0x27, 0xdc, 0xd3, 0x8c, 0xfd, 0xdd, 0x80,
+	0xbb, 0x57, 0x17, 0xc8, 0x2b, 0x28, 0x32, 0x2a, 0x75, 0x2d, 0x95, 0xf6, 0xf6, 0x32, 0xb7, 0xa3,
+	0xce, 0xf1, 0x55, 0xee, 0xb0, 0xe0, 0xa5, 0x1c, 0xd9, 0x83, 0x52, 0xdf, 0xa7, 0xb1, 0xb9, 0xa6,
+	0xf9, 0x27, 0xcb, 0xf8, 0xd7, 0x07, 0x9d, 0xf7, 0x0b, 0x06, 0x9a, 0xdc, 0x07, 0xb8, 0x33, 0xc0,
+	0xa4, 0xcb, 0xa2, 0x13, 0x6e, 0xff, 0x30, 0x60, 0x73, 0x61, 0x2b, 0xe2, 0xc0, 0x83, 0xdc, 0xaa,
+	0x9b, 0x2a, 0x69, 0xbf, 0x2f, 0x50, 0xca, 0xfc, 0xf8, 0x36, 0xf1, 0x52, 0xdc, 0xc9, 0x16, 0x48,
+	0x1d, 0xd6, 0x05, 0xc6, 0x5c, 0x28, 0x5d, 0xd5, 0x86, 0x97, 0x47, 0x64, 0x1b, 0xee, 0x53, 0xa5,
+	0x50, 0x2a, 0xaa, 0x18, 0x8f, 0xba, 0x8a, 0x0d, 0xd1, 0x2c, 0x36, 0x8d, 0x56, 0xc9, 0xbb, 0xf7,
+	0x57, 0xfe, 0x23, 0x1b, 0x62, 0x7a, 0x4f, 0x92, 0x05, 0x11, 0x55, 0x63, 0x81, 0x66, 0x29, 0xbb,
+	0xa7, 0xcb, 0x04, 0xd9, 0x82, 0x6a, 0x1a, 0xb0, 0x28, 0xe8, 0xfa, 0x28, 0x94, 0x59, 0xd6, 0x82,
+	0x4a, 0x9e, 0x3b, 0x40, 0xa1, 0xec, 0x2f, 0x06, 0x90, 0xc5, 0xa6, 0x57, 0x6e, 0xa5, 0x06, 0xe5,
+	0xd1, 0x98, 0x2b, 0xd4, 0x9d, 0x54, 0xbd, 0x2c, 0x58, 0xa1, 0x11, 0xfb, 0x10, 0xea, 0x7a, 0xa4,
+	0xe6, 0x75, 0x5c, 0x8c, 0xe2, 0x8a, 0xa5, 0xd8, 0xc7, 0xf0, 0x70, 0xc1, 0x29, 0x1f, 0xc9, 0x5d,
+	0x28, 0x0e, 0x30, 0xc9, 0x67, 0xe8, 0xb6, 0x13, 0x99, 0x22, 0xed, 0xcf, 0x6b, 0x50, 0xd6, 0xae,
+	0xe4, 0xab, 0x01, 0xb5, 0xeb, 0xe6, 0x9e, 0xec, 0x2e, 0xf3, 0xfb, 0xd7, 0xcf, 0xd6, 0x78, 0xf1,
+	0x1f, 0x64, 0xde, 0xd1, 0x10, 0x60, 0x9e, 0x26, 0xce, 0x8d, 0x46, 0x0b, 0x47, 0xdb, 0x70, 0x6f,
+	0xad, 0xcf, 0xb6, 0xdb, 0x7f, 0x7b, 0xf6, 0xdb, 0x2a, 0x9c, 0x4d, 0x2d, 0xe3, 0x7c, 0x6a, 0x19,
+	0xbf, 0xa6, 0x96, 0xf1, 0x6d, 0x66, 0x15, 0xce, 0x67, 0x56, 0xe1, 0xe7, 0xcc, 0x2a, 0x7c, 0x7a,
+	0x1a, 0x30, 0x75, 0x3a, 0xee, 0x39, 0x3e, 0x1f, 0xba, 0x7d, 0xaa, 0xa8, 0x7f, 0x4a, 0x59, 0x14,
+	0xd2, 0x9e, 0x1b, 0xfa, 0xf1, 0xb3, 0x80, 0xbb, 0x02, 0x43, 0x9a, 0x5c, 0xbc, 0x61, 0xbd, 0x75,
+	0xfd, 0x1a, 0x3d, 0xff, 0x13, 0x00, 0x00, 0xff, 0xff, 0x55, 0xfa, 0xb5, 0x08, 0xe1, 0x04, 0x00,
+	0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -466,13 +597,80 @@ func (m *EnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Extension) > 0 {
-		i -= len(m.Extension)
-		copy(dAtA[i:], m.Extension)
-		i = encodeVarintQuery(dAtA, i, uint64(len(m.Extension)))
-		i--
-		dAtA[i] = 0x32
+	if m.KeyInfo != nil {
+		{
+			size := m.KeyInfo.Size()
+			i -= size
+			if _, err := m.KeyInfo.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *EnclaveKeyInfo_Ias) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnclaveKeyInfo_Ias) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Ias != nil {
+		{
+			size, err := m.Ias.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *EnclaveKeyInfo_Dcap) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnclaveKeyInfo_Dcap) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Dcap != nil {
+		{
+			size, err := m.Dcap.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *IASEnclaveKeyInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *IASEnclaveKeyInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IASEnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	if len(m.SigningCert) > 0 {
 		i -= len(m.SigningCert)
 		copy(dAtA[i:], m.SigningCert)
@@ -487,17 +685,59 @@ func (m *EnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x22
 	}
+	if m.AttestationTime != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.AttestationTime))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.Report) > 0 {
 		i -= len(m.Report)
 		copy(dAtA[i:], m.Report)
 		i = encodeVarintQuery(dAtA, i, uint64(len(m.Report)))
 		i--
-		dAtA[i] = 0x1a
+		dAtA[i] = 0x12
 	}
+	if len(m.EnclaveKeyAddress) > 0 {
+		i -= len(m.EnclaveKeyAddress)
+		copy(dAtA[i:], m.EnclaveKeyAddress)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.EnclaveKeyAddress)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *DCAPEnclaveKeyInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DCAPEnclaveKeyInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DCAPEnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	if m.AttestationTime != 0 {
 		i = encodeVarintQuery(dAtA, i, uint64(m.AttestationTime))
 		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x18
+	}
+	if len(m.Quote) > 0 {
+		i -= len(m.Quote)
+		copy(dAtA[i:], m.Quote)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Quote)))
+		i--
+		dAtA[i] = 0x12
 	}
 	if len(m.EnclaveKeyAddress) > 0 {
 		i -= len(m.EnclaveKeyAddress)
@@ -619,16 +859,52 @@ func (m *EnclaveKeyInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.KeyInfo != nil {
+		n += m.KeyInfo.Size()
+	}
+	return n
+}
+
+func (m *EnclaveKeyInfo_Ias) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Ias != nil {
+		l = m.Ias.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *EnclaveKeyInfo_Dcap) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Dcap != nil {
+		l = m.Dcap.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *IASEnclaveKeyInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	l = len(m.EnclaveKeyAddress)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Report)
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
 	}
 	if m.AttestationTime != 0 {
 		n += 1 + sovQuery(uint64(m.AttestationTime))
-	}
-	l = len(m.Report)
-	if l > 0 {
-		n += 1 + l + sovQuery(uint64(l))
 	}
 	l = len(m.Signature)
 	if l > 0 {
@@ -638,9 +914,25 @@ func (m *EnclaveKeyInfo) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
 	}
-	l = len(m.Extension)
+	return n
+}
+
+func (m *DCAPEnclaveKeyInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.EnclaveKeyAddress)
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Quote)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	if m.AttestationTime != 0 {
+		n += 1 + sovQuery(uint64(m.AttestationTime))
 	}
 	return n
 }
@@ -876,6 +1168,126 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ias", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IASEnclaveKeyInfo{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.KeyInfo = &EnclaveKeyInfo_Ias{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Dcap", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &DCAPEnclaveKeyInfo{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.KeyInfo = &EnclaveKeyInfo_Dcap{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *IASEnclaveKeyInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IASEnclaveKeyInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IASEnclaveKeyInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveKeyAddress", wireType)
 			}
 			var byteLen int
@@ -909,25 +1321,6 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AttestationTime", wireType)
-			}
-			m.AttestationTime = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowQuery
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.AttestationTime |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Report", wireType)
 			}
@@ -959,6 +1352,25 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.Report = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AttestationTime", wireType)
+			}
+			m.AttestationTime = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AttestationTime |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
@@ -1027,9 +1439,59 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 				m.SigningCert = []byte{}
 			}
 			iNdEx = postIndex
-		case 6:
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DCAPEnclaveKeyInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DCAPEnclaveKeyInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DCAPEnclaveKeyInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Extension", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveKeyAddress", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -1056,11 +1518,64 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Extension = append(m.Extension[:0], dAtA[iNdEx:postIndex]...)
-			if m.Extension == nil {
-				m.Extension = []byte{}
+			m.EnclaveKeyAddress = append(m.EnclaveKeyAddress[:0], dAtA[iNdEx:postIndex]...)
+			if m.EnclaveKeyAddress == nil {
+				m.EnclaveKeyAddress = []byte{}
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Quote", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Quote = append(m.Quote[:0], dAtA[iNdEx:postIndex]...)
+			if m.Quote == nil {
+				m.Quote = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AttestationTime", wireType)
+			}
+			m.AttestationTime = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AttestationTime |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipQuery(dAtA[iNdEx:])
