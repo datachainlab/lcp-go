@@ -54,7 +54,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if threshold.Numerator > threshold.Denominator {
 		return fmt.Errorf("new operators threshold numerator cannot be greater than denominator: %s", threshold.String())
 	}
-	cplatestHeight, err := counterparty.LatestHeight()
+	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if err != nil {
 		return err
 	}
-	if _, err := counterparty.SendMsgs([]sdk.Msg{msg}); err != nil {
+	if _, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg}); err != nil {
 		return err
 	}
 	return nil
@@ -129,11 +129,11 @@ func NewEIP712Signer(signer signer.Signer) *EIP712Signer {
 }
 
 func (s EIP712Signer) Sign(commitment [32]byte) ([]byte, error) {
-	return s.signer.Sign(commitment[:])
+	return s.signer.Sign(context.TODO(), commitment[:])
 }
 
 func (s EIP712Signer) GetSignerAddress() (common.Address, error) {
-	pub, err := s.signer.GetPublicKey()
+	pub, err := s.signer.GetPublicKey(context.TODO())
 	if err != nil {
 		return common.Address{}, err
 	}

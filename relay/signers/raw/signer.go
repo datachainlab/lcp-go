@@ -1,6 +1,7 @@
 package raw
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
 
@@ -20,11 +21,11 @@ func NewSigner(privKey *ecdsa.PrivateKey) *Signer {
 	}
 }
 
-func (s *Signer) GetPublicKey() ([]byte, error) {
+func (s *Signer) GetPublicKey(_ context.Context) ([]byte, error) {
 	return crypto.CompressPubkey(&s.privKey.PublicKey), nil
 }
 
-func (s *Signer) Sign(digest []byte) ([]byte, error) {
+func (s *Signer) Sign(_ context.Context, digest []byte) ([]byte, error) {
 	sig, err := crypto.Sign(digest, s.privKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign tx: %v", err)
