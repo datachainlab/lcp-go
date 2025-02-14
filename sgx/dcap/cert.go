@@ -29,12 +29,19 @@ KoZIzj0EAwIDSQAwRgIhAOW/5QkR+S9CiSDcNoowLuPRLsWGf/Yi7GSX94BgwTwg
 AiEA4J0lrHoMs+Xo5o/sX6O9QWxHRAvZUGOdRQ7cvqRXaqI=
 -----END CERTIFICATE-----`
 
-func init() {
+func initDCAP() {
 	rootCert, _, err := ias.CertFromPEM([]byte(dcapTrustRootCert))
 	if err != nil {
 		panic(err)
 	} else if rootCert == nil {
 		panic(fmt.Sprintf("invalid rootCert: %v", dcapTrustRootCert))
+	}
+	setRARootCert(rootCert)
+}
+
+func setRARootCert(rootCert *x509.Certificate) {
+	if trustRARootCert != nil {
+		panic("`trustRARootCert` is already initialized")
 	}
 	trustRARootCert = rootCert
 }

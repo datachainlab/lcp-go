@@ -58,7 +58,7 @@ func (vo VerifiedOutput) IsDebug() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return attrs.Flags&sgx.AttributeDebug == 1, nil
+	return attrs.Flags&sgx.AttributeDebug != 0, nil
 }
 
 func (vo VerifiedOutput) GetExpiredAt() time.Time {
