@@ -28,6 +28,8 @@ while true; do
         --zkdcap)
             echo "ZKDCAP enabled"
             ZKDCAP=true
+            # TODO: Fetch the RISC0_IMAGE_ID from the LCP service
+            export LCP_RISC0_IMAGE_ID=0x44bc1f4eb9588657fc753805dfd3a04a353d96d3ced37b4ad44932544d7efe36
             shift
             ;;
         --)
