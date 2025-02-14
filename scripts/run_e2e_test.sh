@@ -54,7 +54,7 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     LCP_PID=$!
     if [ "$SGX_MODE" = "SW" ]; then
         export LCP_RA_ROOT_CERT_HEX=$(cat ./lcp/tests/certs/root.crt | xxd -p -c 1000000)
-        export LCP_DCAP_RA_ROOT_CERT_HEX=$(cat ./dcap_root_cert.pem | xxd -p -c 1000000)
+        export LCP_DCAP_RA_ROOT_CERT_HEX=$(cat ./tests/e2e/certs/simulate_dcap_root_cert.pem | xxd -p -c 1000000)
     fi
 else
     echo "Skip running LCP"
