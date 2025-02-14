@@ -47,11 +47,12 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH:-./bin/enclave.signed.so}
     export LCP_ENCLAVE_DEBUG=1
     export LCP_MRENCLAVE=$(${LCP_BIN} enclave metadata --enclave=${LCP_ENCLAVE_PATH} | jq -r .mrenclave)
-    LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ./scripts/init_lcp.sh
+    LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ZKDCAP=${ZKDCAP} ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
     if [ "$SGX_MODE" = "SW" ]; then
         export LCP_RA_ROOT_CERT_HEX=$(cat ./lcp/tests/certs/root.crt | xxd -p -c 1000000)
+        export LCP_DCAP_RA_ROOT_CERT_HEX=$(cat ./dcap_root_cert.pem | xxd -p -c 1000000)
     fi
 else
     echo "Skip running LCP"
@@ -71,7 +72,7 @@ make -C ${E2E_TEST_DIR} setup handshake
 if [ "$ZKDCAP" = "false" ] && [ "$NO_RUN_LCP" = "false" ]; then
     echo "Shutdown LCP for testing restore ELC state"
     kill $LCP_PID
-    ./scripts/init_lcp.sh
+    ZKDCAP=${ZKDCAP} ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
     echo "Restore ELC state"

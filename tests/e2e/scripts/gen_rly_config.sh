@@ -11,6 +11,11 @@ CONFIG_DIR=${E2E_TEST_DIR}/configs/demo
 
 mkdir -p $CONFIG_DIR
 if [ "$ZKDCAP" = true ]; then
+    if [ -z "$LCP_RISC0_IMAGE_ID" ]; then
+        echo "LCP_RISC0_IMAGE_ID is not set"
+        exit 1
+    fi
+
     if [ "$OPERATORS_ENABLED" = true ]; then
         IBC0=ibc-0-zkdcap-operators.json
         IBC1=ibc-1-zkdcap-operators.json
