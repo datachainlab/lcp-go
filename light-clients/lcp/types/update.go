@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	errorsmod "cosmossdk.io/errors"
@@ -14,6 +16,7 @@ import (
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/go-risc0-verifier/groth16"
+	"github.com/datachainlab/go-risc0-verifier/mock"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
 	"github.com/datachainlab/lcp-go/sgx/ias"
@@ -183,7 +186,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	if err := cs.ValidateRisc0DCAPVerifierCommit(ctx.BlockTime(), commit); err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: %v", err)
 	}
-	if err := cs.VerifyRisc0ZKDCAPProof(vi, commit, message.Proof); err != nil {
+	if err := cs.VerifyRisc0ZKDCAPProof(vi, commit, message.Proof, risc0MockProofAllowed()); err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify ZKP: %v", err)
 	}
 	var operator common.Address
@@ -212,7 +215,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	return nil
 }
 
-func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.VerifiedOutput, proof []byte) error {
+func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.VerifiedOutput, proof []byte, mockProofAllowed bool) error {
 	if verifierInfo.ZKVMType != dcap.Risc0ZKVMType {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", dcap.Risc0ZKVMType, verifierInfo.ZKVMType)
 	}
@@ -221,8 +224,16 @@ func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierIn
 	}
 	var sel [4]byte
 	copy(sel[:], proof[:4])
-	if err := groth16.VerifyRISC0SealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 proof: %v", err)
+	if !bytes.Equal(sel[:], mock.MockSelector[:]) {
+		if err := groth16.VerifyRISC0SealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 proof: %v", err)
+		}
+	} else if mockProofAllowed {
+		if err := mock.VerifyMockSealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 mock proof: %v", err)
+		}
+	} else {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "mock proof is not allowed")
 	}
 	return nil
 }
@@ -601,4 +612,9 @@ func (cs ClientState) IsZKDCAPEnabled() bool {
 
 func enclaveKeyPath(key common.Address) []byte {
 	return []byte("aux/enclave_keys/" + key.Hex())
+}
+
+func risc0MockProofAllowed() bool {
+	v := strings.ToLower(os.Getenv("LCP_ZKDCAP_RISC0_MOCK"))
+	return v == "1" || v == "true"
 }

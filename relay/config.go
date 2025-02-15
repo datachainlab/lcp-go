@@ -171,9 +171,13 @@ func decodeMrenclaveHex(s string) ([]byte, error) {
 }
 
 func (pr *Prover) getRAType() RAType {
-	switch pr.config.ZkvmConfig.(type) {
+	switch t := pr.config.ZkvmConfig.(type) {
 	case *ProverConfig_Risc0ZkvmConfig:
-		return RATypeZKDCAP
+		if t.Risc0ZkvmConfig.Mock {
+			return RATypeMockZKDCAPRisc0
+		} else {
+			return RATypeZKDCAPRisc0
+		}
 	default:
 		return RATypeIAS
 	}
@@ -184,7 +188,7 @@ func (pr *Prover) getZKDCAPVerifierInfos() ([][]byte, error) {
 	switch raType {
 	case RATypeIAS, RATypeDCAP:
 		return nil, nil
-	case RATypeZKDCAP:
+	case RATypeZKDCAPRisc0, RATypeMockZKDCAPRisc0:
 		bz, err := pr.config.GetRisc0ZkvmConfig().getZKDCAPVerifierInfo()
 		if err != nil {
 			return nil, err
@@ -197,19 +201,18 @@ func (pr *Prover) getZKDCAPVerifierInfos() ([][]byte, error) {
 
 func (c *Risc0ZKVMConfig) getZKDCAPVerifierInfo() ([64]byte, error) {
 	var verifierInfo [64]byte
-	imageID := c.ImageId
-	// remove 0x prefix if exists
-	if len(imageID) > 2 && imageID[:2] == "0x" {
-		imageID = imageID[2:]
-	}
-	if len(imageID) != 64 {
-		return verifierInfo, fmt.Errorf("invalid image ID: %v", imageID)
-	}
-	imBz, err := hex.DecodeString(imageID)
-	if err != nil {
-		return verifierInfo, err
-	}
+	imageID := c.GetImageID()
 	verifierInfo[0] = byte(dcap.Risc0ZKVMType)
-	copy(verifierInfo[32:], imBz)
+	copy(verifierInfo[32:], imageID[:])
 	return verifierInfo, nil
+}
+
+func (c *Risc0ZKVMConfig) GetImageID() [32]byte {
+	imageID := common.FromHex(c.ImageId)
+	if len(imageID) != 32 {
+		panic(fmt.Sprintf("invalid image ID: %v", c.ImageId))
+	}
+	var id [32]byte
+	copy(id[:], imageID)
+	return id
 }

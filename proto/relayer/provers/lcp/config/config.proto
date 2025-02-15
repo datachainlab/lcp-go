@@ -51,6 +51,7 @@ message Fraction {
 
 message Risc0ZKVMConfig {
     string image_id = 1;
+    bool mock = 2;
 }
 
 message EIP712EVMChainParams {

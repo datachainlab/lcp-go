@@ -1,13 +1,16 @@
 #!/bin/sh
 set -ex
 
-# Usage: run_e2e_test.sh <--operators_enabled> <--no_run_lcp> <--zkdcap>
+# Usage: run_e2e_test.sh <--operators_enabled> <--no_run_lcp> <--zkdcap> <--mock_zkdcap>
 
 E2E_TEST_DIR=./tests/e2e/cases/tm2tm
 OPERATORS_ENABLED=false
 NO_RUN_LCP=false
-ZKDCAP=false
-ARGS=$(getopt -o '' --long operators_enabled,no_run_lcp,zkdcap -n 'parse-options' -- "$@")
+export ZKDCAP=false
+export LCP_ZKDCAP_RISC0_MOCK=false
+# TODO Fetch the image ID from the LCP service
+export LCP_RISC0_IMAGE_ID=0x44bc1f4eb9588657fc753805dfd3a04a353d96d3ced37b4ad44932544d7efe36
+ARGS=$(getopt -o '' --long operators_enabled,no_run_lcp,zkdcap,mock_zkdcap -n 'parse-options' -- "$@")
 eval set -- "$ARGS"
 while true; do
     case "$1" in
@@ -28,8 +31,13 @@ while true; do
         --zkdcap)
             echo "ZKDCAP enabled"
             ZKDCAP=true
-            # TODO: Fetch the RISC0_IMAGE_ID from the LCP service
-            export LCP_RISC0_IMAGE_ID=0x44bc1f4eb9588657fc753805dfd3a04a353d96d3ced37b4ad44932544d7efe36
+            LCP_ZKDCAP_RISC0_MOCK=false
+            shift
+            ;;
+        --mock_zkdcap)
+            echo "Mock ZKDCAP enabled"
+            ZKDCAP=true
+            LCP_ZKDCAP_RISC0_MOCK=true
             shift
             ;;
         --)
@@ -49,7 +57,7 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH:-./bin/enclave.signed.so}
     export LCP_ENCLAVE_DEBUG=1
     export LCP_MRENCLAVE=$(${LCP_BIN} enclave metadata --enclave=${LCP_ENCLAVE_PATH} | jq -r .mrenclave)
-    LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ZKDCAP=${ZKDCAP} ./scripts/init_lcp.sh
+    LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
     if [ "$SGX_MODE" = "SW" ]; then
@@ -65,16 +73,16 @@ else
     fi
 fi
 
-ZKDCAP=${ZKDCAP} E2E_TEST_DIR=${E2E_TEST_DIR} OPERATORS_ENABLED=${OPERATORS_ENABLED} ./tests/e2e/scripts/gen_rly_config.sh
+E2E_TEST_DIR=${E2E_TEST_DIR} OPERATORS_ENABLED=${OPERATORS_ENABLED} ./tests/e2e/scripts/gen_rly_config.sh
 
 make -C ${E2E_TEST_DIR} network
 sleep 3
 make -C ${E2E_TEST_DIR} setup handshake
 
-if [ "$ZKDCAP" = "false" ] && [ "$NO_RUN_LCP" = "false" ]; then
+if [ "$NO_RUN_LCP" = "false" ]; then
     echo "Shutdown LCP for testing restore ELC state"
     kill $LCP_PID
-    ZKDCAP=${ZKDCAP} ./scripts/init_lcp.sh
+    ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
     echo "Restore ELC state"

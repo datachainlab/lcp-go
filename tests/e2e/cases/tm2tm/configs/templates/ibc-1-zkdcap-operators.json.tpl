@@ -28,7 +28,8 @@
     "elc_client_id": "07-tendermint-0",
     "is_debug_enclave": $IS_DEBUG_ENCLAVE,
     "risc0_zkvm_config": {
-      "image_id": $RISC0_IMAGE_ID
+      "image_id": $RISC0_IMAGE_ID,
+      "mock": $LCP_ZKDCAP_RISC0_MOCK
     },
     "operators": [
       "0x9722414d09f43fb02235d739B50F4C027F43e657"

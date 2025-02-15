@@ -10,7 +10,7 @@ require (
 	github.com/cosmos/cosmos-sdk v0.50.5
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/cosmos/ibc-go/v8 v8.2.1
-	github.com/datachainlab/go-risc0-verifier v0.0.0-20250115104412-b6fee0d6f256
+	github.com/datachainlab/go-risc0-verifier v0.1.1
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gogo/protobuf v1.3.2

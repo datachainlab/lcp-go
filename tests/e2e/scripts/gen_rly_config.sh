@@ -5,6 +5,10 @@ IS_DEBUG_ENCLAVE=false
 if [ "$LCP_ENCLAVE_DEBUG" = "1" ]; then
     IS_DEBUG_ENCLAVE=true
 fi
+# set LCP_ZKDCAP_RISC0_MOCK as false if not set
+if [ -z "$LCP_ZKDCAP_RISC0_MOCK" ]; then
+    LCP_ZKDCAP_RISC0_MOCK=false
+fi
 
 TEMPLATE_DIR=${E2E_TEST_DIR}/configs/templates
 CONFIG_DIR=${E2E_TEST_DIR}/configs/demo
@@ -28,6 +32,7 @@ if [ "$ZKDCAP" = true ]; then
             --arg MRENCLAVE ${LCP_MRENCLAVE} \
             --argjson IS_DEBUG_ENCLAVE ${IS_DEBUG_ENCLAVE} \
             --arg RISC0_IMAGE_ID ${LCP_RISC0_IMAGE_ID} \
+            --argjson LCP_ZKDCAP_RISC0_MOCK ${LCP_ZKDCAP_RISC0_MOCK} \
             -f ${TEMPLATE_DIR}/$t.tpl > ${CONFIG_DIR}/${t:0:5}.json
     done
 else

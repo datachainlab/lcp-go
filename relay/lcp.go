@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
+	opcs "github.com/oasisprotocol/oasis-core/go/common/sgx/pcs"
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
@@ -31,9 +32,10 @@ import (
 type RAType uint8
 
 const (
-	RATypeIAS    RAType = 1
-	RATypeDCAP   RAType = 2
-	RATypeZKDCAP RAType = 3
+	RATypeIAS             RAType = 1
+	RATypeDCAP            RAType = 2
+	RATypeZKDCAPRisc0     RAType = 3
+	RATypeMockZKDCAPRisc0 RAType = 4
 )
 
 type EIP712DomainParams struct {
@@ -242,19 +244,19 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 		switch v := eki.KeyInfo.(type) {
 		case *enclave.EnclaveKeyInfo_Ias:
 			if ok, err := pr.validateIASEnclaveKeyInfo(v.Ias); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to validate IAS enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
 		case *enclave.EnclaveKeyInfo_Dcap:
 			if ok, err := pr.validateDCAPEnclaveKeyInfo(v.Dcap); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to validate DCAP enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
 		case *enclave.EnclaveKeyInfo_Zkdcap:
 			if ok, err := pr.validateZKDCAPEnclaveKeyInfo(v.Zkdcap); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to validate ZKDCAP enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
@@ -279,7 +281,7 @@ func (pr *Prover) validateIASEnclaveKeyInfo(eki *enclave.IASEnclaveKeyInfo) (boo
 	if err != nil {
 		return false, err
 	}
-	if !pr.validateIASEnclaveQuoteStatus(avr.ISVEnclaveQuoteStatus) {
+	if !pr.validateISVEnclaveQuoteStatus(avr.ISVEnclaveQuoteStatus.String()) {
 		pr.getLogger().Info("the key is not allowed to use because of ISVEnclaveQuoteStatus", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "quote_status", avr.ISVEnclaveQuoteStatus.String())
 		return false, nil
 	}
@@ -290,11 +292,23 @@ func (pr *Prover) validateIASEnclaveKeyInfo(eki *enclave.IASEnclaveKeyInfo) (boo
 	return true, nil
 }
 
+func (pr *Prover) validateISVEnclaveQuoteStatus(status string) bool {
+	if status == oias.QuoteOK.String() || status == opcs.StatusUpToDate.String() {
+		return true
+	}
+	for _, s := range pr.config.AllowedQuoteStatuses {
+		if status == s {
+			return true
+		}
+	}
+	return false
+}
+
 func (pr *Prover) validateDCAPEnclaveKeyInfo(eki *enclave.DCAPEnclaveKeyInfo) (bool, error) {
-	// if !pr.validateISVEnclaveQuoteStatus(eki.TcbStatus) {
-	// 	pr.getLogger().Info("the key is not allowed to use because of TCB status", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "tcb_status", eki.TcbStatus)
-	// 	return false, nil
-	// }
+	if !pr.validateISVEnclaveQuoteStatus(eki.TcbStatus) {
+		pr.getLogger().Info("the key is not allowed to use because of TCB status", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "tcb_status", eki.TcbStatus)
+		return false, nil
+	}
 	if !pr.validateAdvisoryIDs(eki.AdvisoryIds) {
 		pr.getLogger().Info("the key is not allowed to use because of advisory IDs", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "advisory_ids", eki.AdvisoryIds)
 		return false, nil
@@ -303,19 +317,25 @@ func (pr *Prover) validateDCAPEnclaveKeyInfo(eki *enclave.DCAPEnclaveKeyInfo) (b
 }
 
 func (pr *Prover) validateZKDCAPEnclaveKeyInfo(eki *enclave.ZKDCAPEncalveKeyInfo) (bool, error) {
-	return pr.validateDCAPEnclaveKeyInfo(eki.Dcap)
-}
-
-func (pr *Prover) validateIASEnclaveQuoteStatus(s oias.ISVEnclaveQuoteStatus) bool {
-	if s == oias.QuoteOK {
-		return true
+	if ok, err := pr.validateDCAPEnclaveKeyInfo(eki.Dcap); err != nil {
+		return false, err
+	} else if !ok {
+		return false, nil
 	}
-	for _, status := range pr.config.AllowedQuoteStatuses {
-		if s.String() == status {
-			return true
-		}
+	zkp := eki.Zkp.GetRisc0()
+	if zkp == nil {
+		return false, errors.New("currently only RISC0 is supported")
 	}
-	return false
+	zkcfg := pr.config.GetRisc0ZkvmConfig()
+	if zkcfg == nil {
+		return false, errors.New("RISC0 zkvm config is not set")
+	}
+	expectedImageID := zkcfg.GetImageID()
+	if !bytes.Equal(zkp.ImageId, expectedImageID[:]) {
+		pr.getLogger().Info("the key is not allowed to use because of RISC0 image ID mismatch", "enclave_key", hex.EncodeToString(eki.Dcap.EnclaveKeyAddress), "image_id", hex.EncodeToString(zkp.ImageId), "expected_image_id", hex.EncodeToString(expectedImageID[:]))
+		return false, nil
+	}
+	return true, nil
 }
 
 func (pr *Prover) validateAdvisoryIDs(ids []string) bool {
@@ -486,7 +506,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	zkp := eki.Zkp.GetRisc0()
 	if zkp == nil {
-		return nil, errors.New("zkp is nil")
+		return nil, errors.New("currently only RISC0 is supported")
 	}
 	commit, err := dcap.ParseDCAPVerifierCommit(zkp.Commit)
 	if err != nil {
@@ -538,7 +558,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if !bytes.Equal(verifierInfo.ProgramID[:], zkp.ImageId) {
 		return nil, fmt.Errorf("program ID mismatch: expected 0x%x, but got 0x%x", verifierInfo.ProgramID, zkp.ImageId)
 	}
-	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, commit, zkp.Seal); err != nil {
+	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, commit, zkp.Seal, pr.config.GetRisc0ZkvmConfig().Mock); err != nil {
 		return nil, fmt.Errorf("failed to verify RISC0 ZKDCAP proof: %w", err)
 	}
 	if pr.IsOperatorEnabled() {
