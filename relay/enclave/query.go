@@ -66,3 +66,10 @@ func (eki *DCAPEnclaveKeyInfo) GetReportData() ([64]byte, error) {
 	copy(reportData[:], report.ReportData())
 	return reportData, nil
 }
+
+func (m *Risc0ZKVMProof) GetProof() []byte {
+	var proof []byte
+	proof = append(proof, m.Selector...)
+	proof = append(proof, m.Seal...)
+	return proof
+}

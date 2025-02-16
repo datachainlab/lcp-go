@@ -522,7 +522,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	message := &lcptypes.ZKDCAPRegisterEnclaveKeyMessage{
 		ZkvmType:          uint32(dcap.Risc0ZKVMType),
 		Commit:            zkp.Commit,
-		Proof:             zkp.Seal,
+		Proof:             zkp.GetProof(),
 		OperatorSignature: nil,
 	}
 	quote, err := dcap.ParseQuote(eki.Dcap.Quote)
@@ -564,7 +564,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if !bytes.Equal(verifierInfo.ProgramID[:], zkp.ImageId) {
 		return nil, fmt.Errorf("program ID mismatch: expected 0x%x, but got 0x%x", verifierInfo.ProgramID, zkp.ImageId)
 	}
-	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, commit, zkp.Seal, pr.config.GetRisc0ZkvmConfig().Mock); err != nil {
+	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, commit, zkp.GetProof(), pr.config.GetRisc0ZkvmConfig().Mock); err != nil {
 		return nil, fmt.Errorf("failed to verify RISC0 ZKDCAP proof: %w", err)
 	}
 	if pr.IsOperatorEnabled() {
