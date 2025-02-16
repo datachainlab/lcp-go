@@ -233,11 +233,17 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 
 // selectNewEnclaveKey selects a new enclave key from the LCP service
 func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyInfo, error) {
-	res, err := pr.lcpServiceClient.AvailableEnclaveKeys(ctx, &enclave.QueryAvailableEnclaveKeysRequest{Mrenclave: pr.config.GetMrenclave(), RaType: uint32(pr.getRAType())})
+	req := enclave.QueryAvailableEnclaveKeysRequest{
+		Mrenclave:    pr.config.GetMrenclave(),
+		EnclaveDebug: pr.config.IsDebugEnclave,
+		RaType:       uint32(pr.getRAType()),
+	}
+	pr.getLogger().Debug("query available enclave keys", "mrenclave", hex.EncodeToString(req.Mrenclave), "debug", req.EnclaveDebug, "ra_type", req.RaType)
+	res, err := pr.lcpServiceClient.AvailableEnclaveKeys(ctx, &req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to call AvailableEnclaveKeys: mr_enclave=%v debug=%v ra_type=%v %w", hex.EncodeToString(req.Mrenclave), req.EnclaveDebug, req.RaType, err)
 	} else if len(res.Keys) == 0 {
-		return nil, fmt.Errorf("no available enclave keys")
+		return nil, fmt.Errorf("no available enclave keys: mrenclave=%v debug=%v ra_type=%v", hex.EncodeToString(req.Mrenclave), req.EnclaveDebug, req.RaType)
 	}
 
 	for _, eki := range res.Keys {
