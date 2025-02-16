@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -74,6 +75,16 @@ func (pr *Prover) GetOriginProver() core.Prover {
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
 	pr.homePath = homePath
 	pr.codec = codec
+	res, err := pr.lcpServiceClient.EnclaveInfo(context.TODO(), &enclave.QueryEnclaveInfoRequest{})
+	if err != nil {
+		return fmt.Errorf("failed to get enclave info: %w", err)
+	}
+	if !bytes.Equal(res.Mrenclave, pr.config.GetMrenclave()) {
+		return fmt.Errorf("mismatched mrenclave between the prover and the LCP service: prover=%x lcp=%x", pr.config.GetMrenclave(), res.Mrenclave)
+	}
+	if res.EnclaveDebug != pr.config.IsDebugEnclave {
+		return fmt.Errorf("mismatched debug enclave between the prover and the LCP service: prover=%v lcp=%v", pr.config.IsDebugEnclave, res.EnclaveDebug)
+	}
 	if pr.config.IsDebugEnclave {
 		sgx.SetAllowDebugEnclaves()
 	}
