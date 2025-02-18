@@ -62,6 +62,16 @@ func (RegisterEnclaveKeyMessage) ValidateBasic() error {
 	return nil
 }
 
+var _ exported.ClientMessage = (*ZKDCAPRegisterEnclaveKeyMessage)(nil)
+
+func (ZKDCAPRegisterEnclaveKeyMessage) ClientType() string {
+	return ClientTypeLCP
+}
+
+func (ZKDCAPRegisterEnclaveKeyMessage) ValidateBasic() error {
+	return nil
+}
+
 var _ exported.ClientMessage = (*UpdateOperatorsMessage)(nil)
 
 func (UpdateOperatorsMessage) ClientType() string {

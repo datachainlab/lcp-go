@@ -5,12 +5,22 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 )
 
 const (
-	ReportDataVersion uint8 = 1
+	QuoteOK                                = "OK"
+	QuoteSignatureInvalid                  = "SIGNATURE_INVALID"
+	QuoteGroupRevoked                      = "GROUP_REVOKED"
+	QuoteSignatureRevoked                  = "SIGNATURE_REVOKED"
+	QuoteKeyRevoked                        = "KEY_REVOKED"
+	QuoteSigRLVersionMismatch              = "SIGRL_VERSION_MISMATCH"
+	QuoteGroupOutOfDate                    = "GROUP_OUT_OF_DATE"
+	QuoteConfigurationNeeded               = "CONFIGURATION_NEEDED"
+	QuoteSwHardeningNeeded                 = "SW_HARDENING_NEEDED"
+	QuoteConfigurationAndSwHardeningNeeded = "CONFIGURATION_AND_SW_HARDENING_NEEDED"
 )
 
 type AttestationVerificationReport struct {
@@ -69,11 +79,5 @@ func GetEKAndOperator(quote *ias.Quote) (common.Address, common.Address, error) 
 	if err := quote.Verify(); err != nil {
 		return common.Address{}, common.Address{}, err
 	}
-	reportData := quote.Report.ReportData
-	if reportData[0] != ReportDataVersion {
-		return common.Address{}, common.Address{}, fmt.Errorf("unexpected report data version: %v", reportData[0])
-	}
-	ek := common.BytesToAddress(quote.Report.ReportData[1:21])
-	operator := common.BytesToAddress(quote.Report.ReportData[21:41])
-	return ek, operator, nil
+	return sgx.ParseReportData(quote.Report.ReportData)
 }

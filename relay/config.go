@@ -8,6 +8,7 @@ import (
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
+	"github.com/datachainlab/lcp-go/sgx/dcap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/signer"
@@ -167,4 +168,51 @@ func decodeMrenclaveHex(s string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to decode MRENCLAVE: value=%v %w", s, err)
 	}
 	return bz, nil
+}
+
+func (pr *Prover) getRAType() RAType {
+	switch t := pr.config.ZkvmConfig.(type) {
+	case *ProverConfig_Risc0ZkvmConfig:
+		if t.Risc0ZkvmConfig.Mock {
+			return RATypeMockZKDCAPRisc0
+		} else {
+			return RATypeZKDCAPRisc0
+		}
+	default:
+		return RATypeIAS
+	}
+}
+
+func (pr *Prover) getZKDCAPVerifierInfos() ([][]byte, error) {
+	raType := pr.getRAType()
+	switch raType {
+	case RATypeIAS, RATypeDCAP:
+		return nil, nil
+	case RATypeZKDCAPRisc0, RATypeMockZKDCAPRisc0:
+		bz, err := pr.config.GetRisc0ZkvmConfig().getZKDCAPVerifierInfo()
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{bz[:]}, nil
+	default:
+		return nil, fmt.Errorf("unsupported RA type: %v", raType)
+	}
+}
+
+func (c *Risc0ZKVMConfig) getZKDCAPVerifierInfo() ([64]byte, error) {
+	var verifierInfo [64]byte
+	imageID := c.GetImageID()
+	verifierInfo[0] = byte(dcap.Risc0ZKVMType)
+	copy(verifierInfo[32:], imageID[:])
+	return verifierInfo, nil
+}
+
+func (c *Risc0ZKVMConfig) GetImageID() [32]byte {
+	imageID := common.FromHex(c.ImageId)
+	if len(imageID) != 32 {
+		panic(fmt.Sprintf("invalid image ID: %v", c.ImageId))
+	}
+	var id [32]byte
+	copy(id[:], imageID)
+	return id
 }

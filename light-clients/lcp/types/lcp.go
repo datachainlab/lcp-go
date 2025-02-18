@@ -12,17 +12,6 @@ import (
 )
 
 const (
-	QuoteOK                                = "OK"
-	QuoteSignatureInvalid                  = "SIGNATURE_INVALID"
-	QuoteGroupRevoked                      = "GROUP_REVOKED"
-	QuoteSignatureRevoked                  = "SIGNATURE_REVOKED"
-	QuoteKeyRevoked                        = "KEY_REVOKED"
-	QuoteSigRLVersionMismatch              = "SIGRL_VERSION_MISMATCH"
-	QuoteGroupOutOfDate                    = "GROUP_OUT_OF_DATE"
-	QuoteConfigurationNeeded               = "CONFIGURATION_NEEDED"
-	QuoteSwHardeningNeeded                 = "SW_HARDENING_NEEDED"
-	QuoteConfigurationAndSwHardeningNeeded = "CONFIGURATION_AND_SW_HARDENING_NEEDED"
-
 	ChainTypeEVM    ChainType = 1
 	ChainTypeCosmos ChainType = 2
 )
@@ -38,6 +27,20 @@ var (
 		},
 		"RegisterEnclaveKey": []apitypes.Type{
 			{Name: "avr", Type: "string"},
+		},
+	}
+
+	ZKDCAPRegisterEnclaveKeyTypes = apitypes.Types{
+		"EIP712Domain": []apitypes.Type{
+			{Name: "name", Type: "string"},
+			{Name: "version", Type: "string"},
+			{Name: "chainId", Type: "uint256"},
+			{Name: "verifyingContract", Type: "address"},
+			{Name: "salt", Type: "bytes32"},
+		},
+		"ZKDCAPRegisterEnclaveKey": []apitypes.Type{
+			{Name: "zkDCAPVerifierInfo", Type: "bytes"},
+			{Name: "commitHash", Type: "bytes32"},
 		},
 	}
 
@@ -97,6 +100,18 @@ func GetRegisterEnclaveKeyTypedData(avr string) apitypes.TypedData {
 	}
 }
 
+func GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) apitypes.TypedData {
+	return apitypes.TypedData{
+		PrimaryType: "ZKDCAPRegisterEnclaveKey",
+		Types:       ZKDCAPRegisterEnclaveKeyTypes,
+		Domain:      LCPClientDomain(0, common.Address{}, common.Hash{}),
+		Message: apitypes.TypedDataMessage{
+			"zkDCAPVerifierInfo": zkDCAPVerifierInfo[:],
+			"commitHash":         commitHash,
+		},
+	}
+}
+
 func GetUpdateOperatorsTypedData(
 	chainId int64,
 	verifyingContract common.Address,
@@ -135,6 +150,22 @@ func ComputeEIP712RegisterEnclaveKey(report string) ([]byte, error) {
 
 func ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
 	bz, err := ComputeEIP712RegisterEnclaveKey(report)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(bz), nil
+}
+
+func ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) ([]byte, error) {
+	_, raw, err := apitypes.TypedDataAndHash(GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo, commitHash))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(raw), nil
+}
+
+func ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) (common.Hash, error) {
+	bz, err := ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo, commitHash)
 	if err != nil {
 		return common.Hash{}, err
 	}
