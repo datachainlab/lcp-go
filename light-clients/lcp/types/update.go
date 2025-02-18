@@ -166,7 +166,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	if message.ZkvmType != uint32(vi.ZKVMType) {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", vi.ZKVMType, message.ZkvmType)
 	}
-	commit, err := dcap.ParseDCAPVerifierCommit(message.Commit)
+	commit, err := dcap.ParseQuoteVerificationOutput(message.QuoteVerificationOutput)
 	if err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse DCAP verifier commit: %v", err)
 	}
@@ -191,7 +191,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	}
 	var operator common.Address
 	if len(message.OperatorSignature) > 0 {
-		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vi.ToBytes(), crypto.Keccak256Hash(message.Commit))
+		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vi.ToBytes(), crypto.Keccak256Hash(message.QuoteVerificationOutput))
 		if err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err)
 		}
@@ -215,7 +215,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	return nil
 }
 
-func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.VerifiedOutput, proof []byte, mockProofAllowed bool) error {
+func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.QuoteVerificationOutput, proof []byte, mockProofAllowed bool) error {
 	if verifierInfo.ZKVMType != dcap.Risc0ZKVMType {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", dcap.Risc0ZKVMType, verifierInfo.ZKVMType)
 	}
@@ -238,7 +238,7 @@ func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierIn
 	return nil
 }
 
-func (cs ClientState) ValidateRisc0DCAPVerifierCommit(blockTimestamp time.Time, commit *dcap.VerifiedOutput) error {
+func (cs ClientState) ValidateRisc0DCAPVerifierCommit(blockTimestamp time.Time, commit *dcap.QuoteVerificationOutput) error {
 	if commit.QuoteVersion != dcap.QEVersion3 {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported quote version: expected=%v actual=%v", dcap.QEVersion3, commit.QuoteVersion)
 	}
@@ -408,7 +408,7 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 }
 
 func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore storetypes.KVStore, message *ZKDCAPRegisterEnclaveKeyMessage) []exported.Height {
-	commit, err := dcap.ParseDCAPVerifierCommit(message.Commit)
+	commit, err := dcap.ParseQuoteVerificationOutput(message.QuoteVerificationOutput)
 	if err != nil {
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse DCAP verifier commit: %v", err))
 	}
@@ -422,7 +422,7 @@ func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore stor
 	}
 	var operator common.Address
 	if len(message.OperatorSignature) > 0 {
-		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vis[0].ToBytes(), crypto.Keccak256Hash(message.Commit))
+		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vis[0].ToBytes(), crypto.Keccak256Hash(message.QuoteVerificationOutput))
 		if err != nil {
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to compute commitment: %v", err))
 		}

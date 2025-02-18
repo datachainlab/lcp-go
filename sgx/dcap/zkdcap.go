@@ -33,27 +33,28 @@ func (t ZKVMType) String() string {
 	}
 }
 
-type VerifiedOutput struct {
-	Version            uint16
-	QuoteVersion       uint16
-	TeeType            uint32
-	TcbStatus          TCBStatus
-	Fmspc              [6]byte
-	SGXIntelRootCAHash [32]byte
-	Validity           ValidityIntersection
-	QuoteBody          QuoteBody
-	AdvisoryIds        []string
+type QuoteVerificationOutput struct {
+	Version                    uint16
+	QuoteVersion               uint16
+	TeeType                    uint32
+	TcbStatus                  TCBStatus
+	MinTCBEvaluationDataNumber uint32
+	Fmspc                      [6]byte
+	SGXIntelRootCAHash         [32]byte
+	Validity                   ValidityIntersection
+	QuoteBody                  QuoteBody
+	AdvisoryIds                []string
 }
 
-func (vo VerifiedOutput) ReportData() []byte {
+func (vo QuoteVerificationOutput) ReportData() []byte {
 	return vo.QuoteBody.ReportData()
 }
 
-func (vo VerifiedOutput) GetEnclaveIdentity() sgx.EnclaveIdentity {
+func (vo QuoteVerificationOutput) GetEnclaveIdentity() sgx.EnclaveIdentity {
 	return vo.QuoteBody.AsEnclaveIdentity()
 }
 
-func (vo VerifiedOutput) IsDebug() (bool, error) {
+func (vo QuoteVerificationOutput) IsDebug() (bool, error) {
 	attrs, err := GetAttributesFromSgxReport(&vo.QuoteBody)
 	if err != nil {
 		return false, err
@@ -61,11 +62,11 @@ func (vo VerifiedOutput) IsDebug() (bool, error) {
 	return attrs.Flags&sgx.AttributeDebug != 0, nil
 }
 
-func (vo VerifiedOutput) GetExpiredAt() time.Time {
+func (vo QuoteVerificationOutput) GetExpiredAt() time.Time {
 	return time.Unix(int64(vo.Validity.NotAfterMin), 0)
 }
 
-func (vo VerifiedOutput) Digest() [32]byte {
+func (vo QuoteVerificationOutput) Digest() [32]byte {
 	h := sha256.New()
 	h.Write(vo.ToBytes())
 	bz := h.Sum(nil)
@@ -87,7 +88,7 @@ func (vi ValidityIntersection) ValidateTime(tm time.Time) bool {
 
 type QuoteBody = pcs.SgxReport
 
-func ParseDCAPVerifierCommit(raw []byte) (*VerifiedOutput, error) {
+func ParseQuoteVerificationOutput(raw []byte) (*QuoteVerificationOutput, error) {
 	version := uint16(raw[0])<<8 | uint16(raw[1])
 	if version != DCAPQuoteVerifierVersion {
 		return nil, fmt.Errorf("unexpected version: %d", version)
@@ -95,41 +96,43 @@ func ParseDCAPVerifierCommit(raw []byte) (*VerifiedOutput, error) {
 	quoteVersion := uint16(raw[2])<<8 | uint16(raw[3])
 	teeType := uint32(raw[4])<<24 | uint32(raw[5])<<16 | uint32(raw[6])<<8 | uint32(raw[7])
 	tcbStatus := TCBStatus(raw[8])
+	minTCBEvalDataNum := binary.BigEndian.Uint32(raw[9:13])
 	var fmspc [6]byte
-	copy(fmspc[:], raw[9:15])
+	copy(fmspc[:], raw[13:19])
 	var sgxIntelRootCAHash [32]byte
-	copy(sgxIntelRootCAHash[:], raw[15:47])
+	copy(sgxIntelRootCAHash[:], raw[19:51])
 	validity := ValidityIntersection{
-		NotBeforeMax: binary.BigEndian.Uint64(raw[47:55]),
-		NotAfterMin:  binary.BigEndian.Uint64(raw[55:63]),
+		NotBeforeMax: binary.BigEndian.Uint64(raw[51:59]),
+		NotAfterMin:  binary.BigEndian.Uint64(raw[59:67]),
 	}
 	var report pcs.SgxReport
-	err := report.UnmarshalBinary(raw[63:])
+	err := report.UnmarshalBinary(raw[67:])
 	if err != nil {
 		return nil, err
 	}
 	packer := abi.Arguments{
 		{Type: advisoryIdsABI},
 	}
-	advisoryIds, err := packer.UnpackValues(raw[63+len(report.Raw()):])
+	advisoryIds, err := packer.UnpackValues(raw[67+len(report.Raw()):])
 	if err != nil {
 		return nil, err
 	}
-	return &VerifiedOutput{
-		Version:            version,
-		QuoteVersion:       quoteVersion,
-		TeeType:            teeType,
-		TcbStatus:          tcbStatus,
-		Fmspc:              fmspc,
-		SGXIntelRootCAHash: sgxIntelRootCAHash,
-		Validity:           validity,
-		QuoteBody:          report,
-		AdvisoryIds:        advisoryIds[0].([]string),
+	return &QuoteVerificationOutput{
+		Version:                    version,
+		QuoteVersion:               quoteVersion,
+		TeeType:                    teeType,
+		TcbStatus:                  tcbStatus,
+		MinTCBEvaluationDataNumber: minTCBEvalDataNum,
+		Fmspc:                      fmspc,
+		SGXIntelRootCAHash:         sgxIntelRootCAHash,
+		Validity:                   validity,
+		QuoteBody:                  report,
+		AdvisoryIds:                advisoryIds[0].([]string),
 	}, nil
 }
 
-func (o *VerifiedOutput) ToBytes() []byte {
-	bz := make([]byte, 63)
+func (o *QuoteVerificationOutput) ToBytes() []byte {
+	bz := make([]byte, 67)
 	bz[0] = byte(o.Version >> 8)
 	bz[1] = byte(o.Version)
 	bz[2] = byte(o.QuoteVersion >> 8)
@@ -139,10 +142,11 @@ func (o *VerifiedOutput) ToBytes() []byte {
 	bz[6] = byte(o.TeeType >> 8)
 	bz[7] = byte(o.TeeType)
 	bz[8] = o.TcbStatus.AsUint8()
-	copy(bz[9:15], o.Fmspc[:])
-	copy(bz[15:47], o.SGXIntelRootCAHash[:])
-	binary.BigEndian.PutUint64(bz[47:55], o.Validity.NotBeforeMax)
-	binary.BigEndian.PutUint64(bz[55:63], o.Validity.NotAfterMin)
+	binary.BigEndian.PutUint32(bz[9:13], o.MinTCBEvaluationDataNumber)
+	copy(bz[13:19], o.Fmspc[:])
+	copy(bz[19:51], o.SGXIntelRootCAHash[:])
+	binary.BigEndian.PutUint64(bz[51:59], o.Validity.NotBeforeMax)
+	binary.BigEndian.PutUint64(bz[59:67], o.Validity.NotAfterMin)
 	qbz, err := o.QuoteBody.MarshalBinary()
 	if err != nil {
 		panic(err)

@@ -514,16 +514,16 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if zkp == nil {
 		return nil, errors.New("currently only RISC0 is supported")
 	}
-	commit, err := dcap.ParseDCAPVerifierCommit(zkp.Commit)
+	commit, err := dcap.ParseQuoteVerificationOutput(zkp.Output)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DCAP verifier commit: commit=%x %w", zkp.Commit, err)
+		return nil, fmt.Errorf("failed to parse DCAP verifier commit: commit=%x %w", zkp.Output, err)
 	}
 	clientLogger.Info("got DCAP verifier commit", "commit", commit)
 	message := &lcptypes.ZKDCAPRegisterEnclaveKeyMessage{
-		ZkvmType:          uint32(dcap.Risc0ZKVMType),
-		Commit:            zkp.Commit,
-		Proof:             zkp.GetProof(),
-		OperatorSignature: nil,
+		ZkvmType:                uint32(dcap.Risc0ZKVMType),
+		QuoteVerificationOutput: zkp.Output,
+		Proof:                   zkp.GetProof(),
+		OperatorSignature:       nil,
 	}
 	quote, err := dcap.ParseQuote(eki.Dcap.Quote)
 	if err != nil {
@@ -578,7 +578,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
 			return nil, fmt.Errorf("operator mismatch: expected 0x%x, but got 0x%x", expectedOperator, operator)
 		}
-		commitment, err := lcptypes.ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(verifierInfo.ToBytes(), crypto.Keccak256Hash(zkp.Commit))
+		commitment, err := lcptypes.ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(verifierInfo.ToBytes(), crypto.Keccak256Hash(zkp.Output))
 		if err != nil {
 			return nil, err
 		}
