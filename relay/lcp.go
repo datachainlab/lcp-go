@@ -419,7 +419,7 @@ func (pr *Prover) registerEnclaveKey(counterparty core.Chain, eki *enclave.Encla
 
 func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []common.Address, thresholdNumerator, thresholdDenominator uint64) (common.Hash, error) {
 	params := pr.getDomainParams()
-	bz, err := lcptypes.ComputeEIP712UpdateOperators(int64(params.ChainId), params.VerifyingContractAddr, pr.computeEIP712ChainSalt(), pr.path.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
+	bz, err := lcptypes.ComputeEIP712UpdateOperators(int64(params.ChainId), params.VerifyingContractAddr, pr.computeEIP712ChainSalt(), pr.counterpartyPath.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
 	if err != nil {
 		return common.Hash{}, err
 	}

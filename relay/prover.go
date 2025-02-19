@@ -25,9 +25,10 @@ type Prover struct {
 	originChain  core.Chain
 	originProver core.Prover
 
-	homePath string
-	codec    codec.ProtoCodecMarshaler
-	path     *core.PathEnd
+	homePath         string
+	codec            codec.ProtoCodecMarshaler
+	path             *core.PathEnd
+	counterpartyPath *core.PathEnd
 
 	lcpServiceClient LCPServiceClient
 
@@ -92,6 +93,7 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 // SetRelayInfo sets source's path and counterparty's info to the chain
 func (pr *Prover) SetRelayInfo(path *core.PathEnd, counterparty *core.ProvableChain, counterpartyPath *core.PathEnd) error {
 	pr.path = path
+	pr.counterpartyPath = counterpartyPath
 	return nil
 }
 
