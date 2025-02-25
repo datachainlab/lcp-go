@@ -129,11 +129,11 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time,
 // success: true if the msg is successfully executed in the origin chain
 // error: non-nil if the msg may not exist in the origin chain
 func (pr *Prover) checkMsgStatus(counterparty core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
-	lfHeader, err := counterparty.GetLatestFinalizedHeader()
+	lfHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
 	if err != nil {
 		return false, false, err
 	}
-	msgRes, err := counterparty.GetMsgResult(msgID)
+	msgRes, err := counterparty.GetMsgResult(context.TODO(), msgID)
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
@@ -188,7 +188,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 
 	pr.getLogger().Info("active enclave key is unfinalized")
 
-	if _, err := counterparty.GetMsgResult(pr.unfinalizedMsgID); err != nil {
+	if _, err := counterparty.GetMsgResult(context.TODO(), pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		pr.getLogger().Info("the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
@@ -364,7 +364,7 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 	if !res.Found {
 		return nil, fmt.Errorf("client not found: client_id=%v", elcClientID)
 	}
-	latestHeader, err := pr.originProver.GetLatestFinalizedHeader()
+	latestHeader, err := pr.originProver.GetLatestFinalizedHeader(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 
 	// 2. query the header from the upstream chain
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
+	headers, err := pr.originProver.SetupHeadersForUpdate(context.TODO(), NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		SigningCert:       eki.SigningCert,
 		OperatorSignature: nil,
 	}
-	cplatestHeight, err := counterparty.LatestHeight()
+	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -498,7 +498,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 	if err != nil {
 		return nil, err
 	}
-	ids, err := counterparty.SendMsgs([]sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +537,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if err != nil {
 		return nil, err
 	}
-	cplatestHeight, err := counterparty.LatestHeight()
+	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -597,7 +597,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if err != nil {
 		return nil, err
 	}
-	ids, err := counterparty.SendMsgs([]sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -609,7 +609,7 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 
 func (pr *Prover) ComputeEIP712UpdateOperatorsHash(nonce uint64, newOperators []common.Address, thresholdNumerator, thresholdDenominator uint64) (common.Hash, error) {
 	params := pr.getDomainParams()
-	bz, err := lcptypes.ComputeEIP712UpdateOperators(int64(params.ChainId), params.VerifyingContractAddr, pr.computeEIP712ChainSalt(), pr.path.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
+	bz, err := lcptypes.ComputeEIP712UpdateOperators(int64(params.ChainId), params.VerifyingContractAddr, pr.computeEIP712ChainSalt(), pr.counterpartyPath.ClientID, nonce, newOperators, thresholdNumerator, thresholdDenominator)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -702,7 +702,7 @@ type CreateELCResult struct {
 
 // height: 0 means the latest height
 func (pr *Prover) doCreateELC(elcClientID string, height uint64) (*CreateELCResult, error) {
-	header, err := pr.originProver.GetLatestFinalizedHeader()
+	header, err := pr.originProver.GetLatestFinalizedHeader(context.TODO())
 	if err != nil {
 		return nil, err
 	}
@@ -856,7 +856,7 @@ func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc
 	if err != nil {
 		return nil, err
 	}
-	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(height)
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(context.TODO(), height)
 	if err != nil {
 		return nil, err
 	}
@@ -922,7 +922,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryIn
 	}
 
 	// 3. Submit the msgs to the LCP Client
-	if _, err := dst.SendMsgs(msgs); err != nil {
+	if _, err := dst.SendMsgs(context.TODO(), msgs); err != nil {
 		return err
 	}
 	return nil
@@ -948,12 +948,12 @@ func (q LCPQuerier) ChainID() string {
 }
 
 // LatestHeight returns the latest height of the chain
-func (LCPQuerier) LatestHeight() (ibcexported.Height, error) {
+func (LCPQuerier) LatestHeight(_ context.Context) (ibcexported.Height, error) {
 	return clienttypes.ZeroHeight(), nil
 }
 
 // Timestamp returns the timestamp corresponding to the height
-func (LCPQuerier) Timestamp(ibcexported.Height) (time.Time, error) {
+func (LCPQuerier) Timestamp(_ context.Context, _ ibcexported.Height) (time.Time, error) {
 	return time.Time{}, nil
 }
 

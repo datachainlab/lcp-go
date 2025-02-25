@@ -15,7 +15,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gogo/protobuf v1.3.2
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
-	github.com/hyperledger-labs/yui-relayer v0.5.10
+	github.com/hyperledger-labs/yui-relayer v0.5.11
 	github.com/oasisprotocol/oasis-core/go v0.2403.1
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0

@@ -23,7 +23,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("client '%v' already exists", elcClientID)
 	}
 
-	cplatestHeight, err := counterparty.LatestHeight()
+	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("allowed advisory ids mismatch: expected %v, but got %v", pr.config.AllowedAdvisoryIds, clientState.AllowedAdvisoryIds)
 	}
 
-	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(clientState.LatestHeight)
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(context.TODO(), clientState.LatestHeight)
 	if err != nil {
 		return fmt.Errorf("failed to create initial light client state: height=%v %w", clientState.LatestHeight, err)
 	}

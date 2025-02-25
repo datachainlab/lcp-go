@@ -26,9 +26,10 @@ type Prover struct {
 	originChain  core.Chain
 	originProver core.Prover
 
-	homePath string
-	codec    codec.ProtoCodecMarshaler
-	path     *core.PathEnd
+	homePath         string
+	codec            codec.ProtoCodecMarshaler
+	path             *core.PathEnd
+	counterpartyPath *core.PathEnd
 
 	lcpServiceClient LCPServiceClient
 
@@ -103,6 +104,7 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 // SetRelayInfo sets source's path and counterparty's info to the chain
 func (pr *Prover) SetRelayInfo(path *core.PathEnd, counterparty *core.ProvableChain, counterpartyPath *core.PathEnd) error {
 	pr.path = path
+	pr.counterpartyPath = counterpartyPath
 	return nil
 }
 
@@ -119,7 +121,7 @@ func (pr *Prover) GetChainID() string {
 // CreateInitialLightClientState returns a pair of ClientState and ConsensusState based on the state of the self chain at `height`.
 // These states will be submitted to the counterparty chain as MsgCreateClient.
 // If `height` is nil, the latest finalized height is selected automatically.
-func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
+func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height exported.Height) (exported.ClientState, exported.ConsensusState, error) {
 	ops, err := pr.GetOperators()
 	if err != nil {
 		return nil, nil, err
@@ -159,19 +161,19 @@ func (pr *Prover) CreateInitialLightClientState(height exported.Height) (exporte
 
 // GetLatestFinalizedHeader returns the latest finalized header on this chain
 // The returned header is expected to be the latest one of headers that can be verified by the light client
-func (pr *Prover) GetLatestFinalizedHeader() (core.Header, error) {
-	return pr.originProver.GetLatestFinalizedHeader()
+func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, error) {
+	return pr.originProver.GetLatestFinalizedHeader(context.TODO())
 }
 
 // SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterpaty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
-// if the header slice's length == nil and err == nil, the relayer should skips the update-client
-func (pr *Prover) SetupHeadersForUpdate(dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]core.Header, error) {
+// if the header slice's length == nil and err == nil, the relayer should skip the update-client
+func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]core.Header, error) {
 	if err := pr.UpdateEKIfNeeded(context.TODO(), dstChain); err != nil {
 		return nil, err
 	}
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(dstChain, latestFinalizedHeader)
+	headers, err := pr.originProver.SetupHeadersForUpdate(context.TODO(), dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
@@ -327,8 +329,8 @@ func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, 
 	return res, nil
 }
 
-func (pr *Prover) CheckRefreshRequired(counterparty core.ChainInfoICS02Querier) (bool, error) {
-	return pr.originProver.CheckRefreshRequired(counterparty)
+func (pr *Prover) CheckRefreshRequired(ctx context.Context, counterparty core.ChainInfoICS02Querier) (bool, error) {
+	return pr.originProver.CheckRefreshRequired(context.TODO(), counterparty)
 }
 
 func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) ([]byte, clienttypes.Height, error) {
