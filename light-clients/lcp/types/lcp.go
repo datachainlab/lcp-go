@@ -40,7 +40,7 @@ var (
 		},
 		"ZKDCAPRegisterEnclaveKey": []apitypes.Type{
 			{Name: "zkDCAPVerifierInfo", Type: "bytes"},
-			{Name: "commitHash", Type: "bytes32"},
+			{Name: "outputHash", Type: "bytes32"},
 		},
 	}
 
@@ -100,14 +100,14 @@ func GetRegisterEnclaveKeyTypedData(avr string) apitypes.TypedData {
 	}
 }
 
-func GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) apitypes.TypedData {
+func GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo []byte, outputHash [32]byte) apitypes.TypedData {
 	return apitypes.TypedData{
 		PrimaryType: "ZKDCAPRegisterEnclaveKey",
 		Types:       ZKDCAPRegisterEnclaveKeyTypes,
 		Domain:      LCPClientDomain(0, common.Address{}, common.Hash{}),
 		Message: apitypes.TypedDataMessage{
-			"zkDCAPVerifierInfo": zkDCAPVerifierInfo[:],
-			"commitHash":         commitHash,
+			"zkDCAPVerifierInfo": zkDCAPVerifierInfo,
+			"outputHash":         outputHash,
 		},
 	}
 }
@@ -156,16 +156,16 @@ func ComputeEIP712RegisterEnclaveKeyHash(report string) (common.Hash, error) {
 	return crypto.Keccak256Hash(bz), nil
 }
 
-func ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) ([]byte, error) {
-	_, raw, err := apitypes.TypedDataAndHash(GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo, commitHash))
+func ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo []byte, outputHash [32]byte) ([]byte, error) {
+	_, raw, err := apitypes.TypedDataAndHash(GetZKDCAPRegisterEnclaveKeyTypedData(zkDCAPVerifierInfo, outputHash))
 	if err != nil {
 		return nil, err
 	}
 	return []byte(raw), nil
 }
 
-func ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(zkDCAPVerifierInfo [64]byte, commitHash [32]byte) (common.Hash, error) {
-	bz, err := ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo, commitHash)
+func ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(zkDCAPVerifierInfo []byte, outputHash [32]byte) (common.Hash, error) {
+	bz, err := ComputeEIP712ZKDCAPRegisterEnclaveKey(zkDCAPVerifierInfo, outputHash)
 	if err != nil {
 		return common.Hash{}, err
 	}

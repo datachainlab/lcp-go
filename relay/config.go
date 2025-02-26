@@ -104,13 +104,30 @@ func (pc ProverConfig) Validate() error {
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
-	if l := len(pc.Operators); l > 1 {
-		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
-	} else if l == 0 {
-		return nil
+
+	// zkvm config validation -----
+	if pc.ZkvmConfig != nil {
+		switch zkvmConfig := pc.ZkvmConfig.(type) {
+		case *ProverConfig_Risc0ZkvmConfig:
+			if zkvmConfig.Risc0ZkvmConfig.ImageId == "" {
+				return fmt.Errorf("Risc0ZkvmConfig.ImageId must be set")
+			}
+		default:
+			return fmt.Errorf("ZkvmConfig: unknown type")
+		}
+		if pc.CurrentTcbEvaluationDataNumber == 0 {
+			return fmt.Errorf("CurrentTcbEvaluationDataNumber must be greater than 0")
+		}
 	}
 
 	// ----- operators config validation -----
+
+	if l := len(pc.Operators); l > 1 {
+		return fmt.Errorf("Operators: currently only one or zero(=permissionless) operator is supported, but got %v", l)
+	} else if l == 0 {
+		// if no operator is set, early return
+		return nil
+	}
 
 	if pc.OperatorSigner == nil {
 		return fmt.Errorf("OperatorSigner must be set if Operators or OperatorsEip712Params is set")

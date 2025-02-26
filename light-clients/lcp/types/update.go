@@ -183,7 +183,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 	} else if debug != dcap.GetAllowDebugEnclaves() {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: unexpected debug flag: expected=%v actual=%v", dcap.GetAllowDebugEnclaves(), debug)
 	}
-	if err := cs.ValidateRisc0DCAPVerifierCommit(ctx.BlockTime(), commit); err != nil {
+	if err := cs.ValidateRisc0DCAPVerifierOutput(ctx.BlockTime(), commit); err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: %v", err)
 	}
 	if err := cs.VerifyRisc0ZKDCAPProof(vi, commit, message.Proof, risc0MockProofAllowed()); err != nil {
@@ -216,8 +216,12 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 }
 
 func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierInfo, commit *dcap.QuoteVerificationOutput, proof []byte, mockProofAllowed bool) error {
-	if verifierInfo.ZKVMType != dcap.Risc0ZKVMType {
+	if !verifierInfo.IsRISC0() {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported ZKVM type: expected=%v actual=%v", dcap.Risc0ZKVMType, verifierInfo.ZKVMType)
+	}
+	imageID, err := verifierInfo.GetRISC0ImageID()
+	if err != nil {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get RISC0 image ID: %v", err)
 	}
 	if len(proof) < 4 {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid proof length: expected>=4 actual=%v", len(proof))
@@ -225,11 +229,11 @@ func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierIn
 	var sel [4]byte
 	copy(sel[:], proof[:4])
 	if !bytes.Equal(sel[:], mock.MockSelector[:]) {
-		if err := groth16.VerifyRISC0SealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
+		if err := groth16.VerifyRISC0SealBySelector(sel, proof[4:], imageID, commit.Digest()); err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 proof: %v", err)
 		}
 	} else if mockProofAllowed {
-		if err := mock.VerifyMockSealBySelector(sel, proof[4:], verifierInfo.ProgramID, commit.Digest()); err != nil {
+		if err := mock.VerifyMockSealBySelector(sel, proof[4:], imageID, commit.Digest()); err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to verify RISC0 mock proof: %v", err)
 		}
 	} else {
@@ -238,28 +242,35 @@ func (cs ClientState) VerifyRisc0ZKDCAPProof(verifierInfo *dcap.ZKDCAPVerifierIn
 	return nil
 }
 
-func (cs ClientState) ValidateRisc0DCAPVerifierCommit(blockTimestamp time.Time, commit *dcap.QuoteVerificationOutput) error {
-	if commit.QuoteVersion != dcap.QEVersion3 {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported quote version: expected=%v actual=%v", dcap.QEVersion3, commit.QuoteVersion)
+func (cs ClientState) ValidateRisc0DCAPVerifierOutput(blockTimestamp time.Time, output *dcap.QuoteVerificationOutput) error {
+	if output.QuoteVersion != dcap.QEVersion3 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported quote version: expected=%v actual=%v", dcap.QEVersion3, output.QuoteVersion)
 	}
-	if commit.TeeType != dcap.TEETypeSGX {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported TEE type: expected=%v actual=%v", dcap.TEETypeSGX, commit.TeeType)
+	if output.TeeType != dcap.TEETypeSGX {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unsupported TEE type: expected=%v actual=%v", dcap.TEETypeSGX, output.TeeType)
 	}
-	mrenclave := commit.GetEnclaveIdentity().MrEnclave
+	mrenclave := output.GetEnclaveIdentity().MrEnclave
 	if !bytes.Equal(cs.Mrenclave, mrenclave[:]) {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, mrenclave)
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier output: mrenclave mismatch: expected=%v actual=%v", cs.Mrenclave, mrenclave)
 	}
-	if !cs.isAllowedStatus(commit.TcbStatus.String()) {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed TCB status: allowed=%v actual=%v", cs.AllowedQuoteStatuses, commit.TcbStatus)
+	if !cs.isAllowedStatus(output.TcbStatus.String()) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed TCB status: allowed=%v actual=%v", cs.AllowedQuoteStatuses, output.TcbStatus)
 	}
-	if !cs.isAllowedAdvisoryIDs(commit.AdvisoryIds) {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed advisory ID(s) exists: allowed=%v actual=%v", cs.AllowedAdvisoryIds, commit.AdvisoryIds)
+	if !cs.isAllowedAdvisoryIDs(output.AdvisoryIds) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "disallowed advisory ID(s) exists: allowed=%v actual=%v", cs.AllowedAdvisoryIds, output.AdvisoryIds)
 	}
-	if commit.SGXIntelRootCAHash != dcap.HashTrustRootCert() {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier commit: SGXIntelRootCAHash mismatch: expected=%x actual=%x", dcap.HashTrustRootCert(), commit.SGXIntelRootCAHash)
+	if output.SGXIntelRootCAHash != dcap.HashTrustRootCert() {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier output: SGXIntelRootCAHash mismatch: expected=%x actual=%x", dcap.HashTrustRootCert(), output.SGXIntelRootCAHash)
 	}
-	if !commit.Validity.ValidateTime(blockTimestamp) {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid current time: expected=%v-%v actual=%v", commit.Validity.NotBeforeMax, commit.Validity.NotAfterMin, blockTimestamp.Unix())
+	if !output.Validity.ValidateTime(blockTimestamp) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid current time: expected=%v-%v actual=%v", output.Validity.NotBeforeMax, output.Validity.NotAfterMin, blockTimestamp.Unix())
+	}
+	currentTCBEvaluationDataNumber := cs.CurrentTcbEvaluationDataNumber
+	if cs.NextTcbEvaluationDataNumber != 0 && blockTimestamp.Unix() >= int64(cs.NextTcbEvaluationDataNumberUpdateTime) {
+		currentTCBEvaluationDataNumber = cs.NextTcbEvaluationDataNumber
+	}
+	if output.MinTCBEvaluationDataNumber < currentTCBEvaluationDataNumber {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid DCAP verifier output: MinTCBEvaluationDataNumber=%v currentTCBEvaluationDataNumber=%v", output.MinTCBEvaluationDataNumber, currentTCBEvaluationDataNumber)
 	}
 	return nil
 }
@@ -342,7 +353,7 @@ func (cs ClientState) UpdateState(ctx sdk.Context, cdc codec.BinaryCodec, client
 	case *RegisterEnclaveKeyMessage:
 		return cs.registerEnclaveKey(ctx, clientStore, clientMsg)
 	case *ZKDCAPRegisterEnclaveKeyMessage:
-		return cs.registerZKDCAPEnclaveKey(ctx, clientStore, clientMsg)
+		return cs.registerZKDCAPEnclaveKey(ctx, cdc, clientStore, clientMsg)
 	case *UpdateOperatorsMessage:
 		return cs.updateOperators(ctx, cdc, clientStore, clientMsg)
 	default:
@@ -407,12 +418,12 @@ func (cs ClientState) registerEnclaveKey(ctx sdk.Context, clientStore storetypes
 	return nil
 }
 
-func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore storetypes.KVStore, message *ZKDCAPRegisterEnclaveKeyMessage) []exported.Height {
-	commit, err := dcap.ParseQuoteVerificationOutput(message.QuoteVerificationOutput)
+func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *ZKDCAPRegisterEnclaveKeyMessage) []exported.Height {
+	output, err := dcap.ParseQuoteVerificationOutput(message.QuoteVerificationOutput)
 	if err != nil {
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse DCAP verifier commit: %v", err))
 	}
-	ek, _, err := sgx.ParseReportData2(commit.ReportData())
+	ek, _, err := sgx.ParseReportData2(output.ReportData())
 	if err != nil {
 		panic(err)
 	}
@@ -420,6 +431,25 @@ func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore stor
 	if err != nil {
 		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to get zkDCAP verifier info: %v", err))
 	}
+	cs, current, next := cs.CheckAndUpdateTcbEvaluationDataNumber(ctx.BlockTime(), output.MinTCBEvaluationDataNumber)
+	if current {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				EventTypeZKDCAPUpdateCurrentTCBEvaluationDataNumber,
+				sdk.NewAttribute(AttributeKeyTCBEvaluationDataNumber, fmt.Sprint(cs.CurrentTcbEvaluationDataNumber)),
+			),
+		)
+	}
+	if next {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				EventTypeZKDCAPUpdateNextTCBEvaluationDataNumber,
+				sdk.NewAttribute(AttributeKeyTCBEvaluationDataNumber, fmt.Sprint(cs.NextTcbEvaluationDataNumber)),
+			),
+		)
+	}
+	setClientState(clientStore, cdc, &cs)
+
 	var operator common.Address
 	if len(message.OperatorSignature) > 0 {
 		commitment, err := ComputeEIP712ZKDCAPRegisterEnclaveKeyHash(vis[0].ToBytes(), crypto.Keccak256Hash(message.QuoteVerificationOutput))
@@ -431,7 +461,7 @@ func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore stor
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err))
 		}
 	}
-	expiredAt := commit.GetExpiredAt()
+	expiredAt := output.GetExpiredAt()
 	if cs.Contains(clientStore, ek) {
 		if err := cs.ensureEKInfoMatch(clientStore, ek, operator, expiredAt); err != nil {
 			panic(err)
@@ -451,6 +481,83 @@ func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, clientStore stor
 		panic(err)
 	}
 	return nil
+}
+
+// CheckAndUpdateTcbEvaluationDataNumber checks if the current or next TCB evaluation data number update is required.
+func (cs ClientState) CheckAndUpdateTcbEvaluationDataNumber(blockTimestamp time.Time, outputTcbEvaluationDataNumber uint32) (ClientState, bool, bool) {
+	newCS := cs
+	// check if the current or next TCB evaluation data number update is required
+	if newCS.NextTcbEvaluationDataNumber != 0 && blockTimestamp.Unix() >= int64(newCS.NextTcbEvaluationDataNumberUpdateTime) {
+		newCS.CurrentTcbEvaluationDataNumber = newCS.NextTcbEvaluationDataNumber
+		newCS.NextTcbEvaluationDataNumber = 0
+		newCS.NextTcbEvaluationDataNumberUpdateTime = 0
+		// NOTE:
+		// - If the current number is updated again in a subsequent process, only one event is emitted
+		// - A new next TCB evaluation data number is not set, so the `next` is false here
+	}
+
+	if outputTcbEvaluationDataNumber > newCS.CurrentTcbEvaluationDataNumber {
+		if newCS.TcbEvaluationDataNumberUpdateGracePeriod == 0 {
+			// If the grace period is zero, the client immediately updates the current TCB evaluation data number
+			newCS.CurrentTcbEvaluationDataNumber = outputTcbEvaluationDataNumber
+			// If the grace period is zero, the `next_tcb_evaluation_data_number` and `next_tcb_evaluation_data_number_update_time` must always be zero
+			// Otherwise, there is an internal error in the client
+			if newCS.NextTcbEvaluationDataNumber != 0 || newCS.NextTcbEvaluationDataNumberUpdateTime != 0 {
+				panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid next TCB evaluation data number: expected=0 actual=%v", newCS.NextTcbEvaluationDataNumber))
+			}
+			return newCS, true, false
+		} else {
+			// If the grace period is not zero, there may be a next TCB evaluation data number update in the client state
+
+			nextUpdateTime := uint64(blockTimestamp.Unix()) + uint64(newCS.TcbEvaluationDataNumberUpdateGracePeriod)
+
+			// If the next TCB evaluation data number is not set, the client sets the next TCB evaluation data number to the output's TCB evaluation data number
+			if newCS.NextTcbEvaluationDataNumber == 0 {
+				newCS.NextTcbEvaluationDataNumber = outputTcbEvaluationDataNumber
+				newCS.NextTcbEvaluationDataNumberUpdateTime = nextUpdateTime
+				return newCS, false, true
+			}
+
+			// If the next TCB evaluation data number is set, the client updates the next TCB evaluation data number
+
+			if outputTcbEvaluationDataNumber > newCS.NextTcbEvaluationDataNumber {
+				// Edge case 1. clientState.current_tcb_evaluation_data_number < clientState.next_tcb_evaluation_data_number < outputTcbEvaluationDataNumber
+				//
+				// In this case, the client immediately updates the current TCB evaluation data number with the `clientState.next_tcb_evaluation_data_number`
+				// and updates the next TCB evaluation data number with the `outputTcbEvaluationDataNumber`
+				//
+				// This case can be caused by too long grace period values or multiple TCB Recovery Events with very short intervals.
+				// Note that in this case the current number is updated ignoring the
+				// grace period setting.
+				// However, the current number is still a non-latest number, so there should be no problem for the operator operating as expected.
+				newCS.CurrentTcbEvaluationDataNumber = newCS.NextTcbEvaluationDataNumber
+				newCS.NextTcbEvaluationDataNumber = outputTcbEvaluationDataNumber
+				newCS.NextTcbEvaluationDataNumberUpdateTime = nextUpdateTime
+				return newCS, true, true
+			} else if outputTcbEvaluationDataNumber < newCS.NextTcbEvaluationDataNumber {
+				// Edge case 2. clientState.current_tcb_evaluation_data_number < outputTcbEvaluationDataNumber < clientState.next_tcb_evaluation_data_number
+				//
+				// In this case, the client immediately updates the current TCB evaluation data number with the `outputTcbEvaluationDataNumber`
+				// and does not update the next TCB evaluation data number.
+				//
+				// This case can be caused by too long grace period values or multiple TCB Recovery Events with very short intervals.
+				// Note that in this case the current number is updated ignoring the grace period setting.
+				// However, the current number is still a non-latest number, so there should be no problem for the operator operating as expected.
+				newCS.CurrentTcbEvaluationDataNumber = outputTcbEvaluationDataNumber
+				return newCS, true, false
+			} else {
+				// General case. outputTcbEvaluationDataNumber == clientState.next_tcb_evaluation_data_number
+				// In this case, the client already has the next TCB evaluation data number, so it does not need to be updated
+				return newCS, false, false
+			}
+		}
+	} else if outputTcbEvaluationDataNumber < newCS.CurrentTcbEvaluationDataNumber {
+		// The client must revert if the output's TCB evaluation data number is less than the current TCB evaluation data number
+		panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "unexpected TCB evaluation data number: expected=%v actual=%v", newCS.CurrentTcbEvaluationDataNumber, outputTcbEvaluationDataNumber))
+	} else {
+		// nop: case outputTcbEvaluationDataNumber == clientState.current_tcb_evaluation_data_number
+		return newCS, false, false
+	}
 }
 
 func (cs ClientState) updateOperators(ctx sdk.Context, cdc codec.BinaryCodec, clientStore storetypes.KVStore, message *UpdateOperatorsMessage) []exported.Height {

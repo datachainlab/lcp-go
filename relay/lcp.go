@@ -514,11 +514,11 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if zkp == nil {
 		return nil, errors.New("currently only RISC0 is supported")
 	}
-	commit, err := dcap.ParseQuoteVerificationOutput(zkp.Output)
+	output, err := dcap.ParseQuoteVerificationOutput(zkp.Output)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse DCAP verifier commit: commit=%x %w", zkp.Output, err)
+		return nil, fmt.Errorf("failed to parse DCAP verifier output: output=%x %w", zkp.Output, err)
 	}
-	clientLogger.Info("got DCAP verifier commit", "commit", commit)
+	clientLogger.Info("got DCAP verifier output", "output", output)
 	message := &lcptypes.ZKDCAPRegisterEnclaveKeyMessage{
 		ZkvmType:                uint32(dcap.Risc0ZKVMType),
 		QuoteVerificationOutput: zkp.Output,
@@ -553,18 +553,22 @@ func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave
 	if !ok {
 		return nil, fmt.Errorf("failed to cast client state: %T", cs)
 	}
-	if err := clientState.ValidateRisc0DCAPVerifierCommit(time.Now(), commit); err != nil {
-		return nil, fmt.Errorf("failed to validate DCAP verifier commit: %w", err)
+	if err := clientState.ValidateRisc0DCAPVerifierOutput(time.Now(), output); err != nil {
+		return nil, fmt.Errorf("failed to validate DCAP verifier output: %w", err)
 	}
 	vis, err := clientState.GetZKDCAPVerifierInfos()
 	if err != nil {
 		return nil, err
 	}
 	verifierInfo := vis[0]
-	if !bytes.Equal(verifierInfo.ProgramID[:], zkp.ImageId) {
-		return nil, fmt.Errorf("program ID mismatch: expected 0x%x, but got 0x%x", verifierInfo.ProgramID, zkp.ImageId)
+	imageID, err := verifierInfo.GetRISC0ImageID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get RISC0 image ID: %w", err)
 	}
-	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, commit, zkp.GetProof(), pr.config.GetRisc0ZkvmConfig().Mock); err != nil {
+	if !bytes.Equal(imageID[:], zkp.ImageId) {
+		return nil, fmt.Errorf("program ID mismatch: expected 0x%x, but got 0x%x", imageID, zkp.ImageId)
+	}
+	if err := clientState.VerifyRisc0ZKDCAPProof(verifierInfo, output, zkp.GetProof(), pr.config.GetRisc0ZkvmConfig().Mock); err != nil {
 		return nil, fmt.Errorf("failed to verify RISC0 ZKDCAP proof: %w", err)
 	}
 	if pr.IsOperatorEnabled() {

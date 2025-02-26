@@ -91,13 +91,23 @@ func (cs ClientState) Initialize(_ sdk.Context, cdc codec.BinaryCodec, clientSto
 		if l == 1 {
 			vi, err := dcap.ParseZKDCAPVerifierInfo(cs.ZkdcapVerifierInfos[0])
 			if err != nil {
-				return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "failed to parse ZKDCAP verifier info: %v", err)
+				return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "failed to parse zkDCAP verifier info: %v", err)
 			}
-			if vi.ZKVMType != dcap.Risc0ZKVMType {
+			if !vi.IsRISC0() {
 				return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid ZKVM type: %v", vi.ZKVMType)
 			}
 		} else {
-			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "currently only one ZKDCAP verifier info is supported")
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "currently only one zkDCAP verifier info is supported")
+		}
+		if cs.CurrentTcbEvaluationDataNumber == 0 {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`CurrentTcbEvaluationDataNumber` must be non-zero")
+		}
+		// check if both next_tcb_evaluation_data_number and next_tcb_evaluation_data_number_update_time are zero or non-zero
+		if (cs.NextTcbEvaluationDataNumber == 0) != (cs.NextTcbEvaluationDataNumberUpdateTime == 0) {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid next TCB evaluation data number info")
+		}
+		if cs.NextTcbEvaluationDataNumber != 0 && cs.CurrentTcbEvaluationDataNumber >= cs.NextTcbEvaluationDataNumber {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid TCB evaluation data number info")
 		}
 	}
 	if cs.OperatorsNonce != 0 {

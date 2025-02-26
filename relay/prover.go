@@ -135,16 +135,18 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 		return nil, nil, err
 	}
 	clientState := &lcptypes.ClientState{
-		LatestHeight:                  clienttypes.Height{},
-		Mrenclave:                     pr.config.GetMrenclave(),
-		KeyExpiration:                 pr.config.KeyExpiration,
-		AllowedQuoteStatuses:          pr.config.AllowedQuoteStatuses,
-		AllowedAdvisoryIds:            pr.config.AllowedAdvisoryIds,
-		Operators:                     operators,
-		OperatorsNonce:                0,
-		OperatorsThresholdNumerator:   pr.GetOperatorsThreshold().Numerator,
-		OperatorsThresholdDenominator: pr.GetOperatorsThreshold().Denominator,
-		ZkdcapVerifierInfos:           zkDCAPVerifierInfos,
+		LatestHeight:                             clienttypes.Height{},
+		Mrenclave:                                pr.config.GetMrenclave(),
+		KeyExpiration:                            pr.config.KeyExpiration,
+		AllowedQuoteStatuses:                     pr.config.AllowedQuoteStatuses,
+		AllowedAdvisoryIds:                       pr.config.AllowedAdvisoryIds,
+		Operators:                                operators,
+		OperatorsNonce:                           0,
+		OperatorsThresholdNumerator:              pr.GetOperatorsThreshold().Numerator,
+		OperatorsThresholdDenominator:            pr.GetOperatorsThreshold().Denominator,
+		CurrentTcbEvaluationDataNumber:           pr.config.CurrentTcbEvaluationDataNumber,
+		TcbEvaluationDataNumberUpdateGracePeriod: pr.config.TcbEvaluationDataNumberUpdateGracePeriod,
+		ZkdcapVerifierInfos:                      zkDCAPVerifierInfos,
 	}
 
 	consensusState := &lcptypes.ConsensusState{}

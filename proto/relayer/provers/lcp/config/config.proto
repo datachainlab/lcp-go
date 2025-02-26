@@ -33,9 +33,11 @@ message ProverConfig {
     Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
     // signer for eip712 commitment
     google.protobuf.Any operator_signer = 14;
+    uint32 current_tcb_evaluation_data_number = 15;
+    uint32 tcb_evaluation_data_number_update_grace_period = 16;
     // zkvm config
     oneof zkvm_config {
-        Risc0ZKVMConfig risc0_zkvm_config = 15;
+        Risc0ZKVMConfig risc0_zkvm_config = 17;
     }
     // eip712 params
     oneof operators_eip712_params {

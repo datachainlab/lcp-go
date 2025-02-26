@@ -165,26 +165,40 @@ func (o *QuoteVerificationOutput) ToBytes() []byte {
 }
 
 type ZKDCAPVerifierInfo struct {
-	ZKVMType  ZKVMType
-	ProgramID [32]byte
+	ZKVMType ZKVMType
+	raw      []byte
 }
 
-func (vi *ZKDCAPVerifierInfo) ToBytes() [64]byte {
-	var bz [64]byte
-	bz[0] = byte(vi.ZKVMType)
-	copy(bz[32:], vi.ProgramID[:])
-	return bz
+func (vi *ZKDCAPVerifierInfo) ToBytes() []byte {
+	return vi.raw
+}
+
+func (vi *ZKDCAPVerifierInfo) IsRISC0() bool {
+	return vi.ZKVMType == Risc0ZKVMType
+}
+
+func (vi *ZKDCAPVerifierInfo) GetRISC0ImageID() ([32]byte, error) {
+	if !vi.IsRISC0() {
+		return [32]byte{}, fmt.Errorf("not a Risc0 verifier")
+	}
+	var id [32]byte
+	copy(id[:], vi.raw[32:])
+	return id, nil
 }
 
 func ParseZKDCAPVerifierInfo(raw []byte) (*ZKDCAPVerifierInfo, error) {
-	if len(raw) != 64 {
-		return nil, fmt.Errorf("invalid ZKDCAPVerifierInfo length: %d", len(raw))
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("empty verifier info")
 	}
 	zkvmType := ZKVMType(raw[0])
-	var programID [32]byte
-	copy(programID[:], raw[32:])
+	if zkvmType != Risc0ZKVMType {
+		return nil, fmt.Errorf("unsupported ZKVM type: %d", zkvmType)
+	}
+	if len(raw) != 64 {
+		return nil, fmt.Errorf("unexpected verifier info length: %d", len(raw))
+	}
 	return &ZKDCAPVerifierInfo{
-		ZKVMType:  zkvmType,
-		ProgramID: programID,
+		ZKVMType: zkvmType,
+		raw:      raw,
 	}, nil
 }

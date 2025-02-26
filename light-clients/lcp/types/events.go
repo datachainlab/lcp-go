@@ -12,4 +12,8 @@ const (
 	AttributeKeyNewOperators         = "new_operators"
 	AttributeKeyThresholdNumerator   = "threshold_numerator"
 	AttributeKeyThresholdDenominator = "threshold_denominator"
+
+	EventTypeZKDCAPUpdateCurrentTCBEvaluationDataNumber = "zkdcap_update_current_tcb_evaluation_data_number"
+	EventTypeZKDCAPUpdateNextTCBEvaluationDataNumber    = "zkdcap_update_next_tcb_evaluation_data_number"
+	AttributeKeyTCBEvaluationDataNumber                 = "tcb_evaluation_data_number"
 )
