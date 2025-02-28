@@ -62,7 +62,7 @@ func (vo QuoteVerificationOutput) IsDebug() (bool, error) {
 	return attrs.Flags&sgx.AttributeDebug != 0, nil
 }
 
-func (vo QuoteVerificationOutput) GetExpiredAt() time.Time {
+func (vo QuoteVerificationOutput) ValidityNotAfter() time.Time {
 	return time.Unix(int64(vo.Validity.NotAfterMin), 0)
 }
 

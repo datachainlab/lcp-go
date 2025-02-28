@@ -19,25 +19,27 @@ message ProverConfig {
     repeated string allowed_advisory_ids = 6;
     // unit: seconds
     uint64 key_expiration = 7;
-    string elc_client_id = 8;
-    bool message_aggregation = 9;
-    uint64 message_aggregation_batch_size = 10;
-    bool is_debug_enclave = 11;
+    // unit: seconds, buffer time before expiration to proactively update the enclave key
+    uint64 key_update_buffer_time = 8;
+    string elc_client_id = 9;
+    bool message_aggregation = 10;
+    uint64 message_aggregation_batch_size = 11;
+    bool is_debug_enclave = 12;
 
     // --- Operator Config --- //
     // if empty, any operator is allowed (default)
     // otherwise, only operators in this list are allowed
-    repeated string operators = 12;
+    repeated string operators = 13;
     // this only works when operators is not empty
     // the value must be less than or equal to 1
-    Fraction operators_threshold = 13 [(gogoproto.nullable) = false];
+    Fraction operators_threshold = 14 [(gogoproto.nullable) = false];
     // signer for eip712 commitment
-    google.protobuf.Any operator_signer = 14;
-    uint32 current_tcb_evaluation_data_number = 15;
-    uint32 tcb_evaluation_data_number_update_grace_period = 16;
+    google.protobuf.Any operator_signer = 15;
+    uint32 current_tcb_evaluation_data_number = 16;
+    uint32 tcb_evaluation_data_number_update_grace_period = 17;
     // zkvm config
     oneof zkvm_config {
-        Risc0ZKVMConfig risc0_zkvm_config = 17;
+        Risc0ZKVMConfig risc0_zkvm_config = 18;
     }
     // eip712 params
     oneof operators_eip712_params {

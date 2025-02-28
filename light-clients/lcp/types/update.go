@@ -208,7 +208,7 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: expected=%v actual=%v", expectedOperator, operator)
 	}
 	if cs.Contains(store, ek) {
-		if err := cs.ensureEKInfoMatch(store, ek, operator, commit.GetExpiredAt()); err != nil {
+		if err := cs.ensureEKInfoMatch(store, ek, operator, cs.GetDCAPKeyExpiredAt(commit.Validity)); err != nil {
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid enclave key info: %v", err)
 		}
 	}
@@ -461,7 +461,7 @@ func (cs ClientState) registerZKDCAPEnclaveKey(ctx sdk.Context, cdc codec.Binary
 			panic(errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err))
 		}
 	}
-	expiredAt := output.GetExpiredAt()
+	expiredAt := cs.GetDCAPKeyExpiredAt(output.Validity)
 	if cs.Contains(clientStore, ek) {
 		if err := cs.ensureEKInfoMatch(clientStore, ek, operator, expiredAt); err != nil {
 			panic(err)
@@ -687,6 +687,13 @@ func (cs ClientState) GetOperators() []common.Address {
 		operators = append(operators, common.BytesToAddress(op))
 	}
 	return operators
+}
+
+func (cs ClientState) GetDCAPKeyExpiredAt(validity dcap.ValidityIntersection) time.Time {
+	if cs.KeyExpiration == 0 {
+		return time.Unix(int64(validity.NotAfterMin), 0)
+	}
+	return time.Unix(int64(min(validity.NotAfterMin, validity.NotBeforeMax+cs.KeyExpiration)), 0)
 }
 
 func (cs ClientState) getKeyExpiration() time.Duration {

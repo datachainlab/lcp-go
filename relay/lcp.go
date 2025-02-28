@@ -102,18 +102,31 @@ func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.Finali
 
 // checkEKIUpdateNeeded checks if the enclave key needs to be updated
 // if the enclave key is missing or expired, it returns true
-func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, timestamp time.Time, eki *enclave.EnclaveKeyInfo) bool {
-	attestationTime := eki.GetAttestationTime()
+func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, now time.Time, eki *enclave.EnclaveKeyInfo) bool {
+	expiredAt := eki.GetExpiredAt(time.Duration(pr.config.KeyExpiration) * time.Second)
+	bufferTime := time.Duration(pr.config.KeyUpdateBufferTime) * time.Second
+	updateNeededAt := expiredAt.Add(-bufferTime)
 
-	// TODO consider appropriate buffer time
-	updateTime := attestationTime.Add(time.Duration(pr.config.KeyExpiration) * time.Second / 2)
-	pr.getLogger().Info("checkEKIUpdateNeeded", "enclave_key", eki.GetEnclaveKeyAddress().String(), "now", timestamp.Unix(), "attestation_time", attestationTime.Unix(), "expiration", pr.config.KeyExpiration, "update_time", updateTime.Unix())
+	pr.getLogger().Info(
+		"checkEKIUpdateNeeded",
+		"enclave_key", eki.GetEnclaveKeyAddress().String(),
+		"now", now.Unix(),
+		"expiration", expiredAt.Unix(),
+		"update_needed_at", updateNeededAt.Unix(),
+	)
 
-	// For now, a half of expiration is used as a buffer time
-	if timestamp.After(updateTime) {
-		pr.getLogger().Info("checkEKIUpdateNeeded: enclave key is expired", "enclave_key", eki.GetEnclaveKeyAddress().String())
+	// If current time is past the updateNeededAt, return true
+	if now.After(updateNeededAt) {
+		pr.getLogger().Info(
+			"checkEKIUpdateNeeded: enclave key needs update",
+			"enclave_key", eki.GetEnclaveKeyAddress().String(),
+			"expiredAt", expiredAt.Unix(),
+			"updateNeededAt", updateNeededAt.Unix(),
+			"now", now.Unix(),
+		)
 		return true
 	}
+
 	// check if the enclave key is still available in the LCP service
 	_, err := pr.lcpServiceClient.EnclaveKey(ctx, &enclave.QueryEnclaveKeyRequest{EnclaveKeyAddress: eki.GetEnclaveKeyAddress().Bytes()})
 	if err != nil {
@@ -661,13 +674,14 @@ func (pr *Prover) computeEIP712CosmosChainSalt() common.Hash {
 }
 
 type AvailableEnclaveKeysResult struct {
-	Keys []*enclave.EnclaveKeyInfo `json:"keys"`
+	Keys          []*enclave.EnclaveKeyInfo `json:"keys"`
+	keyExpiration time.Duration             `json:"-"`
 }
 
 func (res *AvailableEnclaveKeysResult) MarshalJSON() ([]byte, error) {
 	type enclaveKeyInfo struct {
 		EnclaveKeyAddress string                  `json:"enclave_key_address,omitempty"`
-		AttestationTime   uint64                  `json:"attestation_time,omitempty"`
+		ExpiredAt         uint64                  `json:"update_time,omitempty"`
 		KeyInfo           *enclave.EnclaveKeyInfo `json:"key_info,omitempty"`
 	}
 	type availableEnclaveKeysResult struct {
@@ -677,7 +691,7 @@ func (res *AvailableEnclaveKeysResult) MarshalJSON() ([]byte, error) {
 	for _, key := range res.Keys {
 		keys = append(keys, &enclaveKeyInfo{
 			EnclaveKeyAddress: key.GetEnclaveKeyAddress().String(),
-			AttestationTime:   uint64(key.GetAttestationTime().Unix()),
+			ExpiredAt:         uint64(key.GetExpiredAt(res.keyExpiration).Unix()),
 			KeyInfo:           key,
 		})
 	}
@@ -696,7 +710,7 @@ func (pr *Prover) doAvailableEnclaveKeys(ctx context.Context) (*AvailableEnclave
 	if err != nil {
 		return nil, err
 	}
-	return &AvailableEnclaveKeysResult{Keys: res.Keys}, nil
+	return &AvailableEnclaveKeysResult{Keys: res.Keys, keyExpiration: time.Duration(pr.config.KeyExpiration) * time.Second}, nil
 }
 
 type CreateELCResult struct {

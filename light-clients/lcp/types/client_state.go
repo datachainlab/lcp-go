@@ -28,8 +28,8 @@ const (
 var _ exported.ClientState = (*ClientState)(nil)
 
 func (cs ClientState) Validate() error {
-	if cs.KeyExpiration == 0 {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`KeyExpiration` must be non-zero")
+	if len(cs.ZkdcapVerifierInfos) == 0 && cs.KeyExpiration == 0 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`KeyExpiration` must be non-zero if zkDCAP is not enabled")
 	}
 	if l := len(cs.Mrenclave); l != MrenclaveSize {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`Mrenclave` length must be %v, but got %v", MrenclaveSize, l)

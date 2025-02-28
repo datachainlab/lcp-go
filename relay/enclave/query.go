@@ -10,17 +10,35 @@ import (
 	"github.com/oasisprotocol/oasis-core/go/common/sgx/pcs"
 )
 
-func (eki *EnclaveKeyInfo) GetAttestationTime() time.Time {
+func (eki *EnclaveKeyInfo) GetExpiredAt(keyExpiration time.Duration) time.Time {
 	switch v := eki.KeyInfo.(type) {
 	case *EnclaveKeyInfo_Ias:
-		return time.Unix(int64(v.Ias.AttestationTime), 0)
+		return time.Unix(int64(v.Ias.AttestationTime), 0).Add(keyExpiration)
 	case *EnclaveKeyInfo_Dcap:
-		return time.Unix(int64(v.Dcap.AttestationTime), 0)
+		if v.Dcap.Validity == nil {
+			panic("GetExpiredAt: DCAP validity is nil")
+		}
+		return calculateDCAPKeyExpiration(*v.Dcap.Validity, keyExpiration)
 	case *EnclaveKeyInfo_Zkdcap:
-		return time.Unix(int64(v.Zkdcap.Dcap.AttestationTime), 0)
+		if v.Zkdcap.Dcap.Validity == nil {
+			panic("GetExpiredAt: zkDCAP validity is nil")
+		}
+		return calculateDCAPKeyExpiration(*v.Zkdcap.Dcap.Validity, keyExpiration)
 	default:
 		panic("GetAttestationTime: unexpected type")
 	}
+}
+
+func calculateDCAPKeyExpiration(validity Validity, keyExpiration time.Duration) time.Time {
+	notAfter := time.Unix(int64(validity.NotAfter), 0)
+	if keyExpiration == 0 {
+		return notAfter
+	}
+	tm := time.Unix(int64(validity.NotBefore), 0).Add(keyExpiration)
+	if tm.After(notAfter) {
+		return notAfter
+	}
+	return tm
 }
 
 func (eki *EnclaveKeyInfo) GetEnclaveKeyAddress() common.Address {

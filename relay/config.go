@@ -98,14 +98,11 @@ func (pc ProverConfig) Validate() error {
 	if l := len(mrenclave); l != lcptypes.MrenclaveSize {
 		return fmt.Errorf("MRENCLAVE length must be %v, but got %v", lcptypes.MrenclaveSize, l)
 	}
-	if pc.KeyExpiration == 0 {
-		return fmt.Errorf("KeyExpiration must be greater than 0")
-	}
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
 
-	// zkvm config validation -----
+	// zkvm config validation
 	if pc.ZkvmConfig != nil {
 		switch zkvmConfig := pc.ZkvmConfig.(type) {
 		case *ProverConfig_Risc0ZkvmConfig:
@@ -117,6 +114,10 @@ func (pc ProverConfig) Validate() error {
 		}
 		if pc.CurrentTcbEvaluationDataNumber == 0 {
 			return fmt.Errorf("CurrentTcbEvaluationDataNumber must be greater than 0")
+		}
+	} else {
+		if pc.KeyExpiration == 0 {
+			return fmt.Errorf("KeyExpiration must be greater than 0 if ZkvmConfig is not set")
 		}
 	}
 

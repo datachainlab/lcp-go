@@ -202,28 +202,54 @@ func (m *UpdateOperatorsMessage) XXX_DiscardUnknown() {
 var xxx_messageInfo_UpdateOperatorsMessage proto.InternalMessageInfo
 
 type ClientState struct {
-	// The MRENCLAVE of the enclave in running on the target platform
+	// This value strictly identifies the allowed enclave.
 	Mrenclave []byte `protobuf:"bytes,1,opt,name=mrenclave,proto3" json:"mrenclave,omitempty"`
-	// The expiration period (in seconds) of the enclave key from the time of remote attestation.
+	// The `key_expiration` is used to determine the validity period of the EK.
 	//
-	// This is used only for IAS.
+	// The logic for calculating EK validity periods slightly differs between IAS and DCAP:
+	//
+	// IAS:
+	// - This value must be greater than 0.
+	// - The EK validity ends at `ias_report.timestamp + key_expiration`.
+	//
+	// DCAP:
+	// - If the value is 0, the EK validity ends at `output.validity.not_after`.
+	// - If the value is greater than 0, the EK validity ends at:
+	//   min(`qv_output.validity.not_before` + key_expiration, `output.validity.not_after`)
+	//
+	// Considerations:
+	// - Operators should fetch the latest collateral from Intel Provisioning Certification Service (PCS) to ensure the EK validity starts close to the current time.
+	// - When the EK expires and the TCB evaluation data number has been updated, operators might not be immediately ready
+	//   to operate with the newly accepted TCB status, resulting in availability risks.
+	//   To mitigate this risk, operators should set an appropriate `tcb_evaluation_data_number_update_grace_period`.
 	KeyExpiration uint64 `protobuf:"varint,2,opt,name=key_expiration,json=keyExpiration,proto3" json:"key_expiration,omitempty"`
 	// Indicates whether the client is frozen.
 	Frozen bool `protobuf:"varint,3,opt,name=frozen,proto3" json:"frozen,omitempty"`
 	// The height of the latest consensus state that the client has tracked
 	LatestHeight types.Height `protobuf:"bytes,4,opt,name=latest_height,json=latestHeight,proto3" json:"latest_height"`
-	// The set of quote statuses that the client accepts for the target enclave.
+	// Determines which SGX enclave quote statuses are acceptable.
+	//
+	// Operators must configure this carefully based on their operational
+	// security posture and environment-specific considerations.
 	//
 	// e.g. IAS: SW_HARDENING_NEEDED, CONFIGURATION_AND_SW_HARDENING_NEEDED
 	//      DCAP: SWHardeningNeeded, ConfigurationAndSWHardeningNeeded
 	AllowedQuoteStatuses []string `protobuf:"bytes,5,rep,name=allowed_quote_statuses,json=allowedQuoteStatuses,proto3" json:"allowed_quote_statuses,omitempty"`
-	// The set of Security Advisory IDs that the client allows.
+	// Specifies Security Advisory IDs that operators explicitly allow.
+	//
+	// Operators must carefully consider the security implications of allowing specific advisories.
 	//
 	// e.g. INTEL-SA-00001, INTEL-SA-00002
 	AllowedAdvisoryIds []string `protobuf:"bytes,6,rep,name=allowed_advisory_ids,json=allowedAdvisoryIds,proto3" json:"allowed_advisory_ids,omitempty"`
-	// A list of LCP operator addresses associated with this client.
+	// A list of LCP operator addresses (ethereum format) associated with this client.
 	//
-	// Please check LCP operator details: <https://docs.lcp.network/protocol/lcp-client#lcp-operator>
+	// If this field is empty, operator signatures are not required, allowing any entity to act as an operator.
+	//
+	// Operational assumptions:
+	// - At least one operator (including entities not listed in the `operators` field) is expected to promptly reference and report the latest TCB evaluation data number.
+	//   - If no operator promptly reports the latest TCB number, the client continues accepting attestations based on outdated collateral for up to 12 months.
+	// - Not all operators may immediately prepare an SGX environment compatible with the latest TCB level.
+	//   - The `tcb_evaluation_data_number_update_grace_period` ensures that all operators have a guaranteed minimum period to update their SGX environments, maintaining overall availability.
 	Operators [][]byte `protobuf:"bytes,7,rep,name=operators,proto3" json:"operators,omitempty"`
 	// The current nonce used in operator updates.
 	OperatorsNonce uint64 `protobuf:"varint,8,opt,name=operators_nonce,json=operatorsNonce,proto3" json:"operators_nonce,omitempty"`
@@ -235,26 +261,62 @@ type ClientState struct {
 	//
 	// The client only accepts the zkDCAP output generated using collateral with a TCB evaluation data number equal to or greater than this number.
 	CurrentTcbEvaluationDataNumber uint32 `protobuf:"varint,11,opt,name=current_tcb_evaluation_data_number,json=currentTcbEvaluationDataNumber,proto3" json:"current_tcb_evaluation_data_number,omitempty"`
-	// The grace period for updating to the latest TCB evaluation data number (in seconds)
+	// The grace period (in seconds) for operators to update their SGX environments to support a newly observed TCB evaluation data number.
 	//
-	// Note that this grace period is not affected for updates to non-latest numbers.
+	// Notes:
+	// - A shorter grace period could increase availability risk if operators are not given sufficient time
+	//   to prepare the new SGX environment compatible with the updated TCB level.
+	// - Conversely, a longer grace period could delay the adoption of the latest TCB level, potentially increasing security risks.
+	// - Operators must carefully consider their operational preparation needs and security posture when configuring this value.
+	//
+	// When a new TCB evaluation data number greater than the current number is observed:
+	//
+	// - If the grace period is zero:
+	//   - The current number is updated immediately.
+	//
+	// - If the grace period is non-zero:
+	//   - The new number is reserved as `next_tcb_evaluation_data_number`.
+	//   - `next_tcb_evaluation_data_number_update_time` is set to current timestamp plus the grace period.
+	//
+	// Edge cases:
+	//
+	//   - Edge case 1 (current < next < newly observed number):
+	//     - Immediate activation of reserved next number, bypassing the remaining grace period.
+	//     - Newly observed number is reserved as the next number.
+	//
+	//   - Edge case 2 (current < newly observed number < next):
+	//     - Immediate activation of newly observed number, preserving the reserved next number.
+	//
+	// These edge cases can occur due to excessively long grace periods or frequent TCB Recovery Events occurring within shorter intervals than the typical 6-month update frequency.
+	// Note that we assume operators can maintain an appropriate TCB status based on previous TCB collateral. Therefore, we expect that immediate updates in these edge cases do not cause operational issues.
+	// Additionally, with a well-configured grace period aligned with typical TCB update intervals, the client will never skip the configured grace period for any TCB number update.
 	TcbEvaluationDataNumberUpdateGracePeriod uint32 `protobuf:"varint,12,opt,name=tcb_evaluation_data_number_update_grace_period,json=tcbEvaluationDataNumberUpdateGracePeriod,proto3" json:"tcb_evaluation_data_number_update_grace_period,omitempty"`
-	// The next TCB evaluation data number to be updated
+	// Next TCB evaluation data number scheduled to be updated
 	//
-	// If this number is non-zero, `next_tcb_evaluation_data_number` must be greater than `current_tcb_evaluation_data_number`.
+	// Notes:
+	// - Must be zero if and only if `next_tcb_evaluation_data_number_update_time` is zero.
+	// - When `tcb_evaluation_data_number_update_grace_period` is zero, this field must always be zero.
+	// - If this is non-zero, this number must be always greater than the `current_tcb_evaluation_data_number`.
 	NextTcbEvaluationDataNumber uint32 `protobuf:"varint,13,opt,name=next_tcb_evaluation_data_number,json=nextTcbEvaluationDataNumber,proto3" json:"next_tcb_evaluation_data_number,omitempty"`
-	// The update time of the next TCB evaluation data number (in UNIX time seconds)
+	// Scheduled update time of the next TCB evaluation data number (UNIX time seconds)
+	//
+	// Notes:
+	// - Must be zero if and only if `next_tcb_evaluation_data_number` is zero.
+	// - When `tcb_evaluation_data_number_update_grace_period` is zero, this field must always be zero.
 	NextTcbEvaluationDataNumberUpdateTime uint64 `protobuf:"varint,14,opt,name=next_tcb_evaluation_data_number_update_time,json=nextTcbEvaluationDataNumberUpdateTime,proto3" json:"next_tcb_evaluation_data_number_update_time,omitempty"`
-	// The verifier information for the zkDCAP
+	// Contains verifier-specific information for zkDCAP proofs.
 	//
-	// The format is as follows:
-	// 0: zkVM type
-	// 1-N: arbitrary data for each zkVM type
+	// Data format:
+	// - First byte (0): zkVM type identifier.
+	// - Remaining bytes (1–N): zkVM-specific data.
 	//
-	// The format of the risc0 zkVM is as follows:
-	// | 0 |  1 - 31  |  32 - 64  |
-	// |---|----------|-----------|
-	// | 1 | reserved | image id  |
+	// Currently, only RISC Zero zkVM (type=1) is supported, with the following format:
+	//
+	// | Byte(s) | Description                 |
+	// |---------|-----------------------------|
+	// | 0       | zkVM type (fixed as 1)      |
+	// | 1–31    | Reserved (set as zero)      |
+	// | 32–63   | Image ID                    |
 	ZkdcapVerifierInfos [][]byte `protobuf:"bytes,15,rep,name=zkdcap_verifier_infos,json=zkdcapVerifierInfos,proto3" json:"zkdcap_verifier_infos,omitempty"`
 }
 
