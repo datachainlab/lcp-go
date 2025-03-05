@@ -1,18 +1,19 @@
 #!/bin/sh
 set -ex
 
-# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap>
+# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap> <--key_expiration=<integer>>
 
 E2E_TEST_DIR=./tests/e2e/cases/tm2tm
 OPERATORS_ENABLED=false
 NO_RUN_LCP=false
 export LCP_ENCLAVE_DEBUG=0
+export LCP_KEY_EXPIRATION=86400
 # LCP_RISC0_IMAGE_ID must be set to the same value as in the LCP service
 LCP_RISC0_IMAGE_ID=${LCP_RISC0_IMAGE_ID:-0x7238627eef5fe9a95d8cadd1a74c3bb1f703cf312699ce93f4c8aa448f122e6f}
 export ZKDCAP=false
 export LCP_ZKDCAP_RISC0_MOCK=false
 export LCP_RISC0_IMAGE_ID
-ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap -- "$@")
+ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap,key_expiration: -- "$@")
 eval set -- "$ARGS"
 while true; do
     case "$1" in
@@ -43,6 +44,11 @@ while true; do
             LCP_ZKDCAP_RISC0_MOCK=true
             shift
             ;;
+        --key_expiration)
+            echo "Key expiration: $2"
+            LCP_KEY_EXPIRATION=$2
+            shift 2
+            ;;
         --)
             shift
             break
@@ -59,6 +65,8 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     LCP_BIN=${LCP_BIN:-./bin/lcp}
     LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH:-./bin/enclave.signed.so}
     export LCP_MRENCLAVE=$(${LCP_BIN} enclave metadata --enclave=${LCP_ENCLAVE_PATH} | jq -r .mrenclave)
+    echo "Remove existing LCP configuration"
+    rm -rf ~/.lcp
     LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
@@ -94,6 +102,8 @@ make -C ${E2E_TEST_DIR} setup handshake
 if [ "$NO_RUN_LCP" = "false" ]; then
     echo "Shutdown LCP for testing restore ELC state"
     kill $LCP_PID
+    echo "Remove existing LCP configuration"
+    rm -rf ~/.lcp
     ./scripts/init_lcp.sh
     ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
     LCP_PID=$!
@@ -101,7 +111,13 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     make -C ${E2E_TEST_DIR} restore
 fi
 
-make -C ${E2E_TEST_DIR} test-relay
+# # Run the test 10 times to check if EK rotation works if the current EK is expired
+# for i in $(seq 1 10); do
+#     echo "Loop: $i"
+#     ./scripts/init_lcp.sh
+#     make -C ${E2E_TEST_DIR} test-relay
+# done
+
 make -C ${E2E_TEST_DIR} test-elc-cmd
 if [ "$OPERATORS_ENABLED" = "true" ]; then
     make -C ${E2E_TEST_DIR} test-operators

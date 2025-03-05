@@ -7,8 +7,6 @@ LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH:-./bin/enclave.signed.so}
 CERTS_DIR=./lcp/tests/certs
 
 echo "Generate LCP configuration"
-echo "Remove existing LCP configuration"
-rm -rf ~/.lcp
 
 echo "Create new LCP configuration ZKDCAP=${ZKDCAP} SGX_MODE=${SGX_MODE} LCP_ENCLAVE_DEBUG=${LCP_ENCLAVE_DEBUG}"
 
