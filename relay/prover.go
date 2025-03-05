@@ -38,8 +38,8 @@ type Prover struct {
 	// state
 	// registered key info for requesting lcp to generate proof.
 	activeEnclaveKey *enclave.EnclaveKeyInfo
-	// if not nil, the key is finalized.
-	// if nil, the key is not finalized yet.
+	// if nil, the key is finalized.
+	// if not nil, the key is not finalized yet.
 	unfinalizedMsgID core.MsgID
 }
 
