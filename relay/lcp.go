@@ -335,7 +335,7 @@ func (pr *Prover) validateDCAPEnclaveKeyInfo(eki *enclave.DCAPEnclaveKeyInfo) (b
 	return true, nil
 }
 
-func (pr *Prover) validateZKDCAPEnclaveKeyInfo(eki *enclave.ZKDCAPEncalveKeyInfo) (bool, error) {
+func (pr *Prover) validateZKDCAPEnclaveKeyInfo(eki *enclave.ZKDCAPEnclaveKeyInfo) (bool, error) {
 	if ok, err := pr.validateDCAPEnclaveKeyInfo(eki.Dcap); err != nil {
 		return false, err
 	} else if !ok {
@@ -430,7 +430,7 @@ func (pr *Prover) registerEnclaveKey(counterparty core.FinalityAwareChain, eki *
 	case *enclave.EnclaveKeyInfo_Ias:
 		return pr.registerIASEnclaveKey(counterparty, v.Ias)
 	case *enclave.EnclaveKeyInfo_Zkdcap:
-		return pr.registerZKDCAPEncalveKey(counterparty, v.Zkdcap)
+		return pr.registerZKDCAPEnclaveKey(counterparty, v.Zkdcap)
 	case *enclave.EnclaveKeyInfo_Dcap:
 		return nil, errors.New("DCAP enclave key is not supported yet")
 	default:
@@ -521,7 +521,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 	return ids[0], nil
 }
 
-func (pr *Prover) registerZKDCAPEncalveKey(counterparty core.Chain, eki *enclave.ZKDCAPEncalveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave.ZKDCAPEnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	zkp := eki.Zkp.GetRisc0()
 	if zkp == nil {
