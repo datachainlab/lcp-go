@@ -44,7 +44,7 @@ type EIP712DomainParams struct {
 }
 
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
-func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
+func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
 	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, counterparty)
 	if err != nil {
 		return fmt.Errorf("failed to call loadEKIAndCheckUpdateNeeded: %w", err)
@@ -896,7 +896,7 @@ func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc
 
 func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
 	srcProver := src.Prover.(*Prover)
-	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
+	if err := srcProver.UpdateEKIIfNeeded(context.TODO(), dst); err != nil {
 		return err
 	}
 

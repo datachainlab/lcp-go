@@ -171,7 +171,7 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]core.Header, error) {
-	if err := pr.UpdateEKIfNeeded(context.TODO(), dstChain); err != nil {
+	if err := pr.UpdateEKIIfNeeded(context.TODO(), dstChain); err != nil {
 		return nil, err
 	}
 

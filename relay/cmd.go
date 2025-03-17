@@ -103,7 +103,7 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.UpdateEKIfNeeded(context.TODO(), verifier)
+			return prover.UpdateEKIIfNeeded(context.TODO(), verifier)
 		},
 	}
 	return srcFlag(cmd)
