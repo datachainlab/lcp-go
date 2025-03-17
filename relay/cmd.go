@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -66,7 +65,7 @@ func availableEnclaveKeysCmd(ctx *config.Context) *cobra.Command {
 				target = c[dst]
 			}
 			prover := target.Prover.(*Prover)
-			ekis, err := prover.doAvailableEnclaveKeys(context.TODO())
+			ekis, err := prover.doAvailableEnclaveKeys(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -103,7 +102,7 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				verifier = c[src]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.UpdateEKIIfNeeded(context.TODO(), verifier)
+			return prover.UpdateEKIIfNeeded(cmd.Context(), verifier)
 		},
 	}
 	return srcFlag(cmd)
@@ -135,7 +134,7 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				pathEnd = path.Src
 				target, counterparty = c[dst], c[src]
 			}
-			return activateClient(context.TODO(), pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
+			return activateClient(cmd.Context(), pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
 		},
 	}
 	return retryMaxAttemptsFlag(retryIntervalFlag(srcFlag(cmd)))
@@ -164,7 +163,7 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doCreateELC(context.TODO(), elcClientID, viper.GetUint64(flagHeight))
+			out, err := prover.doCreateELC(cmd.Context(), elcClientID, viper.GetUint64(flagHeight))
 			if err != nil {
 				return err
 			}
@@ -206,7 +205,7 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doUpdateELC(context.TODO(), elcClientID)
+			out, err := prover.doUpdateELC(cmd.Context(), elcClientID)
 			if err != nil {
 				return err
 			}
@@ -244,7 +243,7 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doQueryELC(context.TODO(), elcClientID)
+			out, err := prover.doQueryELC(cmd.Context(), elcClientID)
 			if err != nil {
 				return err
 			}
@@ -287,7 +286,7 @@ func restoreELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			return prover.restoreELC(context.TODO(), verifier, elcClientID, viper.GetUint64(flagHeight))
+			return prover.restoreELC(cmd.Context(), verifier, elcClientID, viper.GetUint64(flagHeight))
 		},
 	}
 	return elcClientIDFlag(heightFlag(srcFlag(cmd)))
@@ -310,7 +309,7 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 				target = c[dst]
 			}
 			prover := target.Prover.(*Prover)
-			return prover.removeEnclaveKeyInfos(context.TODO())
+			return prover.removeEnclaveKeyInfos(cmd.Context())
 		},
 	}
 	return srcFlag(cmd)
@@ -358,7 +357,7 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				Denominator: viper.GetUint64(flagThresholdDenominator),
 			}
 			nonce := viper.GetUint64(flagNonce)
-			return prover.updateOperators(context.TODO(), counterparty, nonce, newOpAddrs, threshold)
+			return prover.updateOperators(cmd.Context(), counterparty, nonce, newOpAddrs, threshold)
 		},
 	}
 	cmd = thresholdFlag(
