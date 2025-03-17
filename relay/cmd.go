@@ -358,7 +358,7 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				Denominator: viper.GetUint64(flagThresholdDenominator),
 			}
 			nonce := viper.GetUint64(flagNonce)
-			return prover.updateOperators(counterparty, nonce, newOpAddrs, threshold)
+			return prover.updateOperators(context.TODO(), counterparty, nonce, newOpAddrs, threshold)
 		},
 	}
 	cmd = thresholdFlag(

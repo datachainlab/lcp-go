@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -147,7 +148,7 @@ func (pc ProverConfig) Validate() error {
 		if err != nil {
 			return fmt.Errorf("failed to build the OperatorSigner: %v", err)
 		}
-		addr, err := NewEIP712Signer(signer).GetSignerAddress()
+		addr, err := NewEIP712Signer(signer).GetSignerAddress(context.TODO())
 		if err != nil {
 			return fmt.Errorf("failed to get the OperatorSigner's address: %v", err)
 		}

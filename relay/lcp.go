@@ -482,7 +482,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		return nil, fmt.Errorf("MRENCLAVE mismatch: expected 0x%x, but got 0x%x", clientState.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
 	if pr.IsOperatorEnabled() {
-		operator, err := pr.eip712Signer.GetSignerAddress()
+		operator, err := pr.eip712Signer.GetSignerAddress(context.TODO())
 		if err != nil {
 			return nil, err
 		}
@@ -496,7 +496,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		if err != nil {
 			return nil, err
 		}
-		sig, err := pr.eip712Signer.Sign(commitment)
+		sig, err := pr.eip712Signer.Sign(context.TODO(), commitment)
 		if err != nil {
 			return nil, err
 		}
@@ -585,7 +585,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 		return nil, fmt.Errorf("failed to verify RISC0 ZKDCAP proof: %w", err)
 	}
 	if pr.IsOperatorEnabled() {
-		operator, err := pr.eip712Signer.GetSignerAddress()
+		operator, err := pr.eip712Signer.GetSignerAddress(context.TODO())
 		if err != nil {
 			return nil, err
 		}
@@ -599,7 +599,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 		if err != nil {
 			return nil, err
 		}
-		sig, err := pr.eip712Signer.Sign(commitment)
+		sig, err := pr.eip712Signer.Sign(context.TODO(), commitment)
 		if err != nil {
 			return nil, err
 		}
