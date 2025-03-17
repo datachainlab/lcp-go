@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -486,7 +487,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		if err != nil {
 			return nil, err
 		}
-		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+		if operators := clientState.GetOperators(); !slices.Contains(operators, operator) {
 			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
 		}
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
@@ -589,7 +590,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 		if err != nil {
 			return nil, err
 		}
-		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+		if operators := clientState.GetOperators(); !slices.Contains(operators, operator) {
 			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
 		}
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
@@ -796,15 +797,6 @@ func (pr *Prover) doUpdateELC(elcClientID string) (*UpdateELCResult, error) {
 	return &UpdateELCResult{
 		Messages: msgs,
 	}, nil
-}
-
-func containsOperator(operators []common.Address, operator common.Address) bool {
-	for _, op := range operators {
-		if op == operator {
-			return true
-		}
-	}
-	return false
 }
 
 type QueryELCResult struct {
