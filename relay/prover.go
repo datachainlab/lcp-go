@@ -151,7 +151,7 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 
 	consensusState := &lcptypes.ConsensusState{}
 
-	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
+	if res, err := pr.createELC(context.TODO(), pr.config.ElcClientId, height); err != nil {
 		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
 	} else if res == nil {
 		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)

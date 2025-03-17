@@ -135,7 +135,7 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				pathEnd = path.Src
 				target, counterparty = c[dst], c[src]
 			}
-			return activateClient(pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
+			return activateClient(context.TODO(), pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
 		},
 	}
 	return retryMaxAttemptsFlag(retryIntervalFlag(srcFlag(cmd)))
@@ -164,7 +164,7 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doCreateELC(elcClientID, viper.GetUint64(flagHeight))
+			out, err := prover.doCreateELC(context.TODO(), elcClientID, viper.GetUint64(flagHeight))
 			if err != nil {
 				return err
 			}
@@ -206,7 +206,7 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doUpdateELC(elcClientID)
+			out, err := prover.doUpdateELC(context.TODO(), elcClientID)
 			if err != nil {
 				return err
 			}
@@ -244,7 +244,7 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 			} else {
 				elcClientID = prover.config.ElcClientId
 			}
-			out, err := prover.doQueryELC(elcClientID)
+			out, err := prover.doQueryELC(context.TODO(), elcClientID)
 			if err != nil {
 				return err
 			}
