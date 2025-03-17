@@ -148,7 +148,7 @@ func (pc ProverConfig) Validate() error {
 		if err != nil {
 			return fmt.Errorf("failed to build the OperatorSigner: %v", err)
 		}
-		addr, err := NewEIP712Signer(signer).GetSignerAddress(context.TODO())
+		addr, err := NewEIP712Signer(signer).GetSignerAddress(context.Background())
 		if err != nil {
 			return fmt.Errorf("failed to get the OperatorSigner's address: %v", err)
 		}
