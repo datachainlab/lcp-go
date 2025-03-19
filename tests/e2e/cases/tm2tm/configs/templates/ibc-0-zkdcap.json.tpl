@@ -28,16 +28,11 @@
     "key_update_buffer_time": 3600,
     "elc_client_id": "07-tendermint-1",
     "is_debug_enclave": $IS_DEBUG_ENCLAVE,
-    "operators": [
-      "0xcb96F8d6C2d543102184d679D7829b39434E4EEc"
-    ],
-    "operators_eip712_cosmos_chain_params": {
-      "chain_id": "ibc1",
-      "prefix": "ibc"
-    },
-    "operator_signer": {
-      "@type": "/relayer.provers.lcp.signers.raw.SignerConfig",
-      "private_key": "0x99b107441d0bce8e5b0078450f10f309910d8c0a2cc91671bd6cc1a284809642"
+    "current_tcb_evaluation_data_number": 1,
+    "tcb_evaluation_data_number_update_grace_period": 0,
+    "risc0_zkvm_config": {
+      "image_id": $RISC0_IMAGE_ID,
+      "mock": $LCP_ZKDCAP_RISC0_MOCK
     }
   }
 }

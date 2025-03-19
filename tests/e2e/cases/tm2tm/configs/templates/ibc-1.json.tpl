@@ -21,11 +21,12 @@
       }
     },
     "lcp_service_address": "localhost:50051",
-    "mrenclave": "$MRENCLAVE",
-    "allowed_quote_statuses": ["GROUP_OUT_OF_DATE"],
+    "mrenclave": $MRENCLAVE,
+    "allowed_quote_statuses": ["GROUP_OUT_OF_DATE", "SW_HARDENING_NEEDED"],
     "allowed_advisory_ids": ["INTEL-SA-00219","INTEL-SA-00289","INTEL-SA-00334","INTEL-SA-00477","INTEL-SA-00614","INTEL-SA-00615","INTEL-SA-00617"],
-    "key_expiration": 604800,
+    "key_expiration": $LCP_KEY_EXPIRATION,
+    "key_update_buffer_time": 3600,
     "elc_client_id": "07-tendermint-0",
-    "is_debug_enclave": true
+    "is_debug_enclave": $IS_DEBUG_ENCLAVE
   }
 }

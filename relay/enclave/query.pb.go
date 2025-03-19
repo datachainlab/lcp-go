@@ -28,15 +28,104 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// Request for getting the enclave information.
+type QueryEnclaveInfoRequest struct {
+}
+
+func (m *QueryEnclaveInfoRequest) Reset()         { *m = QueryEnclaveInfoRequest{} }
+func (m *QueryEnclaveInfoRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryEnclaveInfoRequest) ProtoMessage()    {}
+func (*QueryEnclaveInfoRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{0}
+}
+func (m *QueryEnclaveInfoRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryEnclaveInfoRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryEnclaveInfoRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryEnclaveInfoRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryEnclaveInfoRequest.Merge(m, src)
+}
+func (m *QueryEnclaveInfoRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryEnclaveInfoRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryEnclaveInfoRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryEnclaveInfoRequest proto.InternalMessageInfo
+
+// Response for getting the enclave information.
+type QueryEnclaveInfoResponse struct {
+	Mrenclave    []byte `protobuf:"bytes,1,opt,name=mrenclave,proto3" json:"mrenclave,omitempty"`
+	EnclaveDebug bool   `protobuf:"varint,2,opt,name=enclave_debug,json=enclaveDebug,proto3" json:"enclave_debug,omitempty"`
+}
+
+func (m *QueryEnclaveInfoResponse) Reset()         { *m = QueryEnclaveInfoResponse{} }
+func (m *QueryEnclaveInfoResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryEnclaveInfoResponse) ProtoMessage()    {}
+func (*QueryEnclaveInfoResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{1}
+}
+func (m *QueryEnclaveInfoResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryEnclaveInfoResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryEnclaveInfoResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryEnclaveInfoResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryEnclaveInfoResponse.Merge(m, src)
+}
+func (m *QueryEnclaveInfoResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryEnclaveInfoResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryEnclaveInfoResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryEnclaveInfoResponse proto.InternalMessageInfo
+
+// Request for getting the attested enclave keys corresponding to the specified MRENCLAVE.
 type QueryAvailableEnclaveKeysRequest struct {
+	// MRENCLAVE of the enclave that generates the EK.
 	Mrenclave []byte `protobuf:"bytes,1,opt,name=mrenclave,proto3" json:"mrenclave,omitempty"`
+	// Debug flag of the enclave that generates the EK.
+	EnclaveDebug bool `protobuf:"varint,2,opt,name=enclave_debug,json=enclaveDebug,proto3" json:"enclave_debug,omitempty"`
+	// Remote attestation type.
+	//
+	// | Type            | Value |
+	// |-----------------|-------|
+	// | IAS             |   1   |
+	// | DCAP            |   2   |
+	// | ZKDCAPRisc0     |   3   |
+	// | MockZKDCAPRisc0 |   4   |
+	RaType uint32 `protobuf:"varint,3,opt,name=ra_type,json=raType,proto3" json:"ra_type,omitempty"`
 }
 
 func (m *QueryAvailableEnclaveKeysRequest) Reset()         { *m = QueryAvailableEnclaveKeysRequest{} }
 func (m *QueryAvailableEnclaveKeysRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryAvailableEnclaveKeysRequest) ProtoMessage()    {}
 func (*QueryAvailableEnclaveKeysRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{0}
+	return fileDescriptor_17b0894e959bbc62, []int{2}
 }
 func (m *QueryAvailableEnclaveKeysRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -65,6 +154,7 @@ func (m *QueryAvailableEnclaveKeysRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryAvailableEnclaveKeysRequest proto.InternalMessageInfo
 
+// Response for getting the attested enclave keys.
 type QueryAvailableEnclaveKeysResponse struct {
 	Keys []*EnclaveKeyInfo `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
 }
@@ -73,7 +163,7 @@ func (m *QueryAvailableEnclaveKeysResponse) Reset()         { *m = QueryAvailabl
 func (m *QueryAvailableEnclaveKeysResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryAvailableEnclaveKeysResponse) ProtoMessage()    {}
 func (*QueryAvailableEnclaveKeysResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{1}
+	return fileDescriptor_17b0894e959bbc62, []int{3}
 }
 func (m *QueryAvailableEnclaveKeysResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -102,20 +192,21 @@ func (m *QueryAvailableEnclaveKeysResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryAvailableEnclaveKeysResponse proto.InternalMessageInfo
 
+// Enclave key information contains the RA type specific information.
 type EnclaveKeyInfo struct {
-	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
-	AttestationTime   uint64 `protobuf:"varint,2,opt,name=attestation_time,json=attestationTime,proto3" json:"attestation_time,omitempty"`
-	Report            string `protobuf:"bytes,3,opt,name=report,proto3" json:"report,omitempty"`
-	Signature         []byte `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
-	SigningCert       []byte `protobuf:"bytes,5,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
-	Extension         []byte `protobuf:"bytes,6,opt,name=extension,proto3" json:"extension,omitempty"`
+	// Types that are valid to be assigned to KeyInfo:
+	//
+	//	*EnclaveKeyInfo_Ias
+	//	*EnclaveKeyInfo_Dcap
+	//	*EnclaveKeyInfo_Zkdcap
+	KeyInfo isEnclaveKeyInfo_KeyInfo `protobuf_oneof:"key_info"`
 }
 
 func (m *EnclaveKeyInfo) Reset()         { *m = EnclaveKeyInfo{} }
 func (m *EnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
 func (*EnclaveKeyInfo) ProtoMessage()    {}
 func (*EnclaveKeyInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{2}
+	return fileDescriptor_17b0894e959bbc62, []int{4}
 }
 func (m *EnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -144,6 +235,386 @@ func (m *EnclaveKeyInfo) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_EnclaveKeyInfo proto.InternalMessageInfo
 
+type isEnclaveKeyInfo_KeyInfo interface {
+	isEnclaveKeyInfo_KeyInfo()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type EnclaveKeyInfo_Ias struct {
+	Ias *IASEnclaveKeyInfo `protobuf:"bytes,1,opt,name=ias,proto3,oneof" json:"ias,omitempty"`
+}
+type EnclaveKeyInfo_Dcap struct {
+	Dcap *DCAPEnclaveKeyInfo `protobuf:"bytes,2,opt,name=dcap,proto3,oneof" json:"dcap,omitempty"`
+}
+type EnclaveKeyInfo_Zkdcap struct {
+	Zkdcap *ZKDCAPEnclaveKeyInfo `protobuf:"bytes,3,opt,name=zkdcap,proto3,oneof" json:"zkdcap,omitempty"`
+}
+
+func (*EnclaveKeyInfo_Ias) isEnclaveKeyInfo_KeyInfo()    {}
+func (*EnclaveKeyInfo_Dcap) isEnclaveKeyInfo_KeyInfo()   {}
+func (*EnclaveKeyInfo_Zkdcap) isEnclaveKeyInfo_KeyInfo() {}
+
+func (m *EnclaveKeyInfo) GetKeyInfo() isEnclaveKeyInfo_KeyInfo {
+	if m != nil {
+		return m.KeyInfo
+	}
+	return nil
+}
+
+func (m *EnclaveKeyInfo) GetIas() *IASEnclaveKeyInfo {
+	if x, ok := m.GetKeyInfo().(*EnclaveKeyInfo_Ias); ok {
+		return x.Ias
+	}
+	return nil
+}
+
+func (m *EnclaveKeyInfo) GetDcap() *DCAPEnclaveKeyInfo {
+	if x, ok := m.GetKeyInfo().(*EnclaveKeyInfo_Dcap); ok {
+		return x.Dcap
+	}
+	return nil
+}
+
+func (m *EnclaveKeyInfo) GetZkdcap() *ZKDCAPEnclaveKeyInfo {
+	if x, ok := m.GetKeyInfo().(*EnclaveKeyInfo_Zkdcap); ok {
+		return x.Zkdcap
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*EnclaveKeyInfo) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*EnclaveKeyInfo_Ias)(nil),
+		(*EnclaveKeyInfo_Dcap)(nil),
+		(*EnclaveKeyInfo_Zkdcap)(nil),
+	}
+}
+
+// Enclave key information with IAS report.
+type IASEnclaveKeyInfo struct {
+	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
+	Report            string `protobuf:"bytes,2,opt,name=report,proto3" json:"report,omitempty"`
+	AttestationTime   uint64 `protobuf:"varint,3,opt,name=attestation_time,json=attestationTime,proto3" json:"attestation_time,omitempty"`
+	Signature         []byte `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"`
+	SigningCert       []byte `protobuf:"bytes,5,opt,name=signing_cert,json=signingCert,proto3" json:"signing_cert,omitempty"`
+}
+
+func (m *IASEnclaveKeyInfo) Reset()         { *m = IASEnclaveKeyInfo{} }
+func (m *IASEnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
+func (*IASEnclaveKeyInfo) ProtoMessage()    {}
+func (*IASEnclaveKeyInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{5}
+}
+func (m *IASEnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IASEnclaveKeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_IASEnclaveKeyInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *IASEnclaveKeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IASEnclaveKeyInfo.Merge(m, src)
+}
+func (m *IASEnclaveKeyInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *IASEnclaveKeyInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_IASEnclaveKeyInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IASEnclaveKeyInfo proto.InternalMessageInfo
+
+// Enclave key information with DCAP quote and supplemental data.
+type DCAPEnclaveKeyInfo struct {
+	EnclaveKeyAddress []byte        `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
+	Quote             []byte        `protobuf:"bytes,2,opt,name=quote,proto3" json:"quote,omitempty"`
+	Fmspc             []byte        `protobuf:"bytes,3,opt,name=fmspc,proto3" json:"fmspc,omitempty"`
+	Validity          *Validity     `protobuf:"bytes,4,opt,name=validity,proto3" json:"validity,omitempty"`
+	TcbStatus         string        `protobuf:"bytes,5,opt,name=tcb_status,json=tcbStatus,proto3" json:"tcb_status,omitempty"`
+	AdvisoryIds       []string      `protobuf:"bytes,6,rep,name=advisory_ids,json=advisoryIds,proto3" json:"advisory_ids,omitempty"`
+	Collateral        *QVCollateral `protobuf:"bytes,7,opt,name=collateral,proto3" json:"collateral,omitempty"`
+}
+
+func (m *DCAPEnclaveKeyInfo) Reset()         { *m = DCAPEnclaveKeyInfo{} }
+func (m *DCAPEnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
+func (*DCAPEnclaveKeyInfo) ProtoMessage()    {}
+func (*DCAPEnclaveKeyInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{6}
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DCAPEnclaveKeyInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DCAPEnclaveKeyInfo.Merge(m, src)
+}
+func (m *DCAPEnclaveKeyInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *DCAPEnclaveKeyInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_DCAPEnclaveKeyInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DCAPEnclaveKeyInfo proto.InternalMessageInfo
+
+// Validity Period
+type Validity struct {
+	NotBefore uint64 `protobuf:"varint,1,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	NotAfter  uint64 `protobuf:"varint,2,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+}
+
+func (m *Validity) Reset()         { *m = Validity{} }
+func (m *Validity) String() string { return proto.CompactTextString(m) }
+func (*Validity) ProtoMessage()    {}
+func (*Validity) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{7}
+}
+func (m *Validity) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Validity) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Validity.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Validity) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Validity.Merge(m, src)
+}
+func (m *Validity) XXX_Size() int {
+	return m.Size()
+}
+func (m *Validity) XXX_DiscardUnknown() {
+	xxx_messageInfo_Validity.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Validity proto.InternalMessageInfo
+
+// Enclave key information with zkDCAP proof and DCAP attestation info.
+type ZKDCAPEnclaveKeyInfo struct {
+	Dcap *DCAPEnclaveKeyInfo `protobuf:"bytes,1,opt,name=dcap,proto3" json:"dcap,omitempty"`
+	Zkp  *ZKVMProof          `protobuf:"bytes,2,opt,name=zkp,proto3" json:"zkp,omitempty"`
+}
+
+func (m *ZKDCAPEnclaveKeyInfo) Reset()         { *m = ZKDCAPEnclaveKeyInfo{} }
+func (m *ZKDCAPEnclaveKeyInfo) String() string { return proto.CompactTextString(m) }
+func (*ZKDCAPEnclaveKeyInfo) ProtoMessage()    {}
+func (*ZKDCAPEnclaveKeyInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{8}
+}
+func (m *ZKDCAPEnclaveKeyInfo) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZKDCAPEnclaveKeyInfo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ZKDCAPEnclaveKeyInfo.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ZKDCAPEnclaveKeyInfo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZKDCAPEnclaveKeyInfo.Merge(m, src)
+}
+func (m *ZKDCAPEnclaveKeyInfo) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZKDCAPEnclaveKeyInfo) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZKDCAPEnclaveKeyInfo.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZKDCAPEnclaveKeyInfo proto.InternalMessageInfo
+
+// ZKVM proof
+type ZKVMProof struct {
+	// Types that are valid to be assigned to Proof:
+	//
+	//	*ZKVMProof_Risc0
+	Proof isZKVMProof_Proof `protobuf_oneof:"proof"`
+}
+
+func (m *ZKVMProof) Reset()         { *m = ZKVMProof{} }
+func (m *ZKVMProof) String() string { return proto.CompactTextString(m) }
+func (*ZKVMProof) ProtoMessage()    {}
+func (*ZKVMProof) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{9}
+}
+func (m *ZKVMProof) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ZKVMProof) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ZKVMProof.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ZKVMProof) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ZKVMProof.Merge(m, src)
+}
+func (m *ZKVMProof) XXX_Size() int {
+	return m.Size()
+}
+func (m *ZKVMProof) XXX_DiscardUnknown() {
+	xxx_messageInfo_ZKVMProof.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ZKVMProof proto.InternalMessageInfo
+
+type isZKVMProof_Proof interface {
+	isZKVMProof_Proof()
+	MarshalTo([]byte) (int, error)
+	Size() int
+}
+
+type ZKVMProof_Risc0 struct {
+	Risc0 *Risc0ZKVMProof `protobuf:"bytes,1,opt,name=risc0,proto3,oneof" json:"risc0,omitempty"`
+}
+
+func (*ZKVMProof_Risc0) isZKVMProof_Proof() {}
+
+func (m *ZKVMProof) GetProof() isZKVMProof_Proof {
+	if m != nil {
+		return m.Proof
+	}
+	return nil
+}
+
+func (m *ZKVMProof) GetRisc0() *Risc0ZKVMProof {
+	if x, ok := m.GetProof().(*ZKVMProof_Risc0); ok {
+		return x.Risc0
+	}
+	return nil
+}
+
+// XXX_OneofWrappers is for the internal use of the proto package.
+func (*ZKVMProof) XXX_OneofWrappers() []interface{} {
+	return []interface{}{
+		(*ZKVMProof_Risc0)(nil),
+	}
+}
+
+// RISC Zero zkVM proof for zkDCAP
+type Risc0ZKVMProof struct {
+	ImageId  []byte `protobuf:"bytes,1,opt,name=image_id,json=imageId,proto3" json:"image_id,omitempty"`
+	Selector []byte `protobuf:"bytes,2,opt,name=selector,proto3" json:"selector,omitempty"`
+	Seal     []byte `protobuf:"bytes,3,opt,name=seal,proto3" json:"seal,omitempty"`
+	Output   []byte `protobuf:"bytes,4,opt,name=output,proto3" json:"output,omitempty"`
+}
+
+func (m *Risc0ZKVMProof) Reset()         { *m = Risc0ZKVMProof{} }
+func (m *Risc0ZKVMProof) String() string { return proto.CompactTextString(m) }
+func (*Risc0ZKVMProof) ProtoMessage()    {}
+func (*Risc0ZKVMProof) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{10}
+}
+func (m *Risc0ZKVMProof) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Risc0ZKVMProof) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Risc0ZKVMProof.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Risc0ZKVMProof) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Risc0ZKVMProof.Merge(m, src)
+}
+func (m *Risc0ZKVMProof) XXX_Size() int {
+	return m.Size()
+}
+func (m *Risc0ZKVMProof) XXX_DiscardUnknown() {
+	xxx_messageInfo_Risc0ZKVMProof.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Risc0ZKVMProof proto.InternalMessageInfo
+
+// Collateral information for the DCAP quote verification.
+type QVCollateral struct {
+	TcbInfoJson          string `protobuf:"bytes,1,opt,name=tcb_info_json,json=tcbInfoJson,proto3" json:"tcb_info_json,omitempty"`
+	QeIdentityJson       string `protobuf:"bytes,2,opt,name=qe_identity_json,json=qeIdentityJson,proto3" json:"qe_identity_json,omitempty"`
+	SgxIntelRootCaDer    []byte `protobuf:"bytes,3,opt,name=sgx_intel_root_ca_der,json=sgxIntelRootCaDer,proto3" json:"sgx_intel_root_ca_der,omitempty"`
+	SgxTcbSigningDer     []byte `protobuf:"bytes,4,opt,name=sgx_tcb_signing_der,json=sgxTcbSigningDer,proto3" json:"sgx_tcb_signing_der,omitempty"`
+	SgxIntelRootCaCrlDer []byte `protobuf:"bytes,5,opt,name=sgx_intel_root_ca_crl_der,json=sgxIntelRootCaCrlDer,proto3" json:"sgx_intel_root_ca_crl_der,omitempty"`
+	SgxPckCrlDer         []byte `protobuf:"bytes,6,opt,name=sgx_pck_crl_der,json=sgxPckCrlDer,proto3" json:"sgx_pck_crl_der,omitempty"`
+}
+
+func (m *QVCollateral) Reset()         { *m = QVCollateral{} }
+func (m *QVCollateral) String() string { return proto.CompactTextString(m) }
+func (*QVCollateral) ProtoMessage()    {}
+func (*QVCollateral) Descriptor() ([]byte, []int) {
+	return fileDescriptor_17b0894e959bbc62, []int{11}
+}
+func (m *QVCollateral) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QVCollateral) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QVCollateral.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QVCollateral) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QVCollateral.Merge(m, src)
+}
+func (m *QVCollateral) XXX_Size() int {
+	return m.Size()
+}
+func (m *QVCollateral) XXX_DiscardUnknown() {
+	xxx_messageInfo_QVCollateral.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QVCollateral proto.InternalMessageInfo
+
+// Request for getting the enclave key information.
 type QueryEnclaveKeyRequest struct {
 	EnclaveKeyAddress []byte `protobuf:"bytes,1,opt,name=enclave_key_address,json=enclaveKeyAddress,proto3" json:"enclave_key_address,omitempty"`
 }
@@ -152,7 +623,7 @@ func (m *QueryEnclaveKeyRequest) Reset()         { *m = QueryEnclaveKeyRequest{}
 func (m *QueryEnclaveKeyRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryEnclaveKeyRequest) ProtoMessage()    {}
 func (*QueryEnclaveKeyRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{3}
+	return fileDescriptor_17b0894e959bbc62, []int{12}
 }
 func (m *QueryEnclaveKeyRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -181,6 +652,7 @@ func (m *QueryEnclaveKeyRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_QueryEnclaveKeyRequest proto.InternalMessageInfo
 
+// Response for getting the enclave key information.
 type QueryEnclaveKeyResponse struct {
 	Key *EnclaveKeyInfo `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 }
@@ -189,7 +661,7 @@ func (m *QueryEnclaveKeyResponse) Reset()         { *m = QueryEnclaveKeyResponse
 func (m *QueryEnclaveKeyResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryEnclaveKeyResponse) ProtoMessage()    {}
 func (*QueryEnclaveKeyResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_17b0894e959bbc62, []int{4}
+	return fileDescriptor_17b0894e959bbc62, []int{13}
 }
 func (m *QueryEnclaveKeyResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -219,9 +691,18 @@ func (m *QueryEnclaveKeyResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_QueryEnclaveKeyResponse proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterType((*QueryEnclaveInfoRequest)(nil), "lcp.service.enclave.v1.QueryEnclaveInfoRequest")
+	proto.RegisterType((*QueryEnclaveInfoResponse)(nil), "lcp.service.enclave.v1.QueryEnclaveInfoResponse")
 	proto.RegisterType((*QueryAvailableEnclaveKeysRequest)(nil), "lcp.service.enclave.v1.QueryAvailableEnclaveKeysRequest")
 	proto.RegisterType((*QueryAvailableEnclaveKeysResponse)(nil), "lcp.service.enclave.v1.QueryAvailableEnclaveKeysResponse")
 	proto.RegisterType((*EnclaveKeyInfo)(nil), "lcp.service.enclave.v1.EnclaveKeyInfo")
+	proto.RegisterType((*IASEnclaveKeyInfo)(nil), "lcp.service.enclave.v1.IASEnclaveKeyInfo")
+	proto.RegisterType((*DCAPEnclaveKeyInfo)(nil), "lcp.service.enclave.v1.DCAPEnclaveKeyInfo")
+	proto.RegisterType((*Validity)(nil), "lcp.service.enclave.v1.Validity")
+	proto.RegisterType((*ZKDCAPEnclaveKeyInfo)(nil), "lcp.service.enclave.v1.ZKDCAPEnclaveKeyInfo")
+	proto.RegisterType((*ZKVMProof)(nil), "lcp.service.enclave.v1.ZKVMProof")
+	proto.RegisterType((*Risc0ZKVMProof)(nil), "lcp.service.enclave.v1.Risc0ZKVMProof")
+	proto.RegisterType((*QVCollateral)(nil), "lcp.service.enclave.v1.QVCollateral")
 	proto.RegisterType((*QueryEnclaveKeyRequest)(nil), "lcp.service.enclave.v1.QueryEnclaveKeyRequest")
 	proto.RegisterType((*QueryEnclaveKeyResponse)(nil), "lcp.service.enclave.v1.QueryEnclaveKeyResponse")
 }
@@ -231,36 +712,72 @@ func init() {
 }
 
 var fileDescriptor_17b0894e959bbc62 = []byte{
-	// 457 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0xcf, 0x6f, 0xd3, 0x30,
-	0x14, 0xae, 0xd7, 0xae, 0xd2, 0xbc, 0x89, 0x1f, 0x66, 0x2a, 0x51, 0x85, 0xa2, 0x2c, 0x07, 0x54,
-	0x24, 0xb0, 0xb5, 0x71, 0x19, 0x9c, 0x18, 0x08, 0x89, 0x1f, 0x27, 0x02, 0x27, 0x2e, 0x91, 0x9b,
-	0x3e, 0x32, 0xab, 0x89, 0x9d, 0xd9, 0x6e, 0x44, 0xee, 0xdc, 0xb8, 0xf0, 0x67, 0xed, 0xb8, 0x23,
-	0x47, 0x68, 0xff, 0x11, 0x94, 0xc4, 0x6b, 0x41, 0x1b, 0xa3, 0xec, 0x16, 0x7f, 0xfe, 0xbe, 0x2f,
-	0xef, 0x7d, 0xcf, 0x0f, 0x87, 0x59, 0x52, 0x30, 0x03, 0xba, 0x14, 0x09, 0x30, 0x90, 0x49, 0xc6,
-	0x4b, 0x60, 0xe5, 0x3e, 0x3b, 0x99, 0x81, 0xae, 0x68, 0xa1, 0x95, 0x55, 0x64, 0x90, 0x25, 0x05,
-	0x75, 0x1c, 0xea, 0x38, 0xb4, 0xdc, 0x1f, 0xee, 0xa6, 0x2a, 0x55, 0x0d, 0x85, 0xd5, 0x5f, 0x2d,
-	0x3b, 0x7c, 0x86, 0x83, 0x77, 0xb5, 0xf8, 0xa8, 0xe4, 0x22, 0xe3, 0xe3, 0x0c, 0x5e, 0xb6, 0x8a,
-	0xb7, 0x50, 0x99, 0x08, 0x4e, 0x66, 0x60, 0x2c, 0xb9, 0x87, 0xb7, 0x72, 0xed, 0x9c, 0x3c, 0x14,
-	0xa0, 0xd1, 0x4e, 0xb4, 0x02, 0xc2, 0x18, 0xef, 0x5d, 0xe1, 0x60, 0x0a, 0x25, 0x0d, 0x90, 0xa7,
-	0xb8, 0x37, 0x85, 0xca, 0x78, 0x28, 0xe8, 0x8e, 0xb6, 0x0f, 0xee, 0xd3, 0xcb, 0x6b, 0xa4, 0x2b,
-	0xe9, 0x6b, 0xf9, 0x49, 0x45, 0x8d, 0x26, 0x9c, 0x23, 0x7c, 0xe3, 0xcf, 0x0b, 0x42, 0xf1, 0x1d,
-	0xa7, 0x8a, 0xa7, 0x50, 0xc5, 0x7c, 0x32, 0xd1, 0x60, 0x8c, 0xab, 0xed, 0x36, 0x2c, 0xc9, 0x47,
-	0xed, 0x05, 0x79, 0x80, 0x6f, 0x71, 0x6b, 0xc1, 0x58, 0x6e, 0x85, 0x92, 0xb1, 0x15, 0x39, 0x78,
-	0x1b, 0x01, 0x1a, 0xf5, 0xa2, 0x9b, 0xbf, 0xe1, 0x1f, 0x44, 0x0e, 0x64, 0x80, 0xfb, 0x1a, 0x0a,
-	0xa5, 0xad, 0xd7, 0x0d, 0xd0, 0x68, 0x2b, 0x72, 0xa7, 0x3a, 0x04, 0x23, 0x52, 0xc9, 0xed, 0x4c,
-	0x83, 0xd7, 0x6b, 0x43, 0x58, 0x02, 0x64, 0x0f, 0xef, 0xd4, 0x07, 0x21, 0xd3, 0x38, 0x01, 0x6d,
-	0xbd, 0xcd, 0x86, 0xb0, 0xed, 0xb0, 0x17, 0xd0, 0x1a, 0xc0, 0x67, 0x0b, 0xd2, 0x08, 0x25, 0xbd,
-	0x7e, 0x6b, 0xb0, 0x04, 0xc2, 0x57, 0x78, 0xd0, 0xa4, 0xb8, 0x6a, 0xf4, 0x3c, 0xfd, 0xff, 0xec,
-	0x35, 0x7c, 0x8f, 0xef, 0x5e, 0x70, 0x72, 0x53, 0x38, 0xc4, 0xdd, 0x29, 0x54, 0x8d, 0x74, 0xfd,
-	0x21, 0xd4, 0x92, 0x83, 0x2f, 0x1b, 0x78, 0xb3, 0x71, 0x25, 0x5f, 0x11, 0xde, 0xbd, 0x6c, 0xd4,
-	0xe4, 0xf0, 0x6f, 0x7e, 0xff, 0x7a, 0x5f, 0xc3, 0x27, 0xd7, 0x50, 0xba, 0x8e, 0x72, 0x8c, 0x57,
-	0x30, 0xa1, 0x57, 0x1a, 0x5d, 0x88, 0x76, 0xc8, 0xd6, 0xe6, 0xb7, 0xbf, 0x7b, 0xfe, 0xe6, 0xf4,
-	0xa7, 0xdf, 0x39, 0x9d, 0xfb, 0xe8, 0x6c, 0xee, 0xa3, 0x1f, 0x73, 0x1f, 0x7d, 0x5b, 0xf8, 0x9d,
-	0xb3, 0x85, 0xdf, 0xf9, 0xbe, 0xf0, 0x3b, 0x1f, 0x1f, 0xa6, 0xc2, 0x1e, 0xcf, 0xc6, 0x34, 0x51,
-	0x39, 0x9b, 0x70, 0xcb, 0x93, 0x63, 0x2e, 0x64, 0xc6, 0xc7, 0x2c, 0x4b, 0x8a, 0x47, 0xa9, 0x62,
-	0x1a, 0x32, 0x5e, 0x9d, 0xaf, 0xed, 0xb8, 0xdf, 0x2c, 0xe0, 0xe3, 0x5f, 0x01, 0x00, 0x00, 0xff,
-	0xff, 0xd9, 0x19, 0x22, 0xaa, 0xd4, 0x03, 0x00, 0x00,
+	// 1036 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x56, 0xdd, 0x4e, 0x1b, 0x47,
+	0x14, 0xf6, 0x62, 0x63, 0xec, 0x63, 0x43, 0x60, 0x42, 0x89, 0xa1, 0xad, 0x65, 0xb6, 0x3f, 0x72,
+	0xaa, 0xc4, 0x26, 0xe4, 0xa2, 0x69, 0xd5, 0x46, 0xe5, 0xa7, 0x11, 0x0e, 0xaa, 0x44, 0x16, 0xc4,
+	0x45, 0xa4, 0x6a, 0x35, 0x3b, 0x3b, 0xde, 0x6c, 0xbd, 0xde, 0x59, 0x66, 0xc6, 0x16, 0x9b, 0x8b,
+	0xbe, 0x40, 0x6f, 0xfa, 0x02, 0x7d, 0x8d, 0xbe, 0x42, 0x73, 0x99, 0xcb, 0x5e, 0xb6, 0xa0, 0xbe,
+	0x42, 0xaf, 0xab, 0x99, 0x1d, 0x8c, 0x29, 0x98, 0x42, 0x95, 0xbb, 0x3d, 0x67, 0xbe, 0xef, 0xfc,
+	0xcc, 0x7c, 0xc7, 0xc7, 0x60, 0x47, 0x24, 0x69, 0x0b, 0xca, 0x87, 0x21, 0xa1, 0x6d, 0x1a, 0x93,
+	0x08, 0x0f, 0x69, 0x7b, 0xf8, 0xa8, 0x7d, 0x34, 0xa0, 0x3c, 0x6d, 0x25, 0x9c, 0x49, 0x86, 0x96,
+	0x22, 0x92, 0xb4, 0x0c, 0xa6, 0x65, 0x30, 0xad, 0xe1, 0xa3, 0x95, 0xc5, 0x80, 0x05, 0x4c, 0x43,
+	0xda, 0xea, 0x2b, 0x43, 0xdb, 0xcb, 0x70, 0xef, 0x85, 0x22, 0x7f, 0x9b, 0x01, 0x3b, 0x71, 0x97,
+	0x39, 0xf4, 0x68, 0x40, 0x85, 0xb4, 0xbf, 0x87, 0xda, 0xe5, 0x23, 0x91, 0xb0, 0x58, 0x50, 0xf4,
+	0x01, 0x94, 0xfb, 0xdc, 0x04, 0xaf, 0x59, 0x0d, 0xab, 0x59, 0x75, 0xce, 0x1d, 0xe8, 0x23, 0x98,
+	0x35, 0x9f, 0xae, 0x4f, 0xbd, 0x41, 0x50, 0x9b, 0x6a, 0x58, 0xcd, 0x92, 0x53, 0x35, 0xce, 0x6d,
+	0xe5, 0xb3, 0x7f, 0x84, 0x86, 0x0e, 0xbf, 0x31, 0xc4, 0x61, 0x84, 0xbd, 0x88, 0x9a, 0x3c, 0xbb,
+	0x34, 0x15, 0xa6, 0x84, 0x77, 0x90, 0x06, 0xdd, 0x83, 0x19, 0x8e, 0x5d, 0x99, 0x26, 0xb4, 0x96,
+	0x6f, 0x58, 0xcd, 0x59, 0xa7, 0xc8, 0xf1, 0x41, 0x9a, 0x50, 0xdb, 0x85, 0xd5, 0x6b, 0xf2, 0x9b,
+	0x3e, 0xbf, 0x84, 0x42, 0x8f, 0xa6, 0xa2, 0x66, 0x35, 0xf2, 0xcd, 0xca, 0xfa, 0xa7, 0xad, 0xab,
+	0xef, 0xb6, 0x75, 0x4e, 0xd5, 0xb7, 0xa4, 0x39, 0xf6, 0x5f, 0x16, 0xcc, 0x5d, 0x3c, 0x40, 0x5f,
+	0x43, 0x3e, 0xc4, 0x42, 0x77, 0x52, 0x59, 0xbf, 0x3f, 0x29, 0x5a, 0x67, 0x63, 0xff, 0x22, 0x6f,
+	0x27, 0xe7, 0x28, 0x1e, 0xfa, 0x06, 0x0a, 0x3e, 0xc1, 0x89, 0xee, 0xb3, 0xb2, 0xfe, 0xd9, 0x24,
+	0xfe, 0xf6, 0xd6, 0xc6, 0xde, 0xa5, 0x00, 0x9a, 0x89, 0x9e, 0x41, 0xf1, 0x75, 0x4f, 0xc7, 0xc8,
+	0xeb, 0x18, 0x0f, 0x26, 0xc5, 0x78, 0xb9, 0x7b, 0x65, 0x14, 0xc3, 0xde, 0x04, 0x28, 0xf5, 0x68,
+	0xea, 0x86, 0x71, 0x97, 0xd9, 0xbf, 0x59, 0xb0, 0x70, 0xa9, 0x64, 0xd4, 0x82, 0xbb, 0x67, 0x8f,
+	0xa3, 0x90, 0xd8, 0xf7, 0x39, 0x15, 0xc2, 0x3c, 0xe2, 0x02, 0x1d, 0x81, 0x37, 0xb2, 0x03, 0xb4,
+	0x04, 0x45, 0x4e, 0x13, 0xc6, 0xa5, 0xee, 0xae, 0xec, 0x18, 0x0b, 0xdd, 0x87, 0x79, 0x2c, 0x25,
+	0x15, 0x12, 0xcb, 0x90, 0xc5, 0xae, 0x0c, 0xfb, 0xd9, 0x43, 0x16, 0x9c, 0x3b, 0x63, 0xfe, 0x83,
+	0xb0, 0xaf, 0x45, 0x29, 0xc2, 0x20, 0xc6, 0x72, 0xc0, 0x69, 0xad, 0x90, 0xa9, 0x65, 0xe4, 0x40,
+	0xab, 0x50, 0x55, 0x46, 0x18, 0x07, 0x2e, 0xa1, 0x5c, 0xd6, 0xa6, 0x35, 0xa0, 0x62, 0x7c, 0x5b,
+	0x94, 0x4b, 0xfb, 0xd7, 0x29, 0x40, 0x97, 0xdb, 0xbe, 0x75, 0x2b, 0x8b, 0x30, 0x7d, 0x34, 0x60,
+	0x92, 0xea, 0x4e, 0xaa, 0x4e, 0x66, 0x28, 0x6f, 0xb7, 0x2f, 0x12, 0xa2, 0xab, 0xaf, 0x3a, 0x99,
+	0x81, 0xbe, 0x82, 0xd2, 0x10, 0x47, 0xa1, 0x1f, 0xca, 0x54, 0x97, 0x5c, 0x59, 0x6f, 0x4c, 0x7a,
+	0x92, 0x43, 0x83, 0x73, 0x46, 0x0c, 0xf4, 0x21, 0x80, 0x24, 0x9e, 0xab, 0x2e, 0x61, 0x20, 0x74,
+	0x47, 0x65, 0xa7, 0x2c, 0x89, 0xb7, 0xaf, 0x1d, 0xaa, 0x65, 0xec, 0x0f, 0x43, 0xc1, 0x78, 0xea,
+	0x86, 0xbe, 0xa8, 0x15, 0x1b, 0xf9, 0x66, 0xd9, 0xa9, 0x9c, 0xf9, 0x3a, 0xbe, 0x40, 0xdb, 0x00,
+	0x84, 0x45, 0x11, 0x96, 0x94, 0xe3, 0xa8, 0x36, 0xa3, 0x2b, 0xf8, 0x78, 0x52, 0x05, 0x2f, 0x0e,
+	0xb7, 0x46, 0x58, 0x67, 0x8c, 0x67, 0x3f, 0x83, 0xd2, 0xe1, 0x58, 0x4d, 0x31, 0x93, 0xae, 0x47,
+	0xbb, 0x8c, 0x67, 0x43, 0x5b, 0x70, 0xca, 0x31, 0x93, 0x9b, 0xda, 0x81, 0xde, 0x07, 0x65, 0xb8,
+	0xb8, 0x2b, 0x29, 0xd7, 0x17, 0x54, 0x70, 0x4a, 0x31, 0x93, 0x1b, 0xca, 0xb6, 0x7f, 0xb2, 0x60,
+	0xf1, 0x2a, 0xe5, 0xa1, 0xa7, 0x46, 0xf9, 0xd6, 0x6d, 0x95, 0x6f, 0x74, 0xff, 0x18, 0xf2, 0xaf,
+	0x7b, 0x67, 0x83, 0xb3, 0x3a, 0x59, 0xf4, 0x87, 0xdf, 0xed, 0x71, 0xc6, 0xba, 0x8e, 0x42, 0xdb,
+	0x07, 0x50, 0x1e, 0x79, 0xd0, 0x53, 0x98, 0xe6, 0xa1, 0x20, 0x6b, 0xa6, 0x84, 0x89, 0x3f, 0x05,
+	0x8e, 0x02, 0x8d, 0x68, 0x3b, 0x39, 0x27, 0xa3, 0x6d, 0xce, 0xc0, 0x74, 0xa2, 0x3c, 0xb6, 0x80,
+	0xb9, 0x8b, 0x18, 0xb4, 0x0c, 0xa5, 0xb0, 0x8f, 0x03, 0xea, 0x86, 0xbe, 0x11, 0xd5, 0x8c, 0xb6,
+	0x3b, 0x3e, 0x5a, 0x81, 0x92, 0xa0, 0x11, 0x25, 0x92, 0x71, 0xa3, 0xa6, 0x91, 0x8d, 0x10, 0x14,
+	0x04, 0xc5, 0x91, 0xd1, 0x93, 0xfe, 0x56, 0x53, 0xc4, 0x06, 0x32, 0x19, 0x48, 0xa3, 0x7f, 0x63,
+	0xd9, 0xbf, 0x4c, 0x41, 0x75, 0xfc, 0xf5, 0x90, 0x0d, 0xb3, 0x4a, 0x39, 0x6a, 0x80, 0xdd, 0x1f,
+	0x04, 0x8b, 0x75, 0xe2, 0xb2, 0x53, 0x91, 0xc4, 0x53, 0xd7, 0xf6, 0x5c, 0xb0, 0x18, 0x35, 0x61,
+	0xfe, 0x48, 0x15, 0x45, 0x63, 0x19, 0xca, 0x34, 0x83, 0x65, 0xc3, 0x39, 0x77, 0x44, 0x3b, 0xc6,
+	0xad, 0x91, 0x6b, 0xf0, 0x9e, 0x08, 0x8e, 0xdd, 0x30, 0x96, 0x34, 0x72, 0x39, 0x63, 0xd2, 0x25,
+	0xd8, 0xf5, 0x29, 0x37, 0xb5, 0x2d, 0x88, 0xe0, 0xb8, 0xa3, 0xce, 0x1c, 0xc6, 0xe4, 0x16, 0xde,
+	0xa6, 0x1c, 0x3d, 0x84, 0xbb, 0x8a, 0xa1, 0xd5, 0x6b, 0xa6, 0x52, 0xe1, 0xb3, 0xaa, 0xe7, 0x45,
+	0x70, 0x7c, 0x40, 0xbc, 0xfd, 0xec, 0x40, 0xc1, 0x3f, 0x87, 0xe5, 0xcb, 0x09, 0x08, 0x8f, 0x34,
+	0x29, 0x9b, 0xe4, 0xc5, 0x8b, 0x49, 0xb6, 0x78, 0xa4, 0x88, 0x9f, 0xc0, 0x1d, 0x45, 0x4c, 0x48,
+	0x6f, 0x04, 0x2f, 0x6a, 0x78, 0x55, 0x04, 0xc7, 0x7b, 0xa4, 0x97, 0xc1, 0xec, 0x1d, 0x58, 0x1a,
+	0xdf, 0x75, 0xbb, 0x34, 0x3d, 0x5b, 0x41, 0xb7, 0x1c, 0x7e, 0x7b, 0xff, 0xe2, 0x42, 0xd5, 0x91,
+	0xcc, 0x32, 0x79, 0x02, 0xf9, 0x1e, 0x4d, 0xff, 0x4b, 0x40, 0xff, 0xd2, 0xaf, 0xa2, 0xac, 0xff,
+	0x3d, 0x05, 0xd3, 0x3a, 0x2a, 0x4a, 0xa0, 0x32, 0xb6, 0x8f, 0x51, 0x7b, 0xe2, 0xa8, 0x5e, 0xbd,
+	0xd4, 0x57, 0xd6, 0x6e, 0x4e, 0x30, 0x55, 0xab, 0x99, 0xbc, 0x6a, 0x47, 0xa2, 0x27, 0xd7, 0x86,
+	0xba, 0x66, 0xad, 0xaf, 0x7c, 0xf1, 0x3f, 0x98, 0xa6, 0x9a, 0x3e, 0xc0, 0xb9, 0x1b, 0xb5, 0x6e,
+	0xd2, 0xcd, 0xf9, 0x63, 0xae, 0xb4, 0x6f, 0x8c, 0xcf, 0xd2, 0x6d, 0x3e, 0x7f, 0xf3, 0x67, 0x3d,
+	0xf7, 0xe6, 0xa4, 0x6e, 0xbd, 0x3d, 0xa9, 0x5b, 0x7f, 0x9c, 0xd4, 0xad, 0x9f, 0x4f, 0xeb, 0xb9,
+	0xb7, 0xa7, 0xf5, 0xdc, 0xef, 0xa7, 0xf5, 0xdc, 0xcb, 0x07, 0x41, 0x28, 0x5f, 0x0d, 0xbc, 0x16,
+	0x61, 0xfd, 0xb6, 0x8f, 0x25, 0x26, 0xaf, 0x70, 0x18, 0x47, 0xd8, 0x6b, 0x47, 0x24, 0x79, 0x18,
+	0xb0, 0x36, 0xa7, 0x11, 0x4e, 0xcf, 0xfe, 0xa7, 0x79, 0x45, 0xfd, 0x8f, 0xeb, 0xf1, 0x3f, 0x01,
+	0x00, 0x00, 0xff, 0xff, 0x4a, 0xe9, 0xd1, 0x83, 0xc5, 0x09, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -275,7 +792,12 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type QueryClient interface {
+	// Get the enclave information loaded in the service.
+	EnclaveInfo(ctx context.Context, in *QueryEnclaveInfoRequest, opts ...grpc.CallOption) (*QueryEnclaveInfoResponse, error)
+	// Get the available enclave keys for matching the
+	// specified MRENCLAVE and debug flag and RA type.
 	AvailableEnclaveKeys(ctx context.Context, in *QueryAvailableEnclaveKeysRequest, opts ...grpc.CallOption) (*QueryAvailableEnclaveKeysResponse, error)
+	// Get the enclave key information for the specified enclave key address.
 	EnclaveKey(ctx context.Context, in *QueryEnclaveKeyRequest, opts ...grpc.CallOption) (*QueryEnclaveKeyResponse, error)
 }
 
@@ -285,6 +807,15 @@ type queryClient struct {
 
 func NewQueryClient(cc grpc1.ClientConn) QueryClient {
 	return &queryClient{cc}
+}
+
+func (c *queryClient) EnclaveInfo(ctx context.Context, in *QueryEnclaveInfoRequest, opts ...grpc.CallOption) (*QueryEnclaveInfoResponse, error) {
+	out := new(QueryEnclaveInfoResponse)
+	err := c.cc.Invoke(ctx, "/lcp.service.enclave.v1.Query/EnclaveInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *queryClient) AvailableEnclaveKeys(ctx context.Context, in *QueryAvailableEnclaveKeysRequest, opts ...grpc.CallOption) (*QueryAvailableEnclaveKeysResponse, error) {
@@ -307,7 +838,12 @@ func (c *queryClient) EnclaveKey(ctx context.Context, in *QueryEnclaveKeyRequest
 
 // QueryServer is the server API for Query service.
 type QueryServer interface {
+	// Get the enclave information loaded in the service.
+	EnclaveInfo(context.Context, *QueryEnclaveInfoRequest) (*QueryEnclaveInfoResponse, error)
+	// Get the available enclave keys for matching the
+	// specified MRENCLAVE and debug flag and RA type.
 	AvailableEnclaveKeys(context.Context, *QueryAvailableEnclaveKeysRequest) (*QueryAvailableEnclaveKeysResponse, error)
+	// Get the enclave key information for the specified enclave key address.
 	EnclaveKey(context.Context, *QueryEnclaveKeyRequest) (*QueryEnclaveKeyResponse, error)
 }
 
@@ -315,6 +851,9 @@ type QueryServer interface {
 type UnimplementedQueryServer struct {
 }
 
+func (*UnimplementedQueryServer) EnclaveInfo(ctx context.Context, req *QueryEnclaveInfoRequest) (*QueryEnclaveInfoResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method EnclaveInfo not implemented")
+}
 func (*UnimplementedQueryServer) AvailableEnclaveKeys(ctx context.Context, req *QueryAvailableEnclaveKeysRequest) (*QueryAvailableEnclaveKeysResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AvailableEnclaveKeys not implemented")
 }
@@ -324,6 +863,24 @@ func (*UnimplementedQueryServer) EnclaveKey(ctx context.Context, req *QueryEncla
 
 func RegisterQueryServer(s grpc1.Server, srv QueryServer) {
 	s.RegisterService(&_Query_serviceDesc, srv)
+}
+
+func _Query_EnclaveInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryEnclaveInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).EnclaveInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/lcp.service.enclave.v1.Query/EnclaveInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).EnclaveInfo(ctx, req.(*QueryEnclaveInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Query_AvailableEnclaveKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -367,6 +924,10 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*QueryServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "EnclaveInfo",
+			Handler:    _Query_EnclaveInfo_Handler,
+		},
+		{
 			MethodName: "AvailableEnclaveKeys",
 			Handler:    _Query_AvailableEnclaveKeys_Handler,
 		},
@@ -377,6 +938,69 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "lcp/service/enclave/v1/query.proto",
+}
+
+func (m *QueryEnclaveInfoRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryEnclaveInfoRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryEnclaveInfoRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryEnclaveInfoResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryEnclaveInfoResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryEnclaveInfoResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.EnclaveDebug {
+		i--
+		if m.EnclaveDebug {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.Mrenclave) > 0 {
+		i -= len(m.Mrenclave)
+		copy(dAtA[i:], m.Mrenclave)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Mrenclave)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *QueryAvailableEnclaveKeysRequest) Marshal() (dAtA []byte, err error) {
@@ -399,6 +1023,21 @@ func (m *QueryAvailableEnclaveKeysRequest) MarshalToSizedBuffer(dAtA []byte) (in
 	_ = i
 	var l int
 	_ = l
+	if m.RaType != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.RaType))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.EnclaveDebug {
+		i--
+		if m.EnclaveDebug {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
 	if len(m.Mrenclave) > 0 {
 		i -= len(m.Mrenclave)
 		copy(dAtA[i:], m.Mrenclave)
@@ -466,13 +1105,101 @@ func (m *EnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Extension) > 0 {
-		i -= len(m.Extension)
-		copy(dAtA[i:], m.Extension)
-		i = encodeVarintQuery(dAtA, i, uint64(len(m.Extension)))
-		i--
-		dAtA[i] = 0x32
+	if m.KeyInfo != nil {
+		{
+			size := m.KeyInfo.Size()
+			i -= size
+			if _, err := m.KeyInfo.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *EnclaveKeyInfo_Ias) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnclaveKeyInfo_Ias) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Ias != nil {
+		{
+			size, err := m.Ias.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *EnclaveKeyInfo_Dcap) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnclaveKeyInfo_Dcap) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Dcap != nil {
+		{
+			size, err := m.Dcap.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *EnclaveKeyInfo_Zkdcap) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EnclaveKeyInfo_Zkdcap) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Zkdcap != nil {
+		{
+			size, err := m.Zkdcap.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *IASEnclaveKeyInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *IASEnclaveKeyInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IASEnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	if len(m.SigningCert) > 0 {
 		i -= len(m.SigningCert)
 		copy(dAtA[i:], m.SigningCert)
@@ -487,22 +1214,355 @@ func (m *EnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x22
 	}
+	if m.AttestationTime != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.AttestationTime))
+		i--
+		dAtA[i] = 0x18
+	}
 	if len(m.Report) > 0 {
 		i -= len(m.Report)
 		copy(dAtA[i:], m.Report)
 		i = encodeVarintQuery(dAtA, i, uint64(len(m.Report)))
 		i--
-		dAtA[i] = 0x1a
-	}
-	if m.AttestationTime != 0 {
-		i = encodeVarintQuery(dAtA, i, uint64(m.AttestationTime))
-		i--
-		dAtA[i] = 0x10
+		dAtA[i] = 0x12
 	}
 	if len(m.EnclaveKeyAddress) > 0 {
 		i -= len(m.EnclaveKeyAddress)
 		copy(dAtA[i:], m.EnclaveKeyAddress)
 		i = encodeVarintQuery(dAtA, i, uint64(len(m.EnclaveKeyAddress)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *DCAPEnclaveKeyInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DCAPEnclaveKeyInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DCAPEnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Collateral != nil {
+		{
+			size, err := m.Collateral.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x3a
+	}
+	if len(m.AdvisoryIds) > 0 {
+		for iNdEx := len(m.AdvisoryIds) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.AdvisoryIds[iNdEx])
+			copy(dAtA[i:], m.AdvisoryIds[iNdEx])
+			i = encodeVarintQuery(dAtA, i, uint64(len(m.AdvisoryIds[iNdEx])))
+			i--
+			dAtA[i] = 0x32
+		}
+	}
+	if len(m.TcbStatus) > 0 {
+		i -= len(m.TcbStatus)
+		copy(dAtA[i:], m.TcbStatus)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.TcbStatus)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.Validity != nil {
+		{
+			size, err := m.Validity.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Fmspc) > 0 {
+		i -= len(m.Fmspc)
+		copy(dAtA[i:], m.Fmspc)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Fmspc)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Quote) > 0 {
+		i -= len(m.Quote)
+		copy(dAtA[i:], m.Quote)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Quote)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.EnclaveKeyAddress) > 0 {
+		i -= len(m.EnclaveKeyAddress)
+		copy(dAtA[i:], m.EnclaveKeyAddress)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.EnclaveKeyAddress)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Validity) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Validity) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Validity) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.NotAfter != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.NotAfter))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.NotBefore != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.NotBefore))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZKDCAPEnclaveKeyInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ZKDCAPEnclaveKeyInfo) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZKDCAPEnclaveKeyInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Zkp != nil {
+		{
+			size, err := m.Zkp.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Dcap != nil {
+		{
+			size, err := m.Dcap.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZKVMProof) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ZKVMProof) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZKVMProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Proof != nil {
+		{
+			size := m.Proof.Size()
+			i -= size
+			if _, err := m.Proof.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ZKVMProof_Risc0) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ZKVMProof_Risc0) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.Risc0 != nil {
+		{
+			size, err := m.Risc0.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+func (m *Risc0ZKVMProof) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Risc0ZKVMProof) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Risc0ZKVMProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Output) > 0 {
+		i -= len(m.Output)
+		copy(dAtA[i:], m.Output)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Output)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Seal) > 0 {
+		i -= len(m.Seal)
+		copy(dAtA[i:], m.Seal)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Seal)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.Selector) > 0 {
+		i -= len(m.Selector)
+		copy(dAtA[i:], m.Selector)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Selector)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ImageId) > 0 {
+		i -= len(m.ImageId)
+		copy(dAtA[i:], m.ImageId)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.ImageId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QVCollateral) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QVCollateral) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QVCollateral) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.SgxPckCrlDer) > 0 {
+		i -= len(m.SgxPckCrlDer)
+		copy(dAtA[i:], m.SgxPckCrlDer)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.SgxPckCrlDer)))
+		i--
+		dAtA[i] = 0x32
+	}
+	if len(m.SgxIntelRootCaCrlDer) > 0 {
+		i -= len(m.SgxIntelRootCaCrlDer)
+		copy(dAtA[i:], m.SgxIntelRootCaCrlDer)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.SgxIntelRootCaCrlDer)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if len(m.SgxTcbSigningDer) > 0 {
+		i -= len(m.SgxTcbSigningDer)
+		copy(dAtA[i:], m.SgxTcbSigningDer)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.SgxTcbSigningDer)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.SgxIntelRootCaDer) > 0 {
+		i -= len(m.SgxIntelRootCaDer)
+		copy(dAtA[i:], m.SgxIntelRootCaDer)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.SgxIntelRootCaDer)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.QeIdentityJson) > 0 {
+		i -= len(m.QeIdentityJson)
+		copy(dAtA[i:], m.QeIdentityJson)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.QeIdentityJson)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.TcbInfoJson) > 0 {
+		i -= len(m.TcbInfoJson)
+		copy(dAtA[i:], m.TcbInfoJson)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.TcbInfoJson)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -585,6 +1645,31 @@ func encodeVarintQuery(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *QueryEnclaveInfoRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *QueryEnclaveInfoResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Mrenclave)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	if m.EnclaveDebug {
+		n += 2
+	}
+	return n
+}
+
 func (m *QueryAvailableEnclaveKeysRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -594,6 +1679,12 @@ func (m *QueryAvailableEnclaveKeysRequest) Size() (n int) {
 	l = len(m.Mrenclave)
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
+	}
+	if m.EnclaveDebug {
+		n += 2
+	}
+	if m.RaType != 0 {
+		n += 1 + sovQuery(uint64(m.RaType))
 	}
 	return n
 }
@@ -619,16 +1710,64 @@ func (m *EnclaveKeyInfo) Size() (n int) {
 	}
 	var l int
 	_ = l
+	if m.KeyInfo != nil {
+		n += m.KeyInfo.Size()
+	}
+	return n
+}
+
+func (m *EnclaveKeyInfo_Ias) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Ias != nil {
+		l = m.Ias.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *EnclaveKeyInfo_Dcap) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Dcap != nil {
+		l = m.Dcap.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *EnclaveKeyInfo_Zkdcap) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Zkdcap != nil {
+		l = m.Zkdcap.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *IASEnclaveKeyInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
 	l = len(m.EnclaveKeyAddress)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Report)
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
 	}
 	if m.AttestationTime != 0 {
 		n += 1 + sovQuery(uint64(m.AttestationTime))
-	}
-	l = len(m.Report)
-	if l > 0 {
-		n += 1 + l + sovQuery(uint64(l))
 	}
 	l = len(m.Signature)
 	if l > 0 {
@@ -638,7 +1777,156 @@ func (m *EnclaveKeyInfo) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
 	}
-	l = len(m.Extension)
+	return n
+}
+
+func (m *DCAPEnclaveKeyInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.EnclaveKeyAddress)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Quote)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Fmspc)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	if m.Validity != nil {
+		l = m.Validity.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.TcbStatus)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	if len(m.AdvisoryIds) > 0 {
+		for _, s := range m.AdvisoryIds {
+			l = len(s)
+			n += 1 + l + sovQuery(uint64(l))
+		}
+	}
+	if m.Collateral != nil {
+		l = m.Collateral.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *Validity) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NotBefore != 0 {
+		n += 1 + sovQuery(uint64(m.NotBefore))
+	}
+	if m.NotAfter != 0 {
+		n += 1 + sovQuery(uint64(m.NotAfter))
+	}
+	return n
+}
+
+func (m *ZKDCAPEnclaveKeyInfo) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Dcap != nil {
+		l = m.Dcap.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	if m.Zkp != nil {
+		l = m.Zkp.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *ZKVMProof) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Proof != nil {
+		n += m.Proof.Size()
+	}
+	return n
+}
+
+func (m *ZKVMProof_Risc0) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Risc0 != nil {
+		l = m.Risc0.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+func (m *Risc0ZKVMProof) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ImageId)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Selector)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Seal)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.Output)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QVCollateral) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.TcbInfoJson)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.QeIdentityJson)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.SgxIntelRootCaDer)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.SgxTcbSigningDer)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.SgxIntelRootCaCrlDer)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = len(m.SgxPckCrlDer)
 	if l > 0 {
 		n += 1 + l + sovQuery(uint64(l))
 	}
@@ -676,6 +1964,160 @@ func sovQuery(x uint64) (n int) {
 }
 func sozQuery(x uint64) (n int) {
 	return sovQuery(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *QueryEnclaveInfoRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryEnclaveInfoRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryEnclaveInfoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryEnclaveInfoResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryEnclaveInfoResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryEnclaveInfoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mrenclave", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Mrenclave = append(m.Mrenclave[:0], dAtA[iNdEx:postIndex]...)
+			if m.Mrenclave == nil {
+				m.Mrenclave = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveDebug", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.EnclaveDebug = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *QueryAvailableEnclaveKeysRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -740,6 +2182,45 @@ func (m *QueryAvailableEnclaveKeysRequest) Unmarshal(dAtA []byte) error {
 				m.Mrenclave = []byte{}
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveDebug", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.EnclaveDebug = bool(v != 0)
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RaType", wireType)
+			}
+			m.RaType = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RaType |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipQuery(dAtA[iNdEx:])
@@ -876,6 +2357,161 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Ias", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &IASEnclaveKeyInfo{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.KeyInfo = &EnclaveKeyInfo_Ias{v}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Dcap", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &DCAPEnclaveKeyInfo{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.KeyInfo = &EnclaveKeyInfo_Dcap{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Zkdcap", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &ZKDCAPEnclaveKeyInfo{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.KeyInfo = &EnclaveKeyInfo_Zkdcap{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *IASEnclaveKeyInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IASEnclaveKeyInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IASEnclaveKeyInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveKeyAddress", wireType)
 			}
 			var byteLen int
@@ -909,25 +2545,6 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx = postIndex
 		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AttestationTime", wireType)
-			}
-			m.AttestationTime = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowQuery
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.AttestationTime |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Report", wireType)
 			}
@@ -959,6 +2576,25 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.Report = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AttestationTime", wireType)
+			}
+			m.AttestationTime = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AttestationTime |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
@@ -1027,9 +2663,59 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 				m.SigningCert = []byte{}
 			}
 			iNdEx = postIndex
-		case 6:
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DCAPEnclaveKeyInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DCAPEnclaveKeyInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DCAPEnclaveKeyInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Extension", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field EnclaveKeyAddress", wireType)
 			}
 			var byteLen int
 			for shift := uint(0); ; shift += 7 {
@@ -1056,9 +2742,944 @@ func (m *EnclaveKeyInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Extension = append(m.Extension[:0], dAtA[iNdEx:postIndex]...)
-			if m.Extension == nil {
-				m.Extension = []byte{}
+			m.EnclaveKeyAddress = append(m.EnclaveKeyAddress[:0], dAtA[iNdEx:postIndex]...)
+			if m.EnclaveKeyAddress == nil {
+				m.EnclaveKeyAddress = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Quote", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Quote = append(m.Quote[:0], dAtA[iNdEx:postIndex]...)
+			if m.Quote == nil {
+				m.Quote = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Fmspc", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Fmspc = append(m.Fmspc[:0], dAtA[iNdEx:postIndex]...)
+			if m.Fmspc == nil {
+				m.Fmspc = []byte{}
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Validity", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Validity == nil {
+				m.Validity = &Validity{}
+			}
+			if err := m.Validity.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TcbStatus", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TcbStatus = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AdvisoryIds", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.AdvisoryIds = append(m.AdvisoryIds, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Collateral", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Collateral == nil {
+				m.Collateral = &QVCollateral{}
+			}
+			if err := m.Collateral.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Validity) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Validity: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Validity: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NotBefore", wireType)
+			}
+			m.NotBefore = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NotBefore |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NotAfter", wireType)
+			}
+			m.NotAfter = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NotAfter |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZKDCAPEnclaveKeyInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZKDCAPEnclaveKeyInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZKDCAPEnclaveKeyInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Dcap", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Dcap == nil {
+				m.Dcap = &DCAPEnclaveKeyInfo{}
+			}
+			if err := m.Dcap.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Zkp", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Zkp == nil {
+				m.Zkp = &ZKVMProof{}
+			}
+			if err := m.Zkp.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ZKVMProof) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZKVMProof: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZKVMProof: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Risc0", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &Risc0ZKVMProof{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Proof = &ZKVMProof_Risc0{v}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Risc0ZKVMProof) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Risc0ZKVMProof: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Risc0ZKVMProof: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ImageId", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ImageId = append(m.ImageId[:0], dAtA[iNdEx:postIndex]...)
+			if m.ImageId == nil {
+				m.ImageId = []byte{}
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Selector", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Selector = append(m.Selector[:0], dAtA[iNdEx:postIndex]...)
+			if m.Selector == nil {
+				m.Selector = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Seal", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Seal = append(m.Seal[:0], dAtA[iNdEx:postIndex]...)
+			if m.Seal == nil {
+				m.Seal = []byte{}
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Output", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Output = append(m.Output[:0], dAtA[iNdEx:postIndex]...)
+			if m.Output == nil {
+				m.Output = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QVCollateral) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QVCollateral: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QVCollateral: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TcbInfoJson", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TcbInfoJson = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field QeIdentityJson", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.QeIdentityJson = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SgxIntelRootCaDer", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SgxIntelRootCaDer = append(m.SgxIntelRootCaDer[:0], dAtA[iNdEx:postIndex]...)
+			if m.SgxIntelRootCaDer == nil {
+				m.SgxIntelRootCaDer = []byte{}
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SgxTcbSigningDer", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SgxTcbSigningDer = append(m.SgxTcbSigningDer[:0], dAtA[iNdEx:postIndex]...)
+			if m.SgxTcbSigningDer == nil {
+				m.SgxTcbSigningDer = []byte{}
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SgxIntelRootCaCrlDer", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SgxIntelRootCaCrlDer = append(m.SgxIntelRootCaCrlDer[:0], dAtA[iNdEx:postIndex]...)
+			if m.SgxIntelRootCaCrlDer == nil {
+				m.SgxIntelRootCaCrlDer = []byte{}
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SgxPckCrlDer", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.SgxPckCrlDer = append(m.SgxPckCrlDer[:0], dAtA[iNdEx:postIndex]...)
+			if m.SgxPckCrlDer == nil {
+				m.SgxPckCrlDer = []byte{}
 			}
 			iNdEx = postIndex
 		default:

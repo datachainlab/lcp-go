@@ -14,6 +14,7 @@ import (
 	commitmenttypes "github.com/cosmos/ibc-go/v8/modules/core/23-commitment/types"
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/lcp-go/sgx/dcap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -27,8 +28,8 @@ const (
 var _ exported.ClientState = (*ClientState)(nil)
 
 func (cs ClientState) Validate() error {
-	if cs.KeyExpiration == 0 {
-		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`KeyExpiration` must be non-zero")
+	if len(cs.ZkdcapVerifierInfos) == 0 && cs.KeyExpiration == 0 {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`KeyExpiration` must be non-zero if zkDCAP is not enabled")
 	}
 	if l := len(cs.Mrenclave); l != MrenclaveSize {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`Mrenclave` length must be %v, but got %v", MrenclaveSize, l)
@@ -42,6 +43,21 @@ func (cs ClientState) ClientType() string {
 
 func (cs ClientState) GetLatestHeight() exported.Height {
 	return cs.LatestHeight
+}
+
+func (cs ClientState) GetZKDCAPVerifierInfos() ([]*dcap.ZKDCAPVerifierInfo, error) {
+	if !cs.IsZKDCAPEnabled() {
+		return nil, errorsmod.Wrapf(clienttypes.ErrInvalidClient, "zkdcap is not enabled")
+	}
+	var vis []*dcap.ZKDCAPVerifierInfo
+	for _, bz := range cs.ZkdcapVerifierInfos {
+		vi, err := dcap.ParseZKDCAPVerifierInfo(bz)
+		if err != nil {
+			return nil, err
+		}
+		vis = append(vis, vi)
+	}
+	return vis, nil
 }
 
 func (cs ClientState) GetTimestampAtHeight(
@@ -71,7 +87,29 @@ func (cs ClientState) Initialize(_ sdk.Context, cdc codec.BinaryCodec, clientSto
 	if !ok {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidConsensus, "unexpected consensus state type: expected=%T got=%T", &ConsensusState{}, consensusState)
 	}
-
+	if l := len(cs.ZkdcapVerifierInfos); l > 0 {
+		if l == 1 {
+			vi, err := dcap.ParseZKDCAPVerifierInfo(cs.ZkdcapVerifierInfos[0])
+			if err != nil {
+				return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "failed to parse zkDCAP verifier info: %v", err)
+			}
+			if !vi.IsRISC0() {
+				return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid ZKVM type: %v", vi.ZKVMType)
+			}
+		} else {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "currently only one zkDCAP verifier info is supported")
+		}
+		if cs.CurrentTcbEvaluationDataNumber == 0 {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`CurrentTcbEvaluationDataNumber` must be non-zero")
+		}
+		// check if both next_tcb_evaluation_data_number and next_tcb_evaluation_data_number_update_time are zero or non-zero
+		if (cs.NextTcbEvaluationDataNumber == 0) != (cs.NextTcbEvaluationDataNumberUpdateTime == 0) {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid next TCB evaluation data number info")
+		}
+		if cs.NextTcbEvaluationDataNumber != 0 && cs.CurrentTcbEvaluationDataNumber >= cs.NextTcbEvaluationDataNumber {
+			return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "invalid TCB evaluation data number info")
+		}
+	}
 	if cs.OperatorsNonce != 0 {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidClient, "`OperatorsNonce` must be zero")
 	}
