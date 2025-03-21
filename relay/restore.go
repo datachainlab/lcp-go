@@ -23,11 +23,11 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("client '%v' already exists", elcClientID)
 	}
 
-	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
+	cplatestHeight, err := counterparty.LatestHeight(ctx)
 	if err != nil {
 		return err
 	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
 	if err != nil {
 		return fmt.Errorf("failed to query client state: height=%v %w", cplatestHeight, err)
 	}
@@ -45,7 +45,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 
 	pr.getLogger().Info("try to restore ELC state", "height", restoreHeight)
 
-	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(context.TODO(), cplatestHeight), restoreHeight)
+	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(ctx, cplatestHeight), restoreHeight)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("allowed advisory ids mismatch: expected %v, but got %v", pr.config.AllowedAdvisoryIds, clientState.AllowedAdvisoryIds)
 	}
 
-	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(context.TODO(), clientState.LatestHeight)
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(ctx, clientState.LatestHeight)
 	if err != nil {
 		return fmt.Errorf("failed to create initial light client state: height=%v %w", clientState.LatestHeight, err)
 	}
@@ -87,11 +87,11 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 	if err != nil {
 		return err
 	}
-	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
+	tmpEKI, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
 		return err
 	}
-	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+	res, err := pr.lcpServiceClient.CreateClient(ctx, &elc.MsgCreateClient{
 		ClientId:       elcClientID,
 		ClientState:    originAnyClientState,
 		ConsensusState: originAnyConsensusState,

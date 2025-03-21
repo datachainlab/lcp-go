@@ -76,7 +76,7 @@ func (pr *Prover) GetOriginProver() core.Prover {
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
 	pr.homePath = homePath
 	pr.codec = codec
-	res, err := pr.lcpServiceClient.EnclaveInfo(context.TODO(), &enclave.QueryEnclaveInfoRequest{})
+	res, err := pr.lcpServiceClient.EnclaveInfo(context.Background(), &enclave.QueryEnclaveInfoRequest{})
 	if err != nil {
 		return fmt.Errorf("failed to get enclave info: %w", err)
 	}
@@ -151,7 +151,7 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 
 	consensusState := &lcptypes.ConsensusState{}
 
-	if res, err := pr.createELC(pr.config.ElcClientId, height); err != nil {
+	if res, err := pr.createELC(ctx, pr.config.ElcClientId, height); err != nil {
 		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
 	} else if res == nil {
 		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
@@ -164,18 +164,18 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 // GetLatestFinalizedHeader returns the latest finalized header on this chain
 // The returned header is expected to be the latest one of headers that can be verified by the light client
 func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, error) {
-	return pr.originProver.GetLatestFinalizedHeader(context.TODO())
+	return pr.originProver.GetLatestFinalizedHeader(ctx)
 }
 
-// SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterpaty chain
+// SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterparty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]core.Header, error) {
-	if err := pr.UpdateEKIfNeeded(context.TODO(), dstChain); err != nil {
+	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(context.TODO(), dstChain, latestFinalizedHeader)
+	headers, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
@@ -197,7 +197,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 			IncludeState: false,
 			Signer:       pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
 		}
-		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &m)
+		res, err := pr.lcpServiceClient.UpdateClient(ctx, &m)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v msg=%v %w", i, pr.config.ElcClientId, m, err)
 		}
@@ -213,7 +213,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().Info("aggregate messages", "num_messages", len(messages))
-		update, err := aggregateMessages(pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
 			return nil, err
 		}
@@ -233,6 +233,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 type MessageAggregator func(ctx context.Context, in *elc.MsgAggregateMessages, opts ...grpc.CallOption) (*elc.MsgAggregateMessagesResponse, error)
 
 func aggregateMessages(
+	ctx context.Context,
 	logger *log.RelayLogger,
 	batchSize uint64,
 	messageAggregator MessageAggregator,
@@ -264,7 +265,7 @@ func aggregateMessages(
 					Messages:   batches[0].Messages,
 					Signatures: batches[0].Signatures,
 				}
-				resp, err := messageAggregator(context.TODO(), &m)
+				resp, err := messageAggregator(ctx, &m)
 				if err != nil {
 					return nil, fmt.Errorf("failed to aggregate messages: msg=%v %w", m, err)
 				}
@@ -291,7 +292,7 @@ func aggregateMessages(
 					Messages:   b.Messages,
 					Signatures: b.Signatures,
 				}
-				resp, err := messageAggregator(context.TODO(), &m)
+				resp, err := messageAggregator(ctx, &m)
 				if err != nil {
 					return nil, fmt.Errorf("failed to aggregate messages: batch_index=%v msg=%v %w", i, m, err)
 				}
@@ -332,7 +333,7 @@ func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, 
 }
 
 func (pr *Prover) CheckRefreshRequired(ctx context.Context, counterparty core.ChainInfoICS02Querier) (bool, error) {
-	return pr.originProver.CheckRefreshRequired(context.TODO(), counterparty)
+	return pr.originProver.CheckRefreshRequired(ctx, counterparty)
 }
 
 func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) ([]byte, clienttypes.Height, error) {

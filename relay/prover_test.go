@@ -177,7 +177,7 @@ func TestAggregateMessages(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			require := require.New(t)
-			res, err := aggregateMessages(logger, c.BatchSize, mockMessageAggregator, c.Messages, c.Signatures, c.Signer)
+			res, err := aggregateMessages(context.Background(), logger, c.BatchSize, mockMessageAggregator, c.Messages, c.Signatures, c.Signer)
 			if c.Error {
 				require.Error(err)
 				return

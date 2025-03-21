@@ -39,7 +39,7 @@ func (pr *Prover) GetOperatorsThreshold() Fraction {
 	return pr.config.OperatorsThreshold
 }
 
-func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
+func (pr *Prover) updateOperators(ctx context.Context, counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
 	if !pr.IsOperatorEnabled() {
 		return fmt.Errorf("operator is not enabled")
 	} else if pr.config.OperatorsEip712Params == nil {
@@ -54,11 +54,11 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if threshold.Numerator > threshold.Denominator {
 		return fmt.Errorf("new operators threshold numerator cannot be greater than denominator: %s", threshold.String())
 	}
-	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
+	cplatestHeight, err := counterparty.LatestHeight(ctx)
 	if err != nil {
 		return err
 	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	} else if l > 1 {
 		return fmt.Errorf("currently only one operator is supported, but got %v", l)
 	}
-	opSigner, err := pr.eip712Signer.GetSignerAddress()
+	opSigner, err := pr.eip712Signer.GetSignerAddress(ctx)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if err != nil {
 		return err
 	}
-	sig, err := pr.eip712Signer.Sign(commitment)
+	sig, err := pr.eip712Signer.Sign(ctx, commitment)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (pr *Prover) updateOperators(counterparty core.Chain, nonce uint64, newOper
 	if err != nil {
 		return err
 	}
-	if _, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg}); err != nil {
+	if _, err := counterparty.SendMsgs(ctx, []sdk.Msg{msg}); err != nil {
 		return err
 	}
 	return nil
@@ -128,12 +128,12 @@ func NewEIP712Signer(signer signer.Signer) *EIP712Signer {
 	return &EIP712Signer{signer: signer}
 }
 
-func (s EIP712Signer) Sign(commitment [32]byte) ([]byte, error) {
-	return s.signer.Sign(context.TODO(), commitment[:])
+func (s EIP712Signer) Sign(ctx context.Context, commitment [32]byte) ([]byte, error) {
+	return s.signer.Sign(ctx, commitment[:])
 }
 
-func (s EIP712Signer) GetSignerAddress() (common.Address, error) {
-	pub, err := s.signer.GetPublicKey(context.TODO())
+func (s EIP712Signer) GetSignerAddress(ctx context.Context) (common.Address, error) {
+	pub, err := s.signer.GetPublicKey(ctx)
 	if err != nil {
 		return common.Address{}, err
 	}
