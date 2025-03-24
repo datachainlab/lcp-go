@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -44,7 +45,7 @@ type EIP712DomainParams struct {
 }
 
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
-func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
+func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
 	updateNeeded, err := pr.loadEKIAndCheckUpdateNeeded(ctx, counterparty)
 	if err != nil {
 		return fmt.Errorf("failed to call loadEKIAndCheckUpdateNeeded: %w", err)
@@ -68,12 +69,12 @@ func (pr *Prover) UpdateEKIfNeeded(ctx context.Context, counterparty core.Finali
 
 	pr.getLogger().Info("try to register a new enclave key", "eki", eki)
 
-	msgID, err := pr.registerEnclaveKey(counterparty, eki)
+	msgID, err := pr.registerEnclaveKey(ctx, counterparty, eki)
 	if err != nil {
 		return fmt.Errorf("failed to call registerEnclaveKey: %w", err)
 	}
 	pr.getLogger().Info("registered a new enclave key", "enclave_key", eki.GetEnclaveKeyAddress(), "msg_id", msgID.String())
-	finalized, success, err := pr.checkMsgStatus(counterparty, msgID)
+	finalized, success, err := pr.checkMsgStatus(ctx, counterparty, msgID)
 	if err != nil {
 		return fmt.Errorf("failed to call checkMsgStatus: %w", err)
 	} else if !success {
@@ -136,17 +137,17 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, now time.Time, eki *
 	return false
 }
 
-// isFinalizedMsg checks if the given msg is finalized in the origin chain
+// checkMsgStatus checks if the given msg is finalized in the origin chain
 // and returns (finalized, success, error)
 // finalized: true if the msg is finalized
 // success: true if the msg is successfully executed in the origin chain
 // error: non-nil if the msg may not exist in the origin chain
-func (pr *Prover) checkMsgStatus(counterparty core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
-	lfHeader, err := counterparty.GetLatestFinalizedHeader(context.TODO())
+func (pr *Prover) checkMsgStatus(ctx context.Context, counterparty core.FinalityAwareChain, msgID core.MsgID) (bool, bool, error) {
+	lfHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return false, false, err
 	}
-	msgRes, err := counterparty.GetMsgResult(context.TODO(), msgID)
+	msgRes, err := counterparty.GetMsgResult(ctx, msgID)
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
@@ -201,7 +202,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 
 	pr.getLogger().Info("active enclave key is unfinalized")
 
-	if _, err := counterparty.GetMsgResult(context.TODO(), pr.unfinalizedMsgID); err != nil {
+	if _, err := counterparty.GetMsgResult(ctx, pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		pr.getLogger().Info("the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
@@ -210,7 +211,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 		return true, nil
 	}
 
-	finalized, success, err := pr.checkMsgStatus(counterparty, pr.unfinalizedMsgID)
+	finalized, success, err := pr.checkMsgStatus(ctx, counterparty, pr.unfinalizedMsgID)
 	pr.getLogger().Info("check the unfinalized msg status", "msg_id", pr.unfinalizedMsgID.String(), "finalized", finalized, "success", success, "error", err)
 	if err != nil {
 		return false, err
@@ -366,18 +367,18 @@ func (pr *Prover) validateAdvisoryIDs(ids []string) bool {
 	return targetSet.Difference(allowedSet).Cardinality() == 0
 }
 
-func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUpdateClientResponse, error) {
+func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeState bool) ([]*elc.MsgUpdateClientResponse, error) {
 
 	// 1. check if the latest height of the client is less than the given height
 
-	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
+	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
 	}
 	if !res.Found {
 		return nil, fmt.Errorf("client not found: client_id=%v", elcClientID)
 	}
-	latestHeader, err := pr.originProver.GetLatestFinalizedHeader(context.TODO())
+	latestHeader, err := pr.originProver.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +396,7 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 
 	// 2. query the header from the upstream chain
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(context.TODO(), NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
+	headers, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +411,7 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 		if err != nil {
 			return nil, err
 		}
-		res, err := pr.lcpServiceClient.UpdateClient(context.TODO(), &elc.MsgUpdateClient{
+		res, err := pr.lcpServiceClient.UpdateClient(ctx, &elc.MsgUpdateClient{
 			ClientId:     elcClientID,
 			Header:       anyHeader,
 			IncludeState: includeState,
@@ -425,12 +426,12 @@ func (pr *Prover) updateELC(elcClientID string, includeState bool) ([]*elc.MsgUp
 	return responses, nil
 }
 
-func (pr *Prover) registerEnclaveKey(counterparty core.FinalityAwareChain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.FinalityAwareChain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
 	switch v := eki.KeyInfo.(type) {
 	case *enclave.EnclaveKeyInfo_Ias:
-		return pr.registerIASEnclaveKey(counterparty, v.Ias)
+		return pr.registerIASEnclaveKey(ctx, counterparty, v.Ias)
 	case *enclave.EnclaveKeyInfo_Zkdcap:
-		return pr.registerZKDCAPEnclaveKey(counterparty, v.Zkdcap)
+		return pr.registerZKDCAPEnclaveKey(ctx, counterparty, v.Zkdcap)
 	case *enclave.EnclaveKeyInfo_Dcap:
 		return nil, errors.New("DCAP enclave key is not supported yet")
 	default:
@@ -438,7 +439,7 @@ func (pr *Prover) registerEnclaveKey(counterparty core.FinalityAwareChain, eki *
 	}
 }
 
-func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IASEnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.Chain, eki *enclave.IASEnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, fmt.Errorf("failed to verify AVR signature: %w", err)
@@ -462,11 +463,11 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		SigningCert:       eki.SigningCert,
 		OperatorSignature: nil,
 	}
-	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
+	cplatestHeight, err := counterparty.LatestHeight(ctx)
 	if err != nil {
 		return nil, err
 	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
 	if err != nil {
 		return nil, err
 	}
@@ -482,11 +483,11 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		return nil, fmt.Errorf("MRENCLAVE mismatch: expected 0x%x, but got 0x%x", clientState.Mrenclave, quote.Report.MRENCLAVE[:])
 	}
 	if pr.IsOperatorEnabled() {
-		operator, err := pr.eip712Signer.GetSignerAddress()
+		operator, err := pr.eip712Signer.GetSignerAddress(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+		if operators := clientState.GetOperators(); !slices.Contains(operators, operator) {
 			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
 		}
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
@@ -496,7 +497,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 		if err != nil {
 			return nil, err
 		}
-		sig, err := pr.eip712Signer.Sign(commitment)
+		sig, err := pr.eip712Signer.Sign(ctx, commitment)
 		if err != nil {
 			return nil, err
 		}
@@ -511,7 +512,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 	if err != nil {
 		return nil, err
 	}
-	ids, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs(ctx, []sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +522,7 @@ func (pr *Prover) registerIASEnclaveKey(counterparty core.Chain, eki *enclave.IA
 	return ids[0], nil
 }
 
-func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave.ZKDCAPEnclaveKeyInfo) (core.MsgID, error) {
+func (pr *Prover) registerZKDCAPEnclaveKey(ctx context.Context, counterparty core.Chain, eki *enclave.ZKDCAPEnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	zkp := eki.Zkp.GetRisc0()
 	if zkp == nil {
@@ -550,11 +551,11 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 	if err != nil {
 		return nil, err
 	}
-	cplatestHeight, err := counterparty.LatestHeight(context.TODO())
+	cplatestHeight, err := counterparty.LatestHeight(ctx)
 	if err != nil {
 		return nil, err
 	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(context.TODO(), cplatestHeight))
+	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
 	if err != nil {
 		return nil, err
 	}
@@ -585,11 +586,11 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 		return nil, fmt.Errorf("failed to verify RISC0 ZKDCAP proof: %w", err)
 	}
 	if pr.IsOperatorEnabled() {
-		operator, err := pr.eip712Signer.GetSignerAddress()
+		operator, err := pr.eip712Signer.GetSignerAddress(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if operators := clientState.GetOperators(); !containsOperator(operators, operator) {
+		if operators := clientState.GetOperators(); !slices.Contains(operators, operator) {
 			return nil, fmt.Errorf("the operator is not included in the operators: client_state.operators=%v operator=%v", operators, operator)
 		}
 		if expectedOperator != [20]byte{} && operator != expectedOperator {
@@ -599,7 +600,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 		if err != nil {
 			return nil, err
 		}
-		sig, err := pr.eip712Signer.Sign(commitment)
+		sig, err := pr.eip712Signer.Sign(ctx, commitment)
 		if err != nil {
 			return nil, err
 		}
@@ -614,7 +615,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(counterparty core.Chain, eki *enclave
 	if err != nil {
 		return nil, err
 	}
-	ids, err := counterparty.SendMsgs(context.TODO(), []sdk.Msg{msg})
+	ids, err := counterparty.SendMsgs(ctx, []sdk.Msg{msg})
 	if err != nil {
 		return nil, err
 	}
@@ -719,8 +720,8 @@ type CreateELCResult struct {
 }
 
 // height: 0 means the latest height
-func (pr *Prover) doCreateELC(elcClientID string, height uint64) (*CreateELCResult, error) {
-	header, err := pr.originProver.GetLatestFinalizedHeader(context.TODO())
+func (pr *Prover) doCreateELC(ctx context.Context, elcClientID string, height uint64) (*CreateELCResult, error) {
+	header, err := pr.originProver.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +733,7 @@ func (pr *Prover) doCreateELC(elcClientID string, height uint64) (*CreateELCResu
 	}
 	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
 	pr.getLogger().Info("try to create ELC client", "elc_client_id", elcClientID, "height", h)
-	res, err := pr.createELC(elcClientID, h)
+	res, err := pr.createELC(ctx, elcClientID, h)
 	if err != nil {
 		return nil, err
 	} else if res == nil {
@@ -760,9 +761,9 @@ type UpdateELCResult struct {
 	Messages []*lcptypes.UpdateStateProxyMessage `json:"messages"`
 }
 
-func (pr *Prover) doUpdateELC(elcClientID string) (*UpdateELCResult, error) {
+func (pr *Prover) doUpdateELC(ctx context.Context, elcClientID string) (*UpdateELCResult, error) {
 	if pr.activeEnclaveKey == nil {
-		eki, err := pr.selectNewEnclaveKey(context.TODO())
+		eki, err := pr.selectNewEnclaveKey(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -770,7 +771,7 @@ func (pr *Prover) doUpdateELC(elcClientID string) (*UpdateELCResult, error) {
 		pr.activeEnclaveKey = eki
 	}
 	pr.getLogger().Info("try to update the ELC client", "elc_client_id", elcClientID)
-	updates, err := pr.updateELC(elcClientID, false)
+	updates, err := pr.updateELC(ctx, elcClientID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -798,15 +799,6 @@ func (pr *Prover) doUpdateELC(elcClientID string) (*UpdateELCResult, error) {
 	}, nil
 }
 
-func containsOperator(operators []common.Address, operator common.Address) bool {
-	for _, op := range operators {
-		if op == operator {
-			return true
-		}
-	}
-	return false
-}
-
 type QueryELCResult struct {
 	// if false, `Raw` and `Decoded` are empty
 	Found bool `json:"found"`
@@ -826,8 +818,8 @@ type Any struct {
 	Value   []byte `json:"value"`
 }
 
-func (pr *Prover) doQueryELC(elcClientID string) (*QueryELCResult, error) {
-	r, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
+func (pr *Prover) doQueryELC(ctx context.Context, elcClientID string) (*QueryELCResult, error) {
+	r, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
 	} else if !r.Found {
@@ -862,19 +854,19 @@ func (pr *Prover) doQueryELC(elcClientID string) (*QueryELCResult, error) {
 	return &result, nil
 }
 
-func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc.MsgCreateClientResponse, error) {
-	res, err := pr.lcpServiceClient.Client(context.TODO(), &elc.QueryClientRequest{ClientId: elcClientID})
+func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibcexported.Height) (*elc.MsgCreateClientResponse, error) {
+	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
 	} else if res.Found {
 		return nil, nil
 	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
-	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
+	tmpEKI, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
 		return nil, err
 	}
-	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(context.TODO(), height)
+	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(ctx, height)
 	if err != nil {
 		return nil, err
 	}
@@ -886,7 +878,7 @@ func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc
 	if err != nil {
 		return nil, err
 	}
-	return pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
+	return pr.lcpServiceClient.CreateClient(ctx, &elc.MsgCreateClient{
 		ClientId:       elcClientID,
 		ClientState:    anyOriginClientState,
 		ConsensusState: anyOriginConsensusState,
@@ -894,9 +886,9 @@ func (pr *Prover) createELC(elcClientID string, height ibcexported.Height) (*elc
 	})
 }
 
-func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
+func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
 	srcProver := src.Prover.(*Prover)
-	if err := srcProver.UpdateEKIfNeeded(context.TODO(), dst); err != nil {
+	if err := srcProver.UpdateEKIIfNeeded(ctx, dst); err != nil {
 		return err
 	}
 
@@ -906,14 +898,14 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryIn
 	var updates []*elc.MsgUpdateClientResponse
 	if err := retry.Do(func() error {
 		var err error
-		updates, err = srcProver.updateELC(srcProver.config.ElcClientId, true)
+		updates, err = srcProver.updateELC(ctx, srcProver.config.ElcClientId, true)
 		if err != nil {
 			return err
 		} else if len(updates) == 0 {
 			return fmt.Errorf("no available updates: elc_client_id=%v", srcProver.config.ElcClientId)
 		}
 		return nil
-	}, retry.Attempts(retryMaxAttempts+1), retry.Delay(retryInterval)); err != nil {
+	}, retry.Attempts(retryMaxAttempts+1), retry.Delay(retryInterval), retry.Context(ctx)); err != nil {
 		return err
 	}
 
@@ -940,7 +932,7 @@ func activateClient(pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryIn
 	}
 
 	// 3. Submit the msgs to the LCP Client
-	if _, err := dst.SendMsgs(context.TODO(), msgs); err != nil {
+	if _, err := dst.SendMsgs(ctx, msgs); err != nil {
 		return err
 	}
 	return nil
