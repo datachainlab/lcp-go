@@ -7,6 +7,7 @@ E2E_TEST_DIR=./tests/e2e/cases/tm2tm
 OPERATORS_ENABLED=false
 NO_RUN_LCP=false
 export LCP_ENCLAVE_DEBUG=0
+# should be 0 or greater than `key_update_buffer_time` in the config
 export LCP_KEY_EXPIRATION=86400
 # LCP_RISC0_IMAGE_ID must be set to the same value as in the LCP service
 LCP_RISC0_IMAGE_ID=${LCP_RISC0_IMAGE_ID:-0x7238627eef5fe9a95d8cadd1a74c3bb1f703cf312699ce93f4c8aa448f122e6f}
