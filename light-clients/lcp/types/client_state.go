@@ -21,7 +21,7 @@ import (
 
 const (
 	ModuleName    = "lcp"
-	ClientTypeLCP = "lcp-client"
+	ClientTypeLCP = "lcp-client-zkdcap"
 	MrenclaveSize = 32
 )
 
