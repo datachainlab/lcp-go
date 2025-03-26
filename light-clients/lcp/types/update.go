@@ -691,9 +691,9 @@ func (cs ClientState) GetOperators() []common.Address {
 
 func (cs ClientState) GetDCAPKeyExpiredAt(validity dcap.ValidityIntersection) time.Time {
 	if cs.KeyExpiration == 0 {
-		return time.Unix(int64(validity.NotAfterMin), 0)
+		return time.Unix(int64(validity.NotAfterMin+1), 0)
 	}
-	return time.Unix(int64(min(validity.NotAfterMin, validity.NotBeforeMax+cs.KeyExpiration)), 0)
+	return time.Unix(int64(min(validity.NotAfterMin+1, validity.NotBeforeMax+cs.KeyExpiration)), 0)
 }
 
 func (cs ClientState) getKeyExpiration() time.Duration {
