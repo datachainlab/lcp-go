@@ -30,13 +30,13 @@ func (eki *EnclaveKeyInfo) GetExpiredAt(keyExpiration time.Duration) time.Time {
 }
 
 func calculateDCAPKeyExpiration(validity Validity, keyExpiration time.Duration) time.Time {
-	notAfter := time.Unix(int64(validity.NotAfter), 0)
+	maxKeyExpiredAt := time.Unix(int64(validity.NotAfter+1), 0)
 	if keyExpiration == 0 {
-		return notAfter
+		return maxKeyExpiredAt
 	}
 	tm := time.Unix(int64(validity.NotBefore), 0).Add(keyExpiration)
-	if tm.After(notAfter) {
-		return notAfter
+	if tm.After(maxKeyExpiredAt) {
+		return maxKeyExpiredAt
 	}
 	return tm
 }
