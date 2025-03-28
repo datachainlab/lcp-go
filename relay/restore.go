@@ -8,9 +8,10 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/hyperledger-labs/yui-relayer/core"
+
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
-	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
 func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwareChain, elcClientID string, height uint64) error {
@@ -75,22 +76,27 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("allowed advisory ids mismatch: expected %v, but got %v", pr.config.AllowedAdvisoryIds, clientState.AllowedAdvisoryIds)
 	}
 
+	pr.getLogger().Info("1. pr.originProver.CreateInitialLightClientState")
 	originClientState, originConsensusState, err := pr.originProver.CreateInitialLightClientState(context.TODO(), clientState.LatestHeight)
 	if err != nil {
 		return fmt.Errorf("failed to create initial light client state: height=%v %w", clientState.LatestHeight, err)
 	}
+	pr.getLogger().Info("2. clienttypes.PackClientState")
 	originAnyClientState, err := clienttypes.PackClientState(originClientState)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to pack client state: %w", err)
 	}
+	pr.getLogger().Info("3. clienttypes.PackConsensusState")
 	originAnyConsensusState, err := clienttypes.PackConsensusState(originConsensusState)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to pack consensus state: %w", err)
 	}
+	pr.getLogger().Info("4. pr.selectNewEnclaveKey")
 	tmpEKI, err := pr.selectNewEnclaveKey(context.TODO())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to select new enclave key: %w", err)
 	}
+	pr.getLogger().Info("5. pr.lcpServiceClient.CreateClient")
 	res, err := pr.lcpServiceClient.CreateClient(context.TODO(), &elc.MsgCreateClient{
 		ClientId:       elcClientID,
 		ClientState:    originAnyClientState,
