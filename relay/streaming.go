@@ -9,20 +9,30 @@ import (
 )
 
 func updateClient(ctx context.Context, client LCPServiceClient, anyHeader *types.Any, elcClientID string, includeState bool, signer []byte) (*elc.MsgUpdateClientResponse, error) {
-	stream, err := client.StreamingUpdateClient(ctx)
+	stream, err := client.UpdateClientStream(ctx)
 	if err != nil {
+		return nil, err
+	}
+	if err = stream.Send(&elc.MsgUpdateClientStreamChunk{
+		Chunk: &elc.MsgUpdateClientStreamChunk_Init{
+			Init: &elc.UpdateClientStreamInit{
+				ClientId:     elcClientID,
+				IncludeState: includeState,
+				Signer:       signer,
+				TypeUrl:      anyHeader.TypeUrl,
+			},
+		},
+	}); err != nil {
 		return nil, err
 	}
 	chunks := split(anyHeader.Value, 3*1024*1024)
 	for i, chunk := range chunks {
-		err = stream.Send(&elc.MsgUpdateClient{
-			ClientId: elcClientID,
-			Header: &types.Any{
-				TypeUrl: anyHeader.TypeUrl,
-				Value:   chunk,
+		err = stream.Send(&elc.MsgUpdateClientStreamChunk{
+			Chunk: &elc.MsgUpdateClientStreamChunk_HeaderChunk{
+				HeaderChunk: &elc.UpdateClientStreamHeaderChunk{
+					Data: chunk,
+				},
 			},
-			IncludeState: includeState,
-			Signer:       signer,
 		})
 		if err != nil {
 			log.GetLogger().Error(fmt.Sprintf("chunk failed: index = %d", i), err)
