@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -58,13 +59,23 @@ func availableEnclaveKeysCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var target *core.ProvableChain
+			var (
+				target    *core.ProvableChain
+				direction string
+			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				direction = "src"
 			} else {
 				target = c[dst]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			ekis, err := prover.doAvailableEnclaveKeys(cmd.Context())
 			if err != nil {
 				return err
@@ -91,17 +102,25 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target   *core.ProvableChain
-				verifier *core.ProvableChain
+				target    *core.ProvableChain
+				verifier  *core.ProvableChain
+				direction string
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
 				verifier = c[dst]
+				direction = "src"
 			} else {
 				target = c[dst]
 				verifier = c[src]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			return prover.UpdateEKIIfNeeded(cmd.Context(), verifier)
 		},
 	}
@@ -150,13 +169,23 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var target *core.ProvableChain
+			var (
+				target    *core.ProvableChain
+				direction string
+			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				direction = "src"
 			} else {
 				target = c[dst]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			var elcClientID string
 			if viper.GetString(flagELCClientID) != "" {
 				elcClientID = viper.GetString(flagELCClientID)
@@ -191,14 +220,22 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target *core.ProvableChain
+				target    *core.ProvableChain
+				direction string
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				direction = "src"
 			} else {
 				target = c[dst]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			var elcClientID string
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
@@ -230,13 +267,23 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var target *core.ProvableChain
+			var (
+				target    *core.ProvableChain
+				direction string
+			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				direction = "src"
 			} else {
 				target = c[dst]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			var elcClientID string
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
@@ -269,17 +316,25 @@ func restoreELCCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 			var (
-				target   *core.ProvableChain
-				verifier *core.ProvableChain
+				target    *core.ProvableChain
+				verifier  *core.ProvableChain
+				direction string
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
 				verifier = c[dst]
+				direction = "src"
 			} else {
 				target = c[dst]
 				verifier = c[src]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			var elcClientID string
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
@@ -302,13 +357,23 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var target *core.ProvableChain
+			var (
+				target    *core.ProvableChain
+				direction string
+			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
+				direction = "src"
 			} else {
 				target = c[dst]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
+
 			return prover.removeEnclaveKeyInfos(cmd.Context())
 		},
 	}
@@ -328,15 +393,22 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 			var (
 				target       *core.ProvableChain
 				counterparty *core.ProvableChain
+				direction    string
 			)
 			if viper.GetBool(flagSrc) {
 				target = c[src]
 				counterparty = c[dst]
+				direction = "src"
 			} else {
 				target = c[dst]
 				counterparty = c[src]
+				direction = "dst"
 			}
-			prover := target.Prover.(*Prover)
+
+			prover, err := coreutil.UnwrapProver[*Prover](target)
+			if err != nil {
+				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+			}
 
 			newOperators := viper.GetStringSlice(flagNewOperators)
 			viper.GetBool(flagPermissionlessOperators)
