@@ -882,7 +882,11 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 }
 
 func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
-	srcProver := src.Prover.(*Prover)
+	var srcProver *Prover
+	if err := core.AsProver(src, &srcProver); err != nil {
+		return err
+	}
+
 	if err := srcProver.UpdateEKIIfNeeded(ctx, dst); err != nil {
 		return err
 	}
