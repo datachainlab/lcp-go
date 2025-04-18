@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 	opcs "github.com/oasisprotocol/oasis-core/go/common/sgx/pcs"
 
@@ -882,7 +883,11 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 }
 
 func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
-	srcProver := src.Prover.(*Prover)
+	srcProver, err := coreutil.UnwrapProver[*Prover](src)
+	if err != nil {
+		return err
+	}
+
 	if err := srcProver.UpdateEKIIfNeeded(ctx, dst); err != nil {
 		return err
 	}
