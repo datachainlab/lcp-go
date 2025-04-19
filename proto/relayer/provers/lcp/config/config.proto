@@ -46,6 +46,9 @@ message ProverConfig {
         EIP712EVMChainParams operators_eip712_evm_chain_params = 31;
         EIP712CosmosChainParams operators_eip712_cosmos_chain_params = 32;
     }
+
+    // max chunk size(byte) for update client
+    uint32 max_chunk_size_for_update_client = 33;
 }
 
 message Fraction {

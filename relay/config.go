@@ -18,6 +18,8 @@ import (
 const (
 	DefaultDialTimeout                 = 20 // seconds
 	DefaultMessageAggregationBatchSize = 8
+	// It is necessary to subtract from 4 MB to account for metadata size.
+	DefaultMaxChunkSize = 4*1024*1024 - 1024
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -82,6 +84,14 @@ func (pc ProverConfig) ChainType() lcptypes.ChainType {
 		return lcptypes.ChainTypeCosmos
 	default:
 		panic(fmt.Sprintf("unknown chain params: %v", pc.OperatorsEip712Params))
+	}
+}
+
+func (pc ProverConfig) GetMaxChunkSizeForUpdateClient() uint32 {
+	if pc.MaxChunkSizeForUpdateClient == 0 {
+		return DefaultMaxChunkSize
+	} else {
+		return pc.MaxChunkSizeForUpdateClient
 	}
 }
 
