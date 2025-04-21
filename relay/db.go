@@ -72,8 +72,8 @@ func (pr *Prover) loadLastUnfinalizedEnclaveKey(context.Context) (*enclave.Encla
 	return ueki.Info, unfinalizedMsgID, nil
 }
 
-func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo) error {
-	pr.getLogger().Info("save finalized enclave key info")
+func (pr *Prover) saveFinalizedEnclaveKeyInfo(ctx context.Context, eki *enclave.EnclaveKeyInfo) error {
+	pr.getLogger().InfoContext(ctx, "save finalized enclave key info")
 	bz, err := json.Marshal(eki)
 	if err != nil {
 		return fmt.Errorf("failed to marshal enclave key info: %w", err)
@@ -84,8 +84,8 @@ func (pr *Prover) saveFinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.En
 	return nil
 }
 
-func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
-	pr.getLogger().Info("save unfinalized enclave key info")
+func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(ctx context.Context, eki *enclave.EnclaveKeyInfo, msgID core.MsgID) error {
+	pr.getLogger().InfoContext(ctx, "save unfinalized enclave key info")
 	msgIDBytes, err := pr.codec.MarshalInterface(msgID)
 	if err != nil {
 		return fmt.Errorf("failed to marshal msg id: %w", err)
@@ -103,9 +103,9 @@ func (pr *Prover) saveUnfinalizedEnclaveKeyInfo(_ context.Context, eki *enclave.
 	return nil
 }
 
-func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
+func (pr *Prover) removeFinalizedEnclaveKeyInfo(ctx context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(true)
-	pr.getLogger().Info("remove finalized enclave key info", "path", path)
+	pr.getLogger().InfoContext(ctx, "remove finalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -118,9 +118,9 @@ func (pr *Prover) removeFinalizedEnclaveKeyInfo(context.Context) error {
 	return nil
 }
 
-func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(context.Context) error {
+func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(ctx context.Context) error {
 	path := pr.lastEnclaveKeyInfoFilePath(false)
-	pr.getLogger().Info("remove unfinalized enclave key info", "path", path)
+	pr.getLogger().InfoContext(ctx, "remove unfinalized enclave key info", "path", path)
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return nil
