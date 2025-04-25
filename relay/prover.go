@@ -191,15 +191,9 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		if err != nil {
 			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h, err)
 		}
-		m := elc.MsgUpdateClient{
-			ClientId:     pr.config.ElcClientId,
-			Header:       anyHeader,
-			IncludeState: false,
-			Signer:       pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
-		}
-		res, err := pr.lcpServiceClient.UpdateClient(ctx, &m)
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v msg=%v %w", i, pr.config.ElcClientId, m, err)
+			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
 		}
 		// ensure the message is valid
 		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {

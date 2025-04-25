@@ -411,12 +411,7 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 		if err != nil {
 			return nil, err
 		}
-		res, err := pr.lcpServiceClient.UpdateClient(ctx, &elc.MsgUpdateClient{
-			ClientId:     elcClientID,
-			Header:       anyHeader,
-			IncludeState: includeState,
-			Signer:       pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
-		})
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
 			return nil, err
 		}
