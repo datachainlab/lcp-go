@@ -43,7 +43,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		restoreHeight = clienttypes.NewHeight(cs.GetLatestHeight().GetRevisionNumber(), height)
 	}
 
-	pr.getLogger().Info("try to restore ELC state", "height", restoreHeight)
+	pr.getLogger().InfoContext(ctx, "try to restore ELC state", "height", restoreHeight)
 
 	counterpartyConsRes, err := counterparty.QueryClientConsensusState(core.NewQueryContext(ctx, cplatestHeight), restoreHeight)
 	if err != nil {
@@ -118,7 +118,7 @@ func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwar
 		return fmt.Errorf("unexpected height: expected %v, but got %v", restoreHeight, usm.PostHeight)
 	}
 
-	pr.getLogger().Info("successfully restored ELC state", "elc_client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
+	pr.getLogger().InfoContext(ctx, "successfully restored ELC state", "elc_client_id", elcClientID, "state_id", usm.PostStateID.String(), "height", usm.PostHeight)
 
 	return nil
 }
