@@ -221,7 +221,6 @@ func (cs ClientState) VerifyMembership(
 	if err != nil {
 		return err
 	}
-	hashedValue := crypto.Keccak256Hash(value)
 
 	if !height.EQ(msg.Height) {
 		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid height: expected=%v got=%v", height, msg.Height)
@@ -232,8 +231,12 @@ func (cs ClientState) VerifyMembership(
 	if !bytes.Equal(commitmentPath, msg.Path) {
 		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid path: expected=%v got=%v", string(commitmentPath), string(msg.Path))
 	}
-	if hashedValue != msg.Value {
-		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X", hashedValue[:], msg.Value)
+	if 0 < len(value) {
+		hashedValue := crypto.Keccak256Hash(value)
+a		if hashedValue != msg.Value {
+			//return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X", hashedValue[:], msg.Value)
+			return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X, len(value)=%v", hashedValue[:], msg.Value, len(value))
+		}
 	}
 	if !msg.StateID.EqualBytes(consensusState.StateId) {
 		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid state ID: expected=%v got=%v", consensusState.StateId, msg.StateID)
