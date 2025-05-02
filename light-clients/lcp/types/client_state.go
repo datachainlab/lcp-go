@@ -233,7 +233,7 @@ func (cs ClientState) VerifyMembership(
 	}
 	if 0 < len(value) {
 		hashedValue := crypto.Keccak256Hash(value)
-a		if hashedValue != msg.Value {
+		if hashedValue != msg.Value {
 			//return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X", hashedValue[:], msg.Value)
 			return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=%X got=%X, len(value)=%v", hashedValue[:], msg.Value, len(value))
 		}
