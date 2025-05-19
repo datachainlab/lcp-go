@@ -231,6 +231,7 @@ func (cs ClientState) VerifyMembership(
 	if !bytes.Equal(commitmentPath, msg.Path) {
 		return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid path: expected=%v got=%v", string(commitmentPath), string(msg.Path))
 	}
+	// Note that this function is used for verify NonMembership proof and NonMembership proof has no hashed value in its proof.
 	if len(value) > 0 {
 		hashedValue := crypto.Keccak256Hash(value)
 		if hashedValue != msg.Value {
