@@ -396,17 +396,14 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	// 2. query the header from the upstream chain
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
+	headersChan, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
 		return nil, err
-	}
-	if len(headers) == 0 {
-		return nil, nil
 	}
 
 	// 3. send a request that contains a header from 2 to update the client in ELC
 	var responses []*elc.MsgUpdateClientResponse
-	for _, header := range headers {
+	for header := range headersChan {
 		anyHeader, err := clienttypes.PackClientMessage(header)
 		if err != nil {
 			return nil, err
