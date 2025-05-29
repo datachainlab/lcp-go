@@ -170,12 +170,12 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterparty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
-func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan core.Header, error) {
+func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
 	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
 
-	headersChan, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
@@ -184,10 +184,13 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		signatures [][]byte
 	)
 	i := 0
-	for h := range headersChan {
-		anyHeader, err := clienttypes.PackClientMessage(h)
+	for h := range headerStream {
+		if h.Error != nil {
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+		}
+		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h, err)
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 		}
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
@@ -202,7 +205,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		i++
 	}
 	if i == 0 {
-		return core.MakeHeadersChan(), nil
+		return core.MakeHeaderStream(), nil
 	}
 
 	var updates []core.Header
@@ -223,7 +226,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 			})
 		}
 	}
-	return core.MakeHeadersChan(updates...), nil
+	return core.MakeHeaderStream(updates...), nil
 }
 
 type MessageAggregator func(ctx context.Context, in *elc.MsgAggregateMessages, opts ...grpc.CallOption) (*elc.MsgAggregateMessagesResponse, error)
