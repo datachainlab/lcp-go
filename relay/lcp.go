@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	oias "github.com/oasisprotocol/oasis-core/go/common/sgx/ias"
 	opcs "github.com/oasisprotocol/oasis-core/go/common/sgx/pcs"
 
@@ -50,7 +51,7 @@ func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.Final
 	if err != nil {
 		return fmt.Errorf("failed to call loadEKIAndCheckUpdateNeeded: %w", err)
 	}
-	pr.getLogger().Info("loadEKIAndCheckUpdateNeeded", "updateNeeded", updateNeeded)
+	pr.getLogger().InfoContext(ctx, "loadEKIAndCheckUpdateNeeded", "updateNeeded", updateNeeded)
 	if !updateNeeded {
 		return nil
 	}
@@ -60,27 +61,27 @@ func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.Final
 
 	pr.activeEnclaveKey, pr.unfinalizedMsgID = nil, nil
 
-	pr.getLogger().Info("need to get a new enclave key")
+	pr.getLogger().InfoContext(ctx, "need to get a new enclave key")
 
 	eki, err := pr.selectNewEnclaveKey(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to call selectNewEnclaveKey: %w", err)
 	}
 
-	pr.getLogger().Info("try to register a new enclave key", "eki", eki)
+	pr.getLogger().InfoContext(ctx, "try to register a new enclave key", "eki", eki)
 
 	msgID, err := pr.registerEnclaveKey(ctx, counterparty, eki)
 	if err != nil {
 		return fmt.Errorf("failed to call registerEnclaveKey: %w", err)
 	}
-	pr.getLogger().Info("registered a new enclave key", "enclave_key", eki.GetEnclaveKeyAddress(), "msg_id", msgID.String())
+	pr.getLogger().InfoContext(ctx, "registered a new enclave key", "enclave_key", eki.GetEnclaveKeyAddress(), "msg_id", msgID.String())
 	finalized, success, err := pr.checkMsgStatus(ctx, counterparty, msgID)
 	if err != nil {
 		return fmt.Errorf("failed to call checkMsgStatus: %w", err)
 	} else if !success {
 		return fmt.Errorf("msg(id=%v) execution failed", msgID)
 	}
-	pr.getLogger().Info("check the msg status", "msg_id", msgID.String(), "finalized", finalized, "success", success)
+	pr.getLogger().InfoContext(ctx, "check the msg status", "msg_id", msgID.String(), "finalized", finalized, "success", success)
 
 	if finalized {
 		// this path is for chans have instant finality
@@ -108,7 +109,7 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, now time.Time, eki *
 	bufferTime := time.Duration(pr.config.KeyUpdateBufferTime) * time.Second
 	updateNeededAt := expiredAt.Add(-bufferTime)
 
-	pr.getLogger().Info(
+	pr.getLogger().InfoContext(ctx,
 		"checkEKIUpdateNeeded",
 		"enclave_key", eki.GetEnclaveKeyAddress().String(),
 		"now", now.Unix(),
@@ -118,7 +119,7 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, now time.Time, eki *
 
 	// If current time is past the updateNeededAt, return true
 	if now.After(updateNeededAt) {
-		pr.getLogger().Info(
+		pr.getLogger().InfoContext(ctx,
 			"checkEKIUpdateNeeded: enclave key needs update",
 			"enclave_key", eki.GetEnclaveKeyAddress().String(),
 			"expiredAt", expiredAt.Unix(),
@@ -131,7 +132,7 @@ func (pr *Prover) checkEKIUpdateNeeded(ctx context.Context, now time.Time, eki *
 	// check if the enclave key is still available in the LCP service
 	_, err := pr.lcpServiceClient.EnclaveKey(ctx, &enclave.QueryEnclaveKeyRequest{EnclaveKeyAddress: eki.GetEnclaveKeyAddress().Bytes()})
 	if err != nil {
-		pr.getLogger().Warn("checkEKIUpdateNeeded: enclave key not found", "enclave_key", eki.GetEnclaveKeyAddress().String(), "error", err)
+		pr.getLogger().WarnContext(ctx, "checkEKIUpdateNeeded: enclave key not found", "enclave_key", eki.GetEnclaveKeyAddress().String(), "error", err)
 		return true
 	}
 	return false
@@ -151,7 +152,7 @@ func (pr *Prover) checkMsgStatus(ctx context.Context, counterparty core.Finality
 	if err != nil {
 		return false, false, err
 	} else if ok, failureReason := msgRes.Status(); !ok {
-		pr.getLogger().Warn("msg execution failed", "msg_id", msgID.String(), "reason", failureReason)
+		pr.getLogger().WarnContext(ctx, "msg execution failed", "msg_id", msgID.String(), "reason", failureReason)
 		return false, false, nil
 	}
 	return msgRes.BlockHeight().LTE(lfHeader.GetHeight()), true, nil
@@ -167,23 +168,23 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 		// 2: load the last finalized enclave key if exists
 		// 3: select a new enclave key from the LCP service (i.e. return true)
 
-		pr.getLogger().Info("no active enclave key in memory")
+		pr.getLogger().InfoContext(ctx, "no active enclave key in memory")
 
 		if eki, msgID, err := pr.loadLastUnfinalizedEnclaveKey(ctx); err == nil {
-			pr.getLogger().Info("load last unfinalized enclave key into memory")
+			pr.getLogger().InfoContext(ctx, "load last unfinalized enclave key into memory")
 			pr.activeEnclaveKey = eki
 			pr.unfinalizedMsgID = msgID
 		} else if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
-			pr.getLogger().Info("no unfinalized enclave key info found")
+			pr.getLogger().InfoContext(ctx, "no unfinalized enclave key info found")
 			eki, err := pr.loadLastFinalizedEnclaveKey(ctx)
 			if err != nil {
 				if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
-					pr.getLogger().Info("no enclave key info found")
+					pr.getLogger().InfoContext(ctx, "no enclave key info found")
 					return true, nil
 				}
 				return false, err
 			}
-			pr.getLogger().Info("load last finalized enclave key into memory")
+			pr.getLogger().InfoContext(ctx, "load last finalized enclave key into memory")
 			pr.activeEnclaveKey = eki
 			pr.unfinalizedMsgID = nil
 		} else {
@@ -193,18 +194,18 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 
 	// finalized enclave key
 	if pr.unfinalizedMsgID == nil {
-		pr.getLogger().Info("active enclave key is finalized")
+		pr.getLogger().InfoContext(ctx, "active enclave key is finalized")
 		// check if the enclave key is still available in the LCP service and not expired
 		return pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey), nil
 	}
 
 	// unfinalized enclave key
 
-	pr.getLogger().Info("active enclave key is unfinalized")
+	pr.getLogger().InfoContext(ctx, "active enclave key is unfinalized")
 
 	if _, err := counterparty.GetMsgResult(ctx, pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
-		pr.getLogger().Info("the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
+		pr.getLogger().InfoContext(ctx, "the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
 			return false, err
 		}
@@ -212,27 +213,27 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 	}
 
 	finalized, success, err := pr.checkMsgStatus(ctx, counterparty, pr.unfinalizedMsgID)
-	pr.getLogger().Info("check the unfinalized msg status", "msg_id", pr.unfinalizedMsgID.String(), "finalized", finalized, "success", success, "error", err)
+	pr.getLogger().InfoContext(ctx, "check the unfinalized msg status", "msg_id", pr.unfinalizedMsgID.String(), "finalized", finalized, "success", success, "error", err)
 	if err != nil {
 		return false, err
 	} else if !success {
 		// tx is failed, so remove the unfinalized enclave key info
-		pr.getLogger().Warn("the msg execution failed", "msg_id", pr.unfinalizedMsgID.String())
+		pr.getLogger().WarnContext(ctx, "the msg execution failed", "msg_id", pr.unfinalizedMsgID.String())
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
 			return false, err
 		}
 		return true, nil
 	} else if finalized {
 		// tx is successfully executed and finalized
-		pr.getLogger().Info("the msg is finalized", "msg_id", pr.unfinalizedMsgID.String())
+		pr.getLogger().InfoContext(ctx, "the msg is finalized", "msg_id", pr.unfinalizedMsgID.String())
 		if pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey) {
 			return true, nil
 		}
-		pr.getLogger().Info("save enclave key info as finalized", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
+		pr.getLogger().InfoContext(ctx, "save enclave key info as finalized", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
 		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, pr.activeEnclaveKey); err != nil {
 			return false, err
 		}
-		pr.getLogger().Info("remove old unfinalized enclave key info", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
+		pr.getLogger().InfoContext(ctx, "remove old unfinalized enclave key info", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
 		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
 			return false, err
 		}
@@ -240,7 +241,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 		return false, nil
 	} else {
 		// tx is successfully executed but not finalized yet
-		pr.getLogger().Info("the msg is not finalized yet", "msg_id", pr.unfinalizedMsgID.String())
+		pr.getLogger().InfoContext(ctx, "the msg is not finalized yet", "msg_id", pr.unfinalizedMsgID.String())
 		return pr.checkEKIUpdateNeeded(ctx, now, pr.activeEnclaveKey), nil
 	}
 }
@@ -252,7 +253,7 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 		EnclaveDebug: pr.config.IsDebugEnclave,
 		RaType:       uint32(pr.getRAType()),
 	}
-	pr.getLogger().Debug("query available enclave keys", "mrenclave", hex.EncodeToString(req.Mrenclave), "debug", req.EnclaveDebug, "ra_type", req.RaType)
+	pr.getLogger().DebugContext(ctx, "query available enclave keys", "mrenclave", hex.EncodeToString(req.Mrenclave), "debug", req.EnclaveDebug, "ra_type", req.RaType)
 	res, err := pr.lcpServiceClient.AvailableEnclaveKeys(ctx, &req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call AvailableEnclaveKeys: mr_enclave=%v debug=%v ra_type=%v %w", hex.EncodeToString(req.Mrenclave), req.EnclaveDebug, req.RaType, err)
@@ -263,29 +264,29 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 	for _, eki := range res.Keys {
 		switch v := eki.KeyInfo.(type) {
 		case *enclave.EnclaveKeyInfo_Ias:
-			if ok, err := pr.validateIASEnclaveKeyInfo(v.Ias); err != nil {
+			if ok, err := pr.validateIASEnclaveKeyInfo(ctx, v.Ias); err != nil {
 				return nil, fmt.Errorf("failed to validate IAS enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
 		case *enclave.EnclaveKeyInfo_Dcap:
-			if ok, err := pr.validateDCAPEnclaveKeyInfo(v.Dcap); err != nil {
+			if ok, err := pr.validateDCAPEnclaveKeyInfo(ctx, v.Dcap); err != nil {
 				return nil, fmt.Errorf("failed to validate DCAP enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
 		case *enclave.EnclaveKeyInfo_Zkdcap:
-			if ok, err := pr.validateZKDCAPEnclaveKeyInfo(v.Zkdcap); err != nil {
+			if ok, err := pr.validateZKDCAPEnclaveKeyInfo(ctx, v.Zkdcap); err != nil {
 				return nil, fmt.Errorf("failed to validate ZKDCAP enclave key info: %w", err)
 			} else if !ok {
 				continue
 			}
 		default:
-			pr.getLogger().Warn("unexpected eki type", "type", fmt.Sprintf("%T", eki.KeyInfo))
+			pr.getLogger().WarnContext(ctx, "unexpected eki type", "type", fmt.Sprintf("%T", eki.KeyInfo))
 			continue
 		}
 		if pr.checkEKIUpdateNeeded(ctx, time.Now(), eki) {
-			pr.getLogger().Info("the key is not allowed to use because of expiration", "enclave_key", eki.GetEnclaveKeyAddress().String())
+			pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of expiration", "enclave_key", eki.GetEnclaveKeyAddress().String())
 			continue
 		}
 		return eki, nil
@@ -293,7 +294,7 @@ func (pr *Prover) selectNewEnclaveKey(ctx context.Context) (*enclave.EnclaveKeyI
 	return nil, fmt.Errorf("no available enclave keys: all keys are not allowed to use")
 }
 
-func (pr *Prover) validateIASEnclaveKeyInfo(eki *enclave.IASEnclaveKeyInfo) (bool, error) {
+func (pr *Prover) validateIASEnclaveKeyInfo(ctx context.Context, eki *enclave.IASEnclaveKeyInfo) (bool, error) {
 	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return false, err
 	}
@@ -302,11 +303,11 @@ func (pr *Prover) validateIASEnclaveKeyInfo(eki *enclave.IASEnclaveKeyInfo) (boo
 		return false, err
 	}
 	if !pr.validateISVEnclaveQuoteStatus(avr.ISVEnclaveQuoteStatus.String()) {
-		pr.getLogger().Info("the key is not allowed to use because of ISVEnclaveQuoteStatus", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "quote_status", avr.ISVEnclaveQuoteStatus.String())
+		pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of ISVEnclaveQuoteStatus", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "quote_status", avr.ISVEnclaveQuoteStatus.String())
 		return false, nil
 	}
 	if !pr.validateAdvisoryIDs(avr.AdvisoryIDs) {
-		pr.getLogger().Info("the key is not allowed to use because of advisory IDs", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "advisory_ids", avr.AdvisoryIDs)
+		pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of advisory IDs", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "advisory_ids", avr.AdvisoryIDs)
 		return false, nil
 	}
 	return true, nil
@@ -324,20 +325,20 @@ func (pr *Prover) validateISVEnclaveQuoteStatus(status string) bool {
 	return false
 }
 
-func (pr *Prover) validateDCAPEnclaveKeyInfo(eki *enclave.DCAPEnclaveKeyInfo) (bool, error) {
+func (pr *Prover) validateDCAPEnclaveKeyInfo(ctx context.Context, eki *enclave.DCAPEnclaveKeyInfo) (bool, error) {
 	if !pr.validateISVEnclaveQuoteStatus(eki.TcbStatus) {
-		pr.getLogger().Info("the key is not allowed to use because of TCB status", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "tcb_status", eki.TcbStatus)
+		pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of TCB status", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "tcb_status", eki.TcbStatus)
 		return false, nil
 	}
 	if !pr.validateAdvisoryIDs(eki.AdvisoryIds) {
-		pr.getLogger().Info("the key is not allowed to use because of advisory IDs", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "advisory_ids", eki.AdvisoryIds)
+		pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of advisory IDs", "enclave_key", hex.EncodeToString(eki.EnclaveKeyAddress), "advisory_ids", eki.AdvisoryIds)
 		return false, nil
 	}
 	return true, nil
 }
 
-func (pr *Prover) validateZKDCAPEnclaveKeyInfo(eki *enclave.ZKDCAPEnclaveKeyInfo) (bool, error) {
-	if ok, err := pr.validateDCAPEnclaveKeyInfo(eki.Dcap); err != nil {
+func (pr *Prover) validateZKDCAPEnclaveKeyInfo(ctx context.Context, eki *enclave.ZKDCAPEnclaveKeyInfo) (bool, error) {
+	if ok, err := pr.validateDCAPEnclaveKeyInfo(ctx, eki.Dcap); err != nil {
 		return false, err
 	} else if !ok {
 		return false, nil
@@ -352,7 +353,7 @@ func (pr *Prover) validateZKDCAPEnclaveKeyInfo(eki *enclave.ZKDCAPEnclaveKeyInfo
 	}
 	expectedImageID := zkcfg.GetImageID()
 	if !bytes.Equal(zkp.ImageId, expectedImageID[:]) {
-		pr.getLogger().Info("the key is not allowed to use because of RISC0 image ID mismatch", "enclave_key", hex.EncodeToString(eki.Dcap.EnclaveKeyAddress), "image_id", hex.EncodeToString(zkp.ImageId), "expected_image_id", hex.EncodeToString(expectedImageID[:]))
+		pr.getLogger().InfoContext(ctx, "the key is not allowed to use because of RISC0 image ID mismatch", "enclave_key", hex.EncodeToString(eki.Dcap.EnclaveKeyAddress), "image_id", hex.EncodeToString(zkp.ImageId), "expected_image_id", hex.EncodeToString(expectedImageID[:]))
 		return false, nil
 	}
 	return true, nil
@@ -388,11 +389,11 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 		return nil, err
 	}
 	if clientState.GetLatestHeight().GTE(latestHeader.GetHeight()) {
-		pr.getLogger().Info("no need to update the client", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
+		pr.getLogger().InfoContext(ctx, "no need to update the client", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 		return nil, nil
 	}
 
-	pr.getLogger().Info("try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
+	pr.getLogger().InfoContext(ctx, "try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 
 	// 2. query the header from the upstream chain
 
@@ -451,7 +452,7 @@ func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.C
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EK and operator: %w", err)
 	}
-	clientLogger.Info("got EK and operator from report data", "ek", ek.String(), "operator", expectedOperator.String())
+	clientLogger.InfoContext(ctx, "got EK and operator from report data", "ek", ek.String(), "operator", expectedOperator.String())
 	message := &lcptypes.RegisterEnclaveKeyMessage{
 		Report:            []byte(eki.Report),
 		Signature:         eki.Signature,
@@ -497,7 +498,7 @@ func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.C
 			return nil, err
 		}
 		message.OperatorSignature = sig
-		clientLogger.Info("operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
+		clientLogger.InfoContext(ctx, "operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
 	}
 	signer, err := counterparty.GetAddress()
 	if err != nil {
@@ -527,7 +528,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(ctx context.Context, counterparty cor
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DCAP verifier output: output=%x %w", zkp.Output, err)
 	}
-	clientLogger.Info("got DCAP verifier output", "output", output)
+	clientLogger.InfoContext(ctx, "got DCAP verifier output", "output", output)
 	message := &lcptypes.ZKDCAPRegisterEnclaveKeyMessage{
 		ZkvmType:                uint32(dcap.Risc0ZKVMType),
 		QuoteVerificationOutput: zkp.Output,
@@ -600,7 +601,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(ctx context.Context, counterparty cor
 			return nil, err
 		}
 		message.OperatorSignature = sig
-		clientLogger.Info("operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
+		clientLogger.InfoContext(ctx, "operator signature is generated", "operator", operator.String(), "signature", hex.EncodeToString(sig))
 	}
 	signer, err := counterparty.GetAddress()
 	if err != nil {
@@ -727,15 +728,15 @@ func (pr *Prover) doCreateELC(ctx context.Context, elcClientID string, height ui
 		return nil, fmt.Errorf("height %v is greater than the latest height %v", height, latestHeight.GetRevisionHeight())
 	}
 	h := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), height)
-	pr.getLogger().Info("try to create ELC client", "elc_client_id", elcClientID, "height", h)
+	pr.getLogger().InfoContext(ctx, "try to create ELC client", "elc_client_id", elcClientID, "height", h)
 	res, err := pr.createELC(ctx, elcClientID, h)
 	if err != nil {
 		return nil, err
 	} else if res == nil {
-		pr.getLogger().Info("no need to create ELC client", "elc_client_id", elcClientID)
+		pr.getLogger().InfoContext(ctx, "no need to create ELC client", "elc_client_id", elcClientID)
 		return &CreateELCResult{Created: false}, nil
 	}
-	pr.getLogger().Info("created ELC client", "elc_client_id", elcClientID, "height", h)
+	pr.getLogger().InfoContext(ctx, "created ELC client", "elc_client_id", elcClientID, "height", h)
 	// ensure the message is valid
 	msg, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
 	if err != nil {
@@ -745,7 +746,7 @@ func (pr *Prover) doCreateELC(ctx context.Context, elcClientID string, height ui
 	if err != nil {
 		return nil, err
 	}
-	pr.getLogger().Info("created state", "post_height", m.PostHeight, "post_state_id", m.PostStateID.String(), "timestamp", m.Timestamp.String())
+	pr.getLogger().InfoContext(ctx, "created state", "post_height", m.PostHeight, "post_state_id", m.PostStateID.String(), "timestamp", m.Timestamp.String())
 	return &CreateELCResult{
 		Created: true,
 		Message: m,
@@ -762,16 +763,16 @@ func (pr *Prover) doUpdateELC(ctx context.Context, elcClientID string) (*UpdateE
 		if err != nil {
 			return nil, err
 		}
-		pr.getLogger().Info("use a new enclave key", "enclave_key", eki.GetEnclaveKeyAddress().String())
+		pr.getLogger().InfoContext(ctx, "use a new enclave key", "enclave_key", eki.GetEnclaveKeyAddress().String())
 		pr.activeEnclaveKey = eki
 	}
-	pr.getLogger().Info("try to update the ELC client", "elc_client_id", elcClientID)
+	pr.getLogger().InfoContext(ctx, "try to update the ELC client", "elc_client_id", elcClientID)
 	updates, err := pr.updateELC(ctx, elcClientID, false)
 	if err != nil {
 		return nil, err
 	}
 	if len(updates) == 0 {
-		pr.getLogger().Info("no update is needed")
+		pr.getLogger().InfoContext(ctx, "no update is needed")
 		return &UpdateELCResult{
 			Messages: []*lcptypes.UpdateStateProxyMessage{},
 		}, nil
@@ -786,7 +787,7 @@ func (pr *Prover) doUpdateELC(ctx context.Context, elcClientID string) (*UpdateE
 		if err != nil {
 			return nil, fmt.Errorf("failed GetUpdateStateProxyMessage: index=%v %w", i, err)
 		}
-		pr.getLogger().Info("updated state", "prev_height", msg.PrevHeight, "prev_state_id", msg.PrevStateID.String(), "post_height", msg.PostHeight, "post_state_id", msg.PostStateID.String(), "timestamp", msg.Timestamp.String())
+		pr.getLogger().InfoContext(ctx, "updated state", "prev_height", msg.PrevHeight, "prev_state_id", msg.PrevStateID.String(), "post_height", msg.PostHeight, "post_state_id", msg.PostStateID.String(), "timestamp", msg.Timestamp.String())
 		msgs = append(msgs, msg)
 	}
 	return &UpdateELCResult{
@@ -837,11 +838,11 @@ func (pr *Prover) doQueryELC(ctx context.Context, elcClientID string) (*QueryELC
 		consensusState ibcexported.ConsensusState
 	)
 	if err := pr.codec.UnpackAny(r.ClientState, &clientState); err != nil {
-		pr.getLogger().Warn("failed to unpack client state", "error", err)
+		pr.getLogger().WarnContext(ctx, "failed to unpack client state", "error", err)
 		return &result, nil
 	}
 	if err := pr.codec.UnpackAny(r.ConsensusState, &consensusState); err != nil {
-		pr.getLogger().Warn("failed to unpack consensus state", "error", err)
+		pr.getLogger().WarnContext(ctx, "failed to unpack consensus state", "error", err)
 		return &result, nil
 	}
 	result.Decoded.ClientState = clientState
@@ -882,12 +883,16 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 }
 
 func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
-	srcProver := src.Prover.(*Prover)
+	srcProver, err := coreutil.UnwrapProver[*Prover](src)
+	if err != nil {
+		return err
+	}
+
 	if err := srcProver.UpdateEKIIfNeeded(ctx, dst); err != nil {
 		return err
 	}
 
-	srcProver.getLogger().Info("try to activate the LCP client", "elc_client_id", srcProver.config.ElcClientId)
+	srcProver.getLogger().InfoContext(ctx, "try to activate the LCP client", "elc_client_id", srcProver.config.ElcClientId)
 
 	// 1. LCP client synchronises with the latest header of the upstream chain
 	var updates []*elc.MsgUpdateClientResponse

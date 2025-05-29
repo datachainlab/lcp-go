@@ -17,6 +17,7 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"github.com/hyperledger-labs/yui-relayer/signer"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -53,6 +54,7 @@ func NewProver(config ProverConfig, originChain core.Chain, originProver core.Pr
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithTimeout(config.GetDialTimeout()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to LCP service: %w", err)
@@ -154,7 +156,7 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 	if res, err := pr.createELC(ctx, pr.config.ElcClientId, height); err != nil {
 		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
 	} else if res == nil {
-		pr.getLogger().Info("no need to create ELC", "elc_client_id", pr.config.ElcClientId)
+		pr.getLogger().InfoContext(ctx, "no need to create ELC", "elc_client_id", pr.config.ElcClientId)
 	}
 
 	// NOTE after creates client, register an enclave key into the client state
@@ -206,14 +208,14 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	var updates []core.Header
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
-		pr.getLogger().Info("aggregate messages", "num_messages", len(messages))
+		pr.getLogger().InfoContext(ctx, "aggregate messages", "num_messages", len(messages))
 		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
 			return nil, err
 		}
 		updates = append(updates, update)
 	} else {
-		pr.getLogger().Info("updateClient", "num_messages", len(messages))
+		pr.getLogger().InfoContext(ctx, "updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
 			updates = append(updates, &lcptypes.UpdateClientMessage{
 				ProxyMessage: messages[i],
@@ -271,12 +273,12 @@ func aggregateMessages(
 		} else if n == 0 {
 			return nil, fmt.Errorf("unexpected error: batches must not be empty")
 		} else {
-			logger.Info("aggregateMessages", "num_batches", n)
+			logger.InfoContext(ctx, "aggregateMessages", "num_batches", n)
 		}
 		messages = nil
 		signatures = nil
 		for i, b := range batches {
-			logger.Info("aggregateMessages", "batch_index", i, "num_messages", len(b.Messages))
+			logger.InfoContext(ctx, "aggregateMessages", "batch_index", i, "num_messages", len(b.Messages))
 			if len(b.Messages) == 1 {
 				messages = append(messages, b.Messages[0])
 				signatures = append(signatures, b.Signatures[0])
