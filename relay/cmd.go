@@ -73,7 +73,7 @@ func availableEnclaveKeysCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			ekis, err := prover.doAvailableEnclaveKeys(cmd.Context())
@@ -118,7 +118,7 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			return prover.UpdateEKIIfNeeded(cmd.Context(), verifier)
@@ -183,7 +183,7 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			var elcClientID string
@@ -233,7 +233,7 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			var elcClientID string
@@ -281,7 +281,7 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			var elcClientID string
@@ -332,7 +332,7 @@ func restoreELCCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			var elcClientID string
@@ -371,7 +371,7 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			return prover.removeEnclaveKeyInfos(cmd.Context())
@@ -407,7 +407,7 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 
 			prover, err := coreutil.UnwrapProver[*Prover](target)
 			if err != nil {
-				return fmt.Errorf("%s of %q is not a relay.Prover", direction, args[0])
+				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
 			newOperators := viper.GetStringSlice(flagNewOperators)
