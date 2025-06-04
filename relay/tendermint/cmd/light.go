@@ -9,6 +9,7 @@ import (
 	"github.com/datachainlab/lcp-go/relay"
 	"github.com/hyperledger-labs/yui-relayer/chains/tendermint"
 	"github.com/hyperledger-labs/yui-relayer/config"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 )
 
@@ -41,8 +42,20 @@ func initLightCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
-			prover := c.Prover.(*relay.Prover).GetOriginProver().(*tendermint.Prover)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
+			lcpProver, err := coreutil.UnwrapProver[*relay.Prover](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a relay.Prover: %v", args[0], err)
+			}
+			prover, err := coreutil.UnwrapProver[*tendermint.Prover](lcpProver.GetOriginProver())
+			if err != nil {
+				return fmt.Errorf("OriginProver of Chain %q is not a tendermint.Prover: %v", args[0], err)
+			}
+
 			db, df, err := prover.NewLightDB(cmd.Context())
 			if err != nil {
 				return err
@@ -96,7 +109,16 @@ func updateLightCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			prover := c.Prover.(*relay.Prover).GetOriginProver().(*tendermint.Prover)
+
+			lcpProver, err := coreutil.UnwrapProver[*relay.Prover](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a relay.Prover: %v", args[0], err)
+			}
+			prover, err := coreutil.UnwrapProver[*tendermint.Prover](lcpProver.GetOriginProver())
+			if err != nil {
+				return fmt.Errorf("OriginProver of Chain %q is not a tendermint.Prover: %v", args[0], err)
+			}
+
 			bh, err := prover.GetLatestLightHeader(cmd.Context())
 			if err != nil {
 				return err
@@ -128,8 +150,19 @@ func lightHeaderCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
-			prover := c.Prover.(*relay.Prover).GetOriginProver().(*tendermint.Prover)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
+			lcpProver, err := coreutil.UnwrapProver[*relay.Prover](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a relay.Prover: %v", args[0], err)
+			}
+			prover, err := coreutil.UnwrapProver[*tendermint.Prover](lcpProver.GetOriginProver())
+			if err != nil {
+				return fmt.Errorf("OriginProver of Chain %q is not a tendermint.Prover: %v", args[0], err)
+			}
 
 			var header *tmclient.Header
 			switch len(args) {
@@ -186,7 +219,16 @@ func deleteLightCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			prover := c.Prover.(*relay.Prover).GetOriginProver().(*tendermint.Prover)
+
+			lcpProver, err := coreutil.UnwrapProver[*relay.Prover](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a relay.Prover: %v", args[0], err)
+			}
+			prover, err := coreutil.UnwrapProver[*tendermint.Prover](lcpProver.GetOriginProver())
+			if err != nil {
+				return fmt.Errorf("OriginProver of Chain %q is not a tendermint.Prover: %v", args[0], err)
+			}
+
 			err = prover.DeleteLightDB()
 			if err != nil {
 				return err

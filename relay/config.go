@@ -12,6 +12,7 @@ import (
 	"github.com/datachainlab/lcp-go/sgx/dcap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/otelcore"
 	"github.com/hyperledger-labs/yui-relayer/signer"
 )
 
@@ -49,7 +50,11 @@ func (pc ProverConfig) Build(chain core.Chain) (core.Prover, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewProver(pc, chain, prover)
+	lcpProver, err := NewProver(pc, chain, prover)
+	if err != nil {
+		return nil, err
+	}
+	return otelcore.NewProver(lcpProver, chain.ChainID(), tracer), nil
 }
 
 func (pc ProverConfig) GetDialTimeout() time.Duration {

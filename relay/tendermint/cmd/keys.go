@@ -7,6 +7,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/hyperledger-labs/yui-relayer/chains/tendermint"
 	"github.com/hyperledger-labs/yui-relayer/config"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +41,11 @@ func keysAddCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
 
 			var keyName string
 			if len(args) == 2 {
@@ -99,7 +104,11 @@ func keysRestoreCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
 
 			if chain.KeyExists(keyName) {
 				return errKeyExists(keyName)
@@ -135,7 +144,11 @@ func keysShowCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
 
 			var keyName string
 			if len(args) == 2 {
@@ -176,7 +189,11 @@ func keysListCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			chain := c.Chain.(*tendermint.Chain)
+
+			chain, err := coreutil.UnwrapChain[*tendermint.Chain](c)
+			if err != nil {
+				return fmt.Errorf("Chain %q is not a tendermint.Chain: %v", args[0], err)
+			}
 
 			info, err := chain.Keybase.List()
 			if err != nil {
