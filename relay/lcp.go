@@ -404,19 +404,21 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	// 3. send a request that contains a header from 2 to update the client in ELC
 	var responses []*elc.MsgUpdateClientResponse
+	i := 0
 	for h := range headerStream {
 		if h.Error != nil {
-			return nil, h.Error
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
 		}
 		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 		}
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
 		}
 		responses = append(responses, res)
+		i += 1
 	}
 
 	return responses, nil
