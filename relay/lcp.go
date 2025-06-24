@@ -397,26 +397,28 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	// 2. query the header from the upstream chain
 
-	headers, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
 		return nil, err
-	}
-	if len(headers) == 0 {
-		return nil, nil
 	}
 
 	// 3. send a request that contains a header from 2 to update the client in ELC
 	var responses []*elc.MsgUpdateClientResponse
-	for _, header := range headers {
-		anyHeader, err := clienttypes.PackClientMessage(header)
+	i := 0
+	for h := range headerStream {
+		if h.Error != nil {
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+		}
+		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 		}
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
 		}
 		responses = append(responses, res)
+		i += 1
 	}
 
 	return responses, nil
