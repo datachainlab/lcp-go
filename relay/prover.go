@@ -342,35 +342,53 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed originProver.ProveState: path=%v value=%x %w", path, value, err)
 	}
-	m := elc.MsgVerifyMembership{
-		ClientId:    pr.config.ElcClientId,
-		Prefix:      []byte(exported.StoreKey),
-		Path:        path,
-		Value:       value,
-		ProofHeight: proofHeight,
-		Proof:       proof,
-		Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+
+	var cp lcptypes.CommitmentProofs
+	if len(value) == 0 {
+		m := elc.MsgVerifyNonMembership{
+			ClientId:    pr.config.ElcClientId,
+			Prefix:      []byte(exported.StoreKey),
+			Path:        path,
+			ProofHeight: proofHeight,
+			Proof:       proof,
+			Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		}
+		res, err := pr.lcpServiceClient.VerifyNonMembership(ctx.Context(), &m)
+		if err != nil {
+			return nil, clienttypes.Height{}, fmt.Errorf("failed ELC's VerifyNonMembership: elc_client_id=%v msg=%v %w", pr.config.ElcClientId, m, err)
+		}
+		cp.Message = res.Message
+		cp.Signatures = [][]byte{res.Signature}
+	} else {
+		m := elc.MsgVerifyMembership{
+			ClientId:    pr.config.ElcClientId,
+			Prefix:      []byte(exported.StoreKey),
+			Path:        path,
+			Value:       value,
+			ProofHeight: proofHeight,
+			Proof:       proof,
+			Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		}
+		res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
+		if err != nil {
+			return nil, clienttypes.Height{}, fmt.Errorf("failed ELC's VerifyMembership: elc_client_id=%v msg=%v %w", pr.config.ElcClientId, m, err)
+		}
+		cp.Message = res.Message
+		cp.Signatures = [][]byte{res.Signature}
 	}
-	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
+	message, err := lcptypes.EthABIDecodeHeaderedProxyMessage(cp.Message)
 	if err != nil {
-		return nil, clienttypes.Height{}, fmt.Errorf("failed ELC's VerifyMembership: elc_client_id=%v msg=%v %w", pr.config.ElcClientId, m, err)
-	}
-	message, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message)
-	if err != nil {
-		return nil, clienttypes.Height{}, fmt.Errorf("failed to decode headered proxy message: message=%x %w", res.Message, err)
+		return nil, clienttypes.Height{}, fmt.Errorf("failed to decode headered proxy message: message=%x %w", cp.Message, err)
 	}
 	sc, err := message.GetVerifyMembershipProxyMessage()
 	if err != nil {
-		return nil, clienttypes.Height{}, fmt.Errorf("failed GetVerifyMembershipProxyMessage: message=%x %w", res.Message, err)
+		return nil, clienttypes.Height{}, fmt.Errorf("failed GetVerifyMembershipProxyMessage: message=%x %w", cp.Message, err)
 	}
-	cp, err := lcptypes.EthABIEncodeCommitmentProofs(&lcptypes.CommitmentProofs{
-		Message:    res.Message,
-		Signatures: [][]byte{res.Signature},
-	})
+	cpEnc, err := lcptypes.EthABIEncodeCommitmentProofs(&cp)
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed to encode commitment proof: %w", err)
 	}
-	return cp, sc.Height, nil
+	return cpEnc, sc.Height, nil
 }
 
 // ProveHostConsensusState returns an existence proof of the consensus state at `height`
