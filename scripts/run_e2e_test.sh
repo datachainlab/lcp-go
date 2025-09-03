@@ -10,7 +10,7 @@ export LCP_ENCLAVE_DEBUG=0
 # should be 0 or greater than `key_update_buffer_time` in the config
 export LCP_KEY_EXPIRATION=86400
 # LCP_RISC0_IMAGE_ID must be set to the same value as in the LCP service
-LCP_RISC0_IMAGE_ID=${LCP_RISC0_IMAGE_ID:-0x27a8d21b54ce10b06901dca7de504f7421cfcad47bae69e8783e449519d99635}
+LCP_RISC0_IMAGE_ID=${LCP_RISC0_IMAGE_ID:-0x391db26782758cb803a03fdd1b0648861ff085f172b94118ee06aa5b952f52cc}
 export ZKDCAP=false
 export LCP_ZKDCAP_RISC0_MOCK=false
 export LCP_RISC0_IMAGE_ID
