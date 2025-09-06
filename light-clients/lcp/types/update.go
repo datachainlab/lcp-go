@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -200,6 +201,11 @@ func (cs ClientState) verifyZKDCAPRegisterEnclaveKey(ctx sdk.Context, store stor
 			return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to recover operator address: %v", err)
 		}
 	}
+	// ensure active operator if operators are set in the client state
+	if len(cs.Operators) > 0 && !cs.ensureActiveOperator(operator) {
+		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "invalid operator: operator=%v not found in operators=%v", operator, cs.GetOperators())
+	}
+
 	ek, expectedOperator, err := sgx.ParseReportData2(commit.ReportData())
 	if err != nil {
 		return errorsmod.Wrapf(clienttypes.ErrInvalidHeader, "failed to parse report data: %v", err)
@@ -589,6 +595,13 @@ func (cs ClientState) updateOperators(ctx sdk.Context, cdc codec.BinaryCodec, cl
 
 func (cs ClientState) Contains(clientStore storetypes.KVStore, ek common.Address) bool {
 	return clientStore.Has(enclaveKeyPath(ek))
+}
+
+func (cs ClientState) ensureActiveOperator(operator common.Address) bool {
+	if operator == (common.Address{}) {
+		return false
+	}
+	return slices.Contains(cs.GetOperators(), operator)
 }
 
 func (cs ClientState) GetEKInfo(clientStore storetypes.KVStore, ek common.Address) (*EKInfo, error) {
