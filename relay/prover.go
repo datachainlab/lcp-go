@@ -173,41 +173,21 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+	results, err := pr.SetupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
+	if err != nil {
 		return nil, err
 	}
 
-	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
-	}
-	var (
-		messages   [][]byte
-		signatures [][]byte
-	)
-	i := 0
-	for h := range headerStream {
-		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
-		}
-		anyHeader, err := clienttypes.PackClientMessage(h.Header)
-		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
-		}
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
-		}
-		// ensure the message is valid
-		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
-			return nil, fmt.Errorf("failed to decode headered proxy message: i=%v message=%x %w", i, res.Message, err)
-		}
-		messages = append(messages, res.Message)
-		signatures = append(signatures, res.Signature)
-		i++
-	}
-	if i == 0 {
+	if len(results) == 0 {
 		return core.MakeHeaderStream(), nil
+	}
+
+	// Extract messages and signatures from results for existing aggregation logic
+	var messages [][]byte
+	var signatures [][]byte
+	for _, result := range results {
+		messages = append(messages, result.Message)
+		signatures = append(signatures, result.Signature)
 	}
 
 	var updates []core.Header
