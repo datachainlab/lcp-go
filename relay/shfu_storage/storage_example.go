@@ -1,4 +1,4 @@
-package updater
+package shfu_storage
 
 import (
 	"context"
@@ -6,13 +6,12 @@ import (
 	"time"
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
-	"github.com/datachainlab/lcp-go/relay/updater/storage"
 )
 
 // StorageExample demonstrates how to use the SHFU storage system
 func StorageExample() error {
 	// Create SQLite storage
-	storage, err := storage.NewSQLiteStorage("./shfu_cache.db")
+	storage, err := NewSQLiteStorage("./shfu_cache.db")
 	if err != nil {
 		return fmt.Errorf("failed to create storage: %w", err)
 	}

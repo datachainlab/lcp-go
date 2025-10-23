@@ -1,4 +1,4 @@
-package updater
+package relay
 
 import (
 	"fmt"
@@ -18,7 +18,6 @@ const (
 	flagGRPCAddr       = "grpc_addr"
 	flagUpdateInterval = "update_interval"
 	flagCacheSize      = "cache_size"
-	flagHeight         = "height"
 )
 
 // UpdateClientCacheCmd creates the update-client-cache command (alias for shfu-cache)
@@ -69,16 +68,20 @@ func cacheCmd(ctx *config.Context) *cobra.Command {
 			height := viper.GetUint64(flagHeight)
 			force := viper.GetBool(flagForce)
 
-			opts := UpdateClientCacheOptions{
+			opts := SHFUUpdateClientCacheOptions{
 				DBPath: dbPath,
 				Height: height,
 				Force:  force,
 			}
 
-			return CacheUpdateClient(cmd.Context(), target, opts)
+			return SHFUCacheUpdateClient(cmd.Context(), target, opts)
 		},
 	}
-	cmd = dbPathFlag(heightFlag(forceFlag(cmd)))
+	cmd = dbPathFlag(forceFlag(cmd))
+	cmd.Flags().Uint64(flagHeight, 0, "a height to restore")
+	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
+		panic(err)
+	}
 	return cmd
 }
 
@@ -120,14 +123,14 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 				cacheSize = 1000
 			}
 
-			opts := UpdateClientServerOptions{
+			opts := SHFUUpdateClientServerOptions{
 				DBPath:         dbPath,
 				GRPCAddr:       grpcAddr,
 				UpdateInterval: updateInterval,
 				CacheSize:      cacheSize,
 			}
 
-			return StartUpdateClientServer(cmd.Context(), target, opts)
+			return SHFUStartUpdateClientServer(cmd.Context(), target, opts)
 		},
 	}
 	cmd = cacheSizeFlag(updateIntervalFlag(grpcAddrFlag(dbPathFlag(cmd))))
@@ -159,11 +162,11 @@ func queryLCPCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("chain ID '%s' not found in configuration: %w", targetChainID, err)
 			}
 
-			opts := QueryLCPOptions{
+			opts := SHFUQueryLCPOptions{
 				Height: counterpartyHeight,
 			}
 
-			return QueryLCP(cmd.Context(), target, opts)
+			return SHFUQueryLCP(cmd.Context(), target, opts)
 		},
 	}
 	return cmd
@@ -207,26 +210,18 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Query chain information with path and channel information
-			opts := QueryChainOptions{
+			opts := SHFUQueryChainOptions{
 				PathName:  pathName,
 				ChannelID: channelID,
 			}
 
-			return QueryChain(cmd.Context(), target, clientCtx, opts)
+			return SHFUQueryChain(cmd.Context(), target, clientCtx, opts)
 		},
 	}
 	return cmd
 }
 
 // Flag functions
-func heightFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().Uint64(flagHeight, 0, "a height to restore")
-	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
-		panic(err)
-	}
-	return cmd
-}
-
 func forceFlag(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().Bool(flagForce, false, "force update cache even if entry exists")
 	if err := viper.BindPFlag(flagForce, cmd.Flags().Lookup(flagForce)); err != nil {

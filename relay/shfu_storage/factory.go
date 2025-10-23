@@ -1,4 +1,4 @@
-package storage
+package shfu_storage
 
 import (
 	"github.com/jmoiron/sqlx"

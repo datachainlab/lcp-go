@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/datachainlab/lcp-go/relay/updater"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -45,7 +44,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 		activateClientCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
 		updateOperatorsCmd(ctx),
-		updater.SHFUCacheCmd(ctx),
+		SHFUCacheCmd(ctx),
 	)
 
 	return cmd

@@ -48,6 +48,12 @@ var (
 	_ core.Prover = (*Prover)(nil)
 )
 
+// UpdateClientResult represents the result of updateClient operation
+type UpdateClientResult struct {
+	Message   []byte
+	Signature []byte
+}
+
 func NewProver(config ProverConfig, originChain core.Chain, originProver core.Prover) (*Prover, error) {
 	conn, err := grpc.Dial(
 		config.LcpServiceAddress,
@@ -169,11 +175,56 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 	return pr.originProver.GetLatestFinalizedHeader(ctx)
 }
 
+// setupHeadersForUpdate0 performs the initial setup and updateClient calls
+// Returns the processed updateClient results for aggregation
+func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*UpdateClientResult, error) {
+	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+		return nil, err
+	}
+
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
+	}
+	var results []*UpdateClientResult
+	i := 0
+	for h := range headerStream {
+		if h.Error != nil {
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+		}
+		anyHeader, err := clienttypes.PackClientMessage(h.Header)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
+		}
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+		if err != nil {
+			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
+		}
+		// ensure the message is valid
+		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
+			return nil, fmt.Errorf("failed to decode headered proxy message: i=%v message=%x %w", i, res.Message, err)
+		}
+		results = append(results, &UpdateClientResult{
+			Message:   res.Message,
+			Signature: res.Signature,
+		})
+		i++
+	}
+
+	return results, nil
+}
+
+// SetupHeadersForUpdate0 performs the initial setup and updateClient calls
+// Public wrapper for setupHeadersForUpdate0
+func (pr *Prover) SetupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*UpdateClientResult, error) {
+	return pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
+}
+
 // SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterparty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
-	results, err := pr.SetupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
+	results, err := pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, err
 	}

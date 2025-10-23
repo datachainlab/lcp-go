@@ -1,4 +1,4 @@
-package updater
+package relay
 
 import (
 	"context"
@@ -7,52 +7,54 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 )
 
-// UpdateClientCacheOptions holds options for update client cache operations
-type UpdateClientCacheOptions struct {
+// SHFUUpdateClientCacheOptions holds options for update client cache operations
+type SHFUUpdateClientCacheOptions struct {
 	DBPath string
 	Height uint64
 	Force  bool
 }
 
-// UpdateClientServerOptions holds options for update client server
-type UpdateClientServerOptions struct {
+// SHFUUpdateClientServerOptions holds options for update client server
+type SHFUUpdateClientServerOptions struct {
 	DBPath         string
 	GRPCAddr       string
 	UpdateInterval time.Duration
 	CacheSize      int
 }
 
-// QueryLCPOptions holds options for query LCP operations
-type QueryLCPOptions struct {
+// SHFUQueryLCPOptions holds options for query LCP operations
+type SHFUQueryLCPOptions struct {
 	Height uint64
 }
 
-// QueryChainOptions holds options for query chain operations
-type QueryChainOptions struct {
+// SHFUQueryChainOptions holds options for query chain operations
+type SHFUQueryChainOptions struct {
 	PathName  string
 	ChannelID string
 }
 
-// CacheUpdateClient executes SetupHeadersForUpdate and stores the result in SQLite cache
-func CacheUpdateClient(ctx context.Context, target *core.ProvableChain, opts UpdateClientCacheOptions) error {
+// SHFUCacheUpdateClient executes SetupHeadersForUpdate and stores the result in SQLite cache
+func SHFUCacheUpdateClient(ctx context.Context, target *core.ProvableChain, opts SHFUUpdateClientCacheOptions) error {
 	fmt.Printf("CacheUpdateClient called with options: %+v\n", opts)
 	return fmt.Errorf("not implemented yet")
 }
 
-// StartUpdateClientServer starts the update client cache server
-func StartUpdateClientServer(ctx context.Context, target *core.ProvableChain, opts UpdateClientServerOptions) error {
+// SHFUStartUpdateClientServer starts a gRPC server for update client operations
+func SHFUStartUpdateClientServer(ctx context.Context, target *core.ProvableChain, opts SHFUUpdateClientServerOptions) error {
 	// TODO: Implement gRPC server functionality
 	fmt.Printf("StartUpdateClientServer called with options: %+v\n", opts)
 	return fmt.Errorf("not implemented yet")
 }
 
-// QueryChain queries chain information including latest consensus state
-func QueryChain(ctx context.Context, target *core.ProvableChain, clientCtx client.Context, opts QueryChainOptions) error {
+// SHFUQueryChain queries chain information including latest consensus state
+func SHFUQueryChain(ctx context.Context, target *core.ProvableChain, clientCtx client.Context, opts SHFUQueryChainOptions) error {
 	fmt.Printf("QueryChain called with options: %+v\n", opts)
 	fmt.Printf("Target chain: %s\n", target.ChainID())
 
@@ -134,7 +136,7 @@ func QueryChain(ctx context.Context, target *core.ProvableChain, clientCtx clien
 }
 
 // QueryLCP executes the existing SetupHeadersForUpdate call for testing purposes
-func QueryLCP(ctx context.Context, target *core.ProvableChain, opts QueryLCPOptions) error {
+func SHFUQueryLCP(ctx context.Context, target *core.ProvableChain, opts SHFUQueryLCPOptions) error {
 	fmt.Printf("QueryLCP called with options: %+v\n", opts)
 	fmt.Printf("Target chain: %s\n", target.ChainID())
 
@@ -158,7 +160,7 @@ func QueryLCP(ctx context.Context, target *core.ProvableChain, opts QueryLCPOpti
 	fmt.Printf("Using mock counterparty height: %d\n", mockHeight.GetRevisionHeight())
 
 	// Use ExecuteSetupHeadersForUpdate to get UpdateClientResult array
-	results, err := ExecuteSetupHeadersForUpdate(ctx, target, opts.Height)
+	results, err := SHFUExecuteSetupHeadersForUpdate(ctx, target, opts.Height)
 	if err != nil {
 		return fmt.Errorf("failed to execute SetupHeadersForUpdate: %w", err)
 	}
@@ -202,7 +204,7 @@ func QueryLCP(ctx context.Context, target *core.ProvableChain, opts QueryLCPOpti
 
 // ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
 // This function can be used by various commands and services
-func ExecuteSetupHeadersForUpdate(ctx context.Context, target *core.ProvableChain, counterpartyHeight uint64) ([]*UpdateClientResult, error) {
+func SHFUExecuteSetupHeadersForUpdate(ctx context.Context, target *core.ProvableChain, counterpartyHeight uint64) ([]*UpdateClientResult, error) {
 	// Get the latest height from the target chain
 	latestHeight, err := target.LatestHeight(ctx)
 	if err != nil {
@@ -221,13 +223,10 @@ func ExecuteSetupHeadersForUpdate(ctx context.Context, target *core.ProvableChai
 	// Create a SHFUMockChain instance for counterparty argument
 	counterparty := NewSHFUMockChain("mock-counterparty-chain", mockHeight)
 
-	// Try to get the Prover and cast it to our LCP Prover type
-	prover := target.Prover
-	lcpProver, ok := prover.(interface {
-		SetupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*UpdateClientResult, error)
-	})
-	if !ok {
-		return nil, fmt.Errorf("prover does not support SetupHeadersForUpdate0 method (prover type: %T)", prover)
+	// Try to unwrap the Prover to get the LCP Prover type
+	lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unwrap prover to LCP Prover: %w", err)
 	}
 
 	// Call SetupHeadersForUpdate0 with the mock counterparty
@@ -298,4 +297,75 @@ func (r *SHFUResult) ToStorageRecord() *SHFURecord {
 			"status": r.Status,
 		},
 	}
+}
+
+// SHFUMockChain is a dummy implementation of core.FinalityAwareChain
+// that returns a specific height for testing SetupHeadersForUpdate calls.
+// It embeds the interface so unimplemented methods will panic at runtime.
+type SHFUMockChain struct {
+	core.FinalityAwareChain // Embedded interface - unimplemented methods will panic
+	chainID                 string
+	latestHeight            ibcexported.Height
+}
+
+var (
+	_ core.FinalityAwareChain = (*SHFUMockChain)(nil)
+)
+
+// SHFUMockClientState is a dummy implementation that embeds ibcexported.ClientState
+// All methods will panic at runtime unless specifically implemented
+type SHFUMockClientState struct {
+	ibcexported.ClientState // Embedded interface - unimplemented methods will panic
+	latestHeight            ibcexported.Height
+}
+
+var (
+	_ ibcexported.ClientState = (*SHFUMockClientState)(nil)
+)
+
+// NewSHFUMockChain creates a new SHFUMockChain instance
+func NewSHFUMockChain(chainID string, latestHeight ibcexported.Height) *SHFUMockChain {
+	return &SHFUMockChain{
+		chainID:      chainID,
+		latestHeight: latestHeight,
+	}
+}
+
+// ChainID returns the chain ID
+func (c *SHFUMockChain) ChainID() string {
+	return c.chainID
+}
+
+// LatestHeight returns the latest height with context (allowed method)
+func (c *SHFUMockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
+	return c.latestHeight, nil
+}
+
+// QueryClientState returns a QueryClientStateResponse with mock client state
+func (c *SHFUMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+	// Get height from query context
+	height := qctx.Height()
+	mockClientState := NewSHFUMockClientState(height)
+
+	// Pack the client state into Any type
+	clientStateAny, err := types.NewAnyWithValue(mockClientState)
+	if err != nil {
+		return nil, err
+	}
+
+	return &clienttypes.QueryClientStateResponse{
+		ClientState: clientStateAny,
+	}, nil
+}
+
+// NewSHFUMockClientState creates a new SHFUMockClientState instance
+func NewSHFUMockClientState(latestHeight ibcexported.Height) *SHFUMockClientState {
+	return &SHFUMockClientState{
+		latestHeight: latestHeight,
+	}
+}
+
+// GetLatestHeight returns the configured latest height
+func (s *SHFUMockClientState) GetLatestHeight() ibcexported.Height {
+	return s.latestHeight
 }
