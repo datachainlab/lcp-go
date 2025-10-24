@@ -3,9 +3,11 @@ package relay
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -68,10 +70,13 @@ func cacheCmd(ctx *config.Context) *cobra.Command {
 			height := viper.GetUint64(flagHeight)
 			force := viper.GetBool(flagForce)
 
+			// Create Height object with revision number 0 (default)
+			fromHeight := clienttypes.NewHeight(0, height)
+
 			opts := SHFUUpdateClientCacheOptions{
-				DBPath: dbPath,
-				Height: height,
-				Force:  force,
+				DBPath:     dbPath,
+				FromHeight: fromHeight,
+				Force:      force,
 			}
 
 			return SHFUCacheUpdateClient(cmd.Context(), target, opts)
@@ -139,22 +144,35 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 
 func queryLCPCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "query-lcp [chain-id] [counterparty-height]",
-		Short: "Test existing SetupHeadersForUpdate call (for testing purposes)",
+		Use:   "query-lcp [chain-id] [from-height]",
+		Short: "Query LCP from the specified height (format: <revision_number>-<revision height>)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				return fmt.Errorf("chain ID and counterparty height are required")
+				return fmt.Errorf("chain ID and from-height are required")
 			}
 
 			targetChainID := args[0]
-			counterpartyHeightStr := args[1]
+			revisionHeightStr := args[1]
 
-			// Parse counterparty height
-			counterpartyHeight, err := strconv.ParseUint(counterpartyHeightStr, 10, 64)
-			if err != nil {
-				return fmt.Errorf("invalid counterparty height '%s': %w", counterpartyHeightStr, err)
+			// Parse revision-height in format "revision_number-height"
+			parts := strings.Split(revisionHeightStr, "-")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid from-height format '%s': expected format is '<revision_number>-<revision_height>'", revisionHeightStr)
 			}
+
+			revisionNumber, err := strconv.ParseUint(parts[0], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid revision number '%s': %w", parts[0], err)
+			}
+
+			revisionHeight, err := strconv.ParseUint(parts[1], 10, 64)
+			if err != nil {
+				return fmt.Errorf("invalid revision height '%s': %w", parts[1], err)
+			}
+
+			// Create Height object with parsed revision number and height
+			fromHeight := clienttypes.NewHeight(revisionNumber, revisionHeight)
 
 			// Get the target chain by chain ID
 			target, err := ctx.Config.GetChain(targetChainID)
@@ -163,7 +181,7 @@ func queryLCPCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			opts := SHFUQueryLCPOptions{
-				Height: counterpartyHeight,
+				FromHeight: fromHeight,
 			}
 
 			return SHFUQueryLCP(cmd.Context(), target, opts)

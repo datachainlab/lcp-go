@@ -19,42 +19,33 @@ func StorageExample() error {
 
 	ctx := context.Background()
 
-	// Create a sample SHFU record
+	// Create a sample SHFU record with UpdateClientResults
+	sampleResults := []*UpdateClientResult{
+		{
+			Message:   []byte("sample_message_1"),
+			Signature: []byte("sample_signature_1"),
+		},
+		{
+			Message:   []byte("sample_message_2"),
+			Signature: []byte("sample_signature_2"),
+		},
+	}
+
 	record := &SHFURecord{
 		ID:                  "example_record_1",
 		ChainID:             "chain-a",
 		CounterpartyChainID: "chain-b",
-		CounterpartyHeight: clienttypes.Height{
+		FromHeight: clienttypes.Height{
 			RevisionNumber: 1,
 			RevisionHeight: 100,
-		},
-		LatestHeight: clienttypes.Height{
-			RevisionNumber: 1,
-			RevisionHeight: 105,
 		},
 		LatestFinalizedHeight: clienttypes.Height{
 			RevisionNumber: 1,
 			RevisionHeight: 103,
 		},
-		Headers: []SHFUHeaderRecord{
-			{
-				Index: 0,
-				Height: clienttypes.Height{
-					RevisionNumber: 1,
-					RevisionHeight: 101,
-				},
-				HeaderType:  "mock_header",
-				HeaderData:  []byte("mock header data"),
-				ProcessedAt: time.Now(),
-			},
-		},
-		ErrorMessage: "",
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-		Metadata: map[string]interface{}{
-			"source":  "storage_example",
-			"version": "1.0",
-		},
+		LatestFinalizedHeightTime: time.Now(),
+		UpdatedAt:                 time.Now(),
+		UpdateClientResults:       sampleResults,
 	}
 
 	// Save the record
@@ -71,9 +62,9 @@ func StorageExample() error {
 	}
 
 	if latest != nil {
-		fmt.Printf("Retrieved latest record: %s, created at: %s\n",
-			latest.ID, latest.CreatedAt.Format(time.RFC3339))
-		fmt.Printf("Record has %d headers\n", len(latest.Headers))
+		fmt.Printf("Retrieved latest record: %s, updated at: %s\n",
+			latest.ID, latest.UpdatedAt.Format(time.RFC3339))
+		fmt.Printf("Latest finalized height time: %s\n", latest.LatestFinalizedHeightTime.Format(time.RFC3339))
 	}
 
 	return nil

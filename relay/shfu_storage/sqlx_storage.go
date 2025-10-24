@@ -10,6 +10,28 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+/*
+DB Schema Overview:
+
+1. shfu_records - Main records table for SHFU (SetupHeadersForUpdate) operations
+   - Stores chain information, counterparty details, height data, and execution metadata
+   - Primary key: id (TEXT)
+   - Key fields: chain_id, counterparty_chain_id, various height revisions
+   - Includes error tracking and timestamps
+
+2. shfu_headers - Headers associated with each SHFU record
+   - Stores individual header data for each update operation
+   - Links to shfu_records via record_id (foreign key)
+   - Contains header type, binary data, and processing information
+   - Auto-incrementing primary key with proper indexing
+
+Indexes:
+   - Chain/counterparty combination for efficient filtering
+   - Height-based queries for chronological operations
+   - Creation time for temporal analysis
+   - Record ID for header lookups
+*/
+
 // DBDialect defines database-specific operations to abstract SQL differences
 type DBDialect interface {
 	// GetCreateTableSQL returns the SQL statements to create required tables
@@ -71,13 +93,6 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 		return fmt.Errorf("failed to insert SHFU record: %w", err)
 	}
 
-	// Insert associated headers
-	for _, header := range record.Headers {
-		if err := s.insertSHFUHeader(ctx, tx, record.ID, &header); err != nil {
-			return fmt.Errorf("failed to insert SHFU header: %w", err)
-		}
-	}
-
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
@@ -86,20 +101,19 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 	return nil
 }
 
-// FindSHFUByChainAndHeight finds SHFU records for a specific chain and counterparty height range
+// FindSHFUByChainAndHeight finds SHFU records for a specific chain and from height range
 func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight, toHeight uint64) ([]*SHFURecord, error) {
 	p1, p2, p3, p4 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2), s.dialect.GetPlaceholder(3), s.dialect.GetPlaceholder(4)
 
 	query := fmt.Sprintf(`
-		SELECT id, chain_id, counterparty_chain_id, counterparty_height_revision_number, 
-		       counterparty_height_revision_height, latest_height_revision_number, 
-		       latest_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, error_message, created_at, 
-		       updated_at, metadata
+		SELECT id, chain_id, counterparty_chain_id, from_height_revision_number, 
+		       from_height_revision_height, latest_finalized_height_revision_number, 
+		       latest_finalized_height_revision_height, latest_finalized_height_time, 
+		       updated_at, update_client_results
 		FROM shfu_records 
 		WHERE chain_id = %s AND counterparty_chain_id = %s 
-		  AND counterparty_height_revision_height BETWEEN %s AND %s
-		ORDER BY created_at DESC
+		  AND from_height_revision_height BETWEEN %s AND %s
+		ORDER BY updated_at DESC
 	`, p1, p2, p3, p4)
 
 	rows, err := s.db.QueryxContext(ctx, query, chainID, counterpartyChainID, fromHeight, toHeight)
@@ -113,11 +127,6 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 		record, err := s.scanSHFURecord(rows)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan SHFU record: %w", err)
-		}
-
-		// Load associated headers
-		if err := s.loadHeaders(ctx, record); err != nil {
-			return nil, fmt.Errorf("failed to load headers for record %s: %w", record.ID, err)
 		}
 
 		records = append(records, record)
@@ -135,14 +144,13 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChainPair(ctx context.Context, chainID
 	p1, p2 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2)
 
 	query := fmt.Sprintf(`
-		SELECT id, chain_id, counterparty_chain_id, counterparty_height_revision_number, 
-		       counterparty_height_revision_height, latest_height_revision_number, 
-		       latest_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, error_message, created_at, 
-		       updated_at, metadata
+		SELECT id, chain_id, counterparty_chain_id, from_height_revision_number, 
+		       from_height_revision_height, latest_finalized_height_revision_number, 
+		       latest_finalized_height_revision_height, latest_finalized_height_time, 
+		       updated_at, update_client_results
 		FROM shfu_records 
 		WHERE chain_id = %s AND counterparty_chain_id = %s
-		ORDER BY created_at DESC 
+		ORDER BY updated_at DESC 
 		LIMIT 1
 	`, p1, p2)
 
@@ -156,11 +164,6 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChainPair(ctx context.Context, chainID
 		return nil, fmt.Errorf("failed to scan latest SHFU record: %w", err)
 	}
 
-	// Load associated headers
-	if err := s.loadHeaders(ctx, record); err != nil {
-		return nil, fmt.Errorf("failed to load headers for record %s: %w", record.ID, err)
-	}
-
 	return record, nil
 }
 
@@ -169,14 +172,13 @@ func (s *SqlxSHFUStorage) FindSHFUByTimeRange(ctx context.Context, chainID strin
 	p1, p2, p3 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2), s.dialect.GetPlaceholder(3)
 
 	query := fmt.Sprintf(`
-		SELECT id, chain_id, counterparty_chain_id, counterparty_height_revision_number, 
-		       counterparty_height_revision_height, latest_height_revision_number, 
-		       latest_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, error_message, created_at, 
-		       updated_at, metadata
+		SELECT id, chain_id, counterparty_chain_id, from_height_revision_number, 
+		       from_height_revision_height, latest_finalized_height_revision_number, 
+		       latest_finalized_height_revision_height, latest_finalized_height_time, 
+		       updated_at, update_client_results
 		FROM shfu_records 
-		WHERE chain_id = %s AND created_at BETWEEN %s AND %s
-		ORDER BY created_at DESC
+		WHERE chain_id = %s AND updated_at BETWEEN %s AND %s
+		ORDER BY updated_at DESC
 	`, p1, p2, p3)
 
 	rows, err := s.db.QueryxContext(ctx, query, chainID, s.dialect.ConvertTimeToDB(fromTime), s.dialect.ConvertTimeToDB(toTime))
@@ -192,51 +194,6 @@ func (s *SqlxSHFUStorage) FindSHFUByTimeRange(ctx context.Context, chainID strin
 			return nil, fmt.Errorf("failed to scan SHFU record: %w", err)
 		}
 
-		// Load associated headers
-		if err := s.loadHeaders(ctx, record); err != nil {
-			return nil, fmt.Errorf("failed to load headers for record %s: %w", record.ID, err)
-		}
-
-		records = append(records, record)
-	}
-
-	return records, nil
-}
-
-// FindFailedSHFU finds failed SHFU operations for retry or analysis
-func (s *SqlxSHFUStorage) FindFailedSHFU(ctx context.Context, chainID string, limit int) ([]*SHFURecord, error) {
-	p1, p2 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2)
-
-	query := fmt.Sprintf(`
-		SELECT id, chain_id, counterparty_chain_id, counterparty_height_revision_number, 
-		       counterparty_height_revision_height, latest_height_revision_number, 
-		       latest_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, error_message, created_at, 
-		       updated_at, metadata
-		FROM shfu_records 
-		WHERE chain_id = %s AND error_message IS NOT NULL AND error_message != ''
-		ORDER BY created_at DESC 
-		LIMIT %s
-	`, p1, p2)
-
-	rows, err := s.db.QueryxContext(ctx, query, chainID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query failed SHFU records: %w", err)
-	}
-	defer rows.Close()
-
-	var records []*SHFURecord
-	for rows.Next() {
-		record, err := s.scanSHFURecord(rows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan SHFU record: %w", err)
-		}
-
-		// Load associated headers
-		if err := s.loadHeaders(ctx, record); err != nil {
-			return nil, fmt.Errorf("failed to load headers for record %s: %w", record.ID, err)
-		}
-
 		records = append(records, record)
 	}
 
@@ -247,19 +204,6 @@ func (s *SqlxSHFUStorage) FindFailedSHFU(ctx context.Context, chainID string, li
 func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 	p1 := s.dialect.GetPlaceholder(1)
-
-	// Delete headers first (foreign key constraint)
-	headerQuery := fmt.Sprintf(`
-		DELETE FROM shfu_headers 
-		WHERE record_id IN (
-			SELECT id FROM shfu_records WHERE created_at < %s
-		)
-	`, p1)
-
-	_, err := s.db.ExecContext(ctx, headerQuery, s.dialect.ConvertTimeToDB(cutoffTime))
-	if err != nil {
-		return 0, fmt.Errorf("failed to delete old SHFU headers: %w", err)
-	}
 
 	// Delete records
 	recordQuery := fmt.Sprintf(`DELETE FROM shfu_records WHERE created_at < %s`, p1)
@@ -289,58 +233,30 @@ type rowScanner interface {
 }
 
 func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, record *SHFURecord) error {
-	// Serialize metadata to JSON
-	var metadataJSON sql.NullString
-	if record.Metadata != nil {
-		jsonBytes, err := json.Marshal(record.Metadata)
-		if err != nil {
-			return fmt.Errorf("failed to marshal metadata: %w", err)
-		}
-		metadataJSON = sql.NullString{String: string(jsonBytes), Valid: true}
-	}
-
 	query := `INSERT INTO shfu_records (
 		id, chain_id, counterparty_chain_id,
-		counterparty_height_revision_number, counterparty_height_revision_height,
-		latest_height_revision_number, latest_height_revision_height,
+		from_height_revision_number, from_height_revision_height,
 		latest_finalized_height_revision_number, latest_finalized_height_revision_height,
-		error_message, created_at, updated_at, metadata
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		latest_finalized_height_time, updated_at, update_client_results
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
-	_, err := tx.ExecContext(ctx, query,
+	// Serialize UpdateClientResults to JSON
+	updateClientResultsJSON, err := json.Marshal(record.UpdateClientResults)
+	if err != nil {
+		return fmt.Errorf("failed to marshal UpdateClientResults: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, query,
 		record.ID,
 		record.ChainID,
 		record.CounterpartyChainID,
-		record.CounterpartyHeight.RevisionNumber,
-		record.CounterpartyHeight.RevisionHeight,
-		record.LatestHeight.RevisionNumber,
-		record.LatestHeight.RevisionHeight,
+		record.FromHeight.RevisionNumber,
+		record.FromHeight.RevisionHeight,
 		record.LatestFinalizedHeight.RevisionNumber,
 		record.LatestFinalizedHeight.RevisionHeight,
-		record.ErrorMessage,
-		s.dialect.ConvertTimeToDB(record.CreatedAt),
+		s.dialect.ConvertTimeToDB(record.LatestFinalizedHeightTime),
 		s.dialect.ConvertTimeToDB(record.UpdatedAt),
-		metadataJSON,
-	)
-
-	return err
-}
-
-func (s *SqlxSHFUStorage) insertSHFUHeader(ctx context.Context, tx *sqlx.Tx, recordID string, header *SHFUHeaderRecord) error {
-	query := `INSERT INTO shfu_headers (
-		record_id, header_index, height_revision_number, height_revision_height,
-		header_type, header_data, processed_at, error_message
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-
-	_, err := tx.ExecContext(ctx, query,
-		recordID,
-		header.Index,
-		header.Height.RevisionNumber,
-		header.Height.RevisionHeight,
-		header.HeaderType,
-		header.HeaderData,
-		s.dialect.ConvertTimeToDB(header.ProcessedAt),
-		header.ErrorMessage,
+		updateClientResultsJSON,
 	)
 
 	return err
@@ -348,93 +264,43 @@ func (s *SqlxSHFUStorage) insertSHFUHeader(ctx context.Context, tx *sqlx.Tx, rec
 
 func (s *SqlxSHFUStorage) scanSHFURecord(scanner rowScanner) (*SHFURecord, error) {
 	var record SHFURecord
-	var metadataJSON sql.NullString
-	var createdAtDB, updatedAtDB interface{}
+	var updatedAtDB, latestFinalizedHeightTimeDB interface{}
+	var updateClientResultsJSON []byte
 
 	err := scanner.Scan(
 		&record.ID,
 		&record.ChainID,
 		&record.CounterpartyChainID,
-		&record.CounterpartyHeight.RevisionNumber,
-		&record.CounterpartyHeight.RevisionHeight,
-		&record.LatestHeight.RevisionNumber,
-		&record.LatestHeight.RevisionHeight,
+		&record.FromHeight.RevisionNumber,
+		&record.FromHeight.RevisionHeight,
 		&record.LatestFinalizedHeight.RevisionNumber,
 		&record.LatestFinalizedHeight.RevisionHeight,
-		&record.ErrorMessage,
-		&createdAtDB,
+		&latestFinalizedHeightTimeDB,
 		&updatedAtDB,
-		&metadataJSON,
+		&updateClientResultsJSON,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Parse timestamps
-	record.CreatedAt, err = s.dialect.ConvertTimeFromDB(createdAtDB)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse created_at: %w", err)
-	}
-
 	record.UpdatedAt, err = s.dialect.ConvertTimeFromDB(updatedAtDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
 	}
 
-	// Parse metadata JSON
-	if metadataJSON.Valid {
-		if err := json.Unmarshal([]byte(metadataJSON.String), &record.Metadata); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+	record.LatestFinalizedHeightTime, err = s.dialect.ConvertTimeFromDB(latestFinalizedHeightTimeDB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse latest_finalized_height_time: %w", err)
+	}
+
+	// Deserialize UpdateClientResults from JSON
+	if updateClientResultsJSON != nil {
+		err = json.Unmarshal(updateClientResultsJSON, &record.UpdateClientResults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal UpdateClientResults: %w", err)
 		}
 	}
 
 	return &record, nil
-}
-
-func (s *SqlxSHFUStorage) loadHeaders(ctx context.Context, record *SHFURecord) error {
-	query := `SELECT header_index, height_revision_number, height_revision_height,
-	                 header_type, header_data, processed_at, error_message
-	          FROM shfu_headers 
-	          WHERE record_id = ? 
-	          ORDER BY header_index`
-
-	rows, err := s.db.QueryxContext(ctx, query, record.ID)
-	if err != nil {
-		return fmt.Errorf("failed to query headers: %w", err)
-	}
-	defer rows.Close()
-
-	var headers []SHFUHeaderRecord
-	for rows.Next() {
-		var header SHFUHeaderRecord
-		var processedAtDB interface{}
-
-		err := rows.Scan(
-			&header.Index,
-			&header.Height.RevisionNumber,
-			&header.Height.RevisionHeight,
-			&header.HeaderType,
-			&header.HeaderData,
-			&processedAtDB,
-			&header.ErrorMessage,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to scan header: %w", err)
-		}
-
-		// Parse timestamp
-		header.ProcessedAt, err = s.dialect.ConvertTimeFromDB(processedAtDB)
-		if err != nil {
-			return fmt.Errorf("failed to parse processed_at: %w", err)
-		}
-
-		headers = append(headers, header)
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("row iteration error: %w", err)
-	}
-
-	record.Headers = headers
-	return nil
 }

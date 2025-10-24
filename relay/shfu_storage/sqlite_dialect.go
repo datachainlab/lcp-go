@@ -20,37 +20,20 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			id TEXT PRIMARY KEY,
 			chain_id TEXT NOT NULL,
 			counterparty_chain_id TEXT NOT NULL,
-			counterparty_height_revision_number INTEGER NOT NULL,
-			counterparty_height_revision_height INTEGER NOT NULL,
-			latest_height_revision_number INTEGER NOT NULL,
-			latest_height_revision_height INTEGER NOT NULL,
+			from_height_revision_number INTEGER NOT NULL,
+			from_height_revision_height INTEGER NOT NULL,
 			latest_finalized_height_revision_number INTEGER NOT NULL,
 			latest_finalized_height_revision_height INTEGER NOT NULL,
-			error_message TEXT,
-			created_at DATETIME NOT NULL,
+			latest_finalized_height_time DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
-			metadata TEXT
-		)`,
-		`CREATE TABLE IF NOT EXISTS shfu_headers (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			record_id TEXT NOT NULL,
-			header_index INTEGER NOT NULL,
-			height_revision_number INTEGER NOT NULL,
-			height_revision_height INTEGER NOT NULL,
-			header_type TEXT NOT NULL,
-			header_data BLOB NOT NULL,
-			processed_at DATETIME NOT NULL,
-			error_message TEXT,
-			FOREIGN KEY (record_id) REFERENCES shfu_records(id) ON DELETE CASCADE
+			update_client_results BLOB
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain_counterparty 
 		 ON shfu_records(chain_id, counterparty_chain_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_height 
-		 ON shfu_records(counterparty_height_revision_height)`,
-		`CREATE INDEX IF NOT EXISTS idx_shfu_records_created_at 
-		 ON shfu_records(created_at)`,
-		`CREATE INDEX IF NOT EXISTS idx_shfu_headers_record_id 
-		 ON shfu_headers(record_id)`,
+		 ON shfu_records(from_height_revision_height)`,
+		`CREATE INDEX IF NOT EXISTS idx_shfu_records_updated_at 
+		 ON shfu_records(updated_at)`,
 	}
 }
 

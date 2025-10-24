@@ -13,6 +13,7 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/enclave"
+	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -47,12 +48,6 @@ type Prover struct {
 var (
 	_ core.Prover = (*Prover)(nil)
 )
-
-// UpdateClientResult represents the result of updateClient operation
-type UpdateClientResult struct {
-	Message   []byte
-	Signature []byte
-}
 
 func NewProver(config ProverConfig, originChain core.Chain, originProver core.Prover) (*Prover, error) {
 	conn, err := grpc.Dial(
@@ -177,7 +172,7 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 
 // setupHeadersForUpdate0 performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
-func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*UpdateClientResult, error) {
+func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
 	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
@@ -186,7 +181,7 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
-	var results []*UpdateClientResult
+	var results []*shfu_storage.UpdateClientResult
 	i := 0
 	for h := range headerStream {
 		if h.Error != nil {
@@ -204,7 +199,7 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
 			return nil, fmt.Errorf("failed to decode headered proxy message: i=%v message=%x %w", i, res.Message, err)
 		}
-		results = append(results, &UpdateClientResult{
+		results = append(results, &shfu_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
 		})
