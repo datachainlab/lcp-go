@@ -214,12 +214,6 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 	return results, nil
 }
 
-// SetupHeadersForUpdate0 performs the initial setup and updateClient calls
-// Public wrapper for setupHeadersForUpdate0
-func (pr *Prover) SetupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*UpdateClientResult, error) {
-	return pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
-}
-
 // SetupHeadersForUpdate returns the finalized header and any intermediate headers needed to apply it to the client on the counterparty chain
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client

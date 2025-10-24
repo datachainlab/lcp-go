@@ -229,10 +229,10 @@ func SHFUExecuteSetupHeadersForUpdate(ctx context.Context, target *core.Provable
 		return nil, fmt.Errorf("failed to unwrap prover to LCP Prover: %w", err)
 	}
 
-	// Call SetupHeadersForUpdate0 with the mock counterparty
-	results, err := lcpProver.SetupHeadersForUpdate0(ctx, counterparty, latestFinalizedHeader)
+	// Call setupHeadersForUpdate0 with the mock counterparty
+	results, err := lcpProver.setupHeadersForUpdate0(ctx, counterparty, latestFinalizedHeader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call SetupHeadersForUpdate0: %w", err)
+		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)
 	}
 
 	// Return the UpdateClientResult array directly
