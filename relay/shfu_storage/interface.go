@@ -15,7 +15,6 @@ type UpdateClientResult struct {
 
 // SHFURecord represents a SetupHeadersForUpdate record for persistence
 type SHFURecord struct {
-	ID                        string                `json:"id"`
 	ChainID                   string                `json:"chain_id"`
 	CounterpartyChainID       string                `json:"counterparty_chain_id"`
 	FromHeight                clienttypes.Height    `json:"from_height"`
@@ -39,6 +38,9 @@ type SHFUStorage interface {
 
 	// FindSHFUByTimeRange finds SHFU records within a time range
 	FindSHFUByTimeRange(ctx context.Context, chainID string, fromTime, toTime time.Time) ([]*SHFURecord, error)
+
+	// ListAllSHFURecords lists all SHFU records in the database
+	ListAllSHFURecords(ctx context.Context) ([]*SHFURecord, error)
 
 	// CleanupOldSHFU removes SHFU records older than the specified duration
 	CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error)

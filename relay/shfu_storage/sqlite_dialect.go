@@ -17,7 +17,6 @@ func NewSQLiteDialect() *SQLiteDialect {
 func (d *SQLiteDialect) GetCreateTableSQL() []string {
 	return []string{
 		`CREATE TABLE IF NOT EXISTS shfu_records (
-			id TEXT PRIMARY KEY,
 			chain_id TEXT NOT NULL,
 			counterparty_chain_id TEXT NOT NULL,
 			from_height_revision_number INTEGER NOT NULL,
@@ -26,7 +25,8 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			latest_finalized_height_revision_height INTEGER NOT NULL,
 			latest_finalized_height_time DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
-			update_client_results BLOB
+			update_client_results BLOB,
+			PRIMARY KEY (chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, latest_finalized_height_revision_number, latest_finalized_height_revision_height)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain_counterparty 
 		 ON shfu_records(chain_id, counterparty_chain_id)`,

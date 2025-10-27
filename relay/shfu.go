@@ -15,13 +15,6 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
 )
 
-// SHFUUpdateClientCacheOptions holds options for update client cache operations
-type SHFUUpdateClientCacheOptions struct {
-	DBPath     string
-	FromHeight ibcexported.Height // the starting height for SHFU operations
-	Force      bool
-}
-
 // SHFUUpdateClientServerOptions holds options for update client server
 type SHFUUpdateClientServerOptions struct {
 	DBPath         string
@@ -30,21 +23,10 @@ type SHFUUpdateClientServerOptions struct {
 	CacheSize      int
 }
 
-// SHFUQueryLCPOptions defines options for querying LCP
-type SHFUQueryLCPOptions struct {
-	FromHeight ibcexported.Height // the starting height for SHFU operations
-}
-
 // SHFUQueryChainOptions holds options for query chain operations
 type SHFUQueryChainOptions struct {
 	PathName  string
 	ChannelID string
-}
-
-// SHFUCacheUpdateClient executes SetupHeadersForUpdate and stores the result in SQLite cache
-func SHFUCacheUpdateClient(ctx context.Context, target *core.ProvableChain, opts SHFUUpdateClientCacheOptions) error {
-	fmt.Printf("CacheUpdateClient called with options: %+v\n", opts)
-	return fmt.Errorf("not implemented yet")
 }
 
 // SHFUStartUpdateClientServer starts a gRPC server for update client operations
@@ -136,81 +118,26 @@ func SHFUQueryChain(ctx context.Context, target *core.ProvableChain, clientCtx c
 	return nil
 }
 
-// QueryLCP executes the existing SetupHeadersForUpdate call for testing purposes
-func SHFUQueryLCP(ctx context.Context, target *core.ProvableChain, opts SHFUQueryLCPOptions) error {
-	fmt.Printf("QueryLCP called with options: %+v\n", opts)
-	fmt.Printf("Target chain: %s\n", target.ChainID())
-
-	// Get the latest height from the target chain
-	latestHeight, err := target.LatestHeight(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get latest height: %w", err)
-	}
-
-	// Try to get the finalized header
-	latestFinalizedHeader, err := target.GetLatestFinalizedHeader(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get latest finalized header: %w", err)
-	}
-
-	fmt.Printf("Latest finalized header height: %d\n", latestFinalizedHeader.GetHeight().GetRevisionHeight())
-
-	// Create the height for SHFUMockChain from the specified height
-	mockHeight := clienttypes.NewHeight(latestHeight.GetRevisionNumber(), opts.FromHeight.GetRevisionHeight())
-
-	fmt.Printf("Using mock counterparty height: %d\n", mockHeight.GetRevisionHeight())
-
-	// Use ExecuteSetupHeadersForUpdate to get UpdateClientResult array
-	results, err := SHFUExecuteSetupHeadersForUpdate(ctx, target, opts.FromHeight)
-	if err != nil {
-		return fmt.Errorf("failed to execute SetupHeadersForUpdate: %w", err)
-	}
-
-	// Process the results
-	fmt.Printf("Received %d updateClient results\n", len(results))
-	for i, result := range results {
-		fmt.Printf("Result %d: message_size=%d bytes, signature_size=%d bytes\n",
-			i+1,
-			len(result.Message),
-			len(result.Signature))
-	}
-	resultCount := len(results)
-
-	// Create a result with chain and header information
-	result := map[string]interface{}{
-		"chain_id":                       target.ChainID(),
-		"latest_height":                  latestHeight.GetRevisionHeight(),
-		"latest_finalized_header_height": latestFinalizedHeader.GetHeight().GetRevisionHeight(),
-		"mock_counterparty_height":       mockHeight.GetRevisionHeight(),
-		"results_received_count":         resultCount,
-		"message":                        "ExecuteSetupHeadersForUpdate called successfully",
-		"success":                        true,
-		"timestamp":                      time.Now().Format(time.RFC3339),
-	}
-
-	// Add the requested height info
-	result["target_height"] = latestHeight.GetRevisionHeight()
-	result["requested_height"] = opts.FromHeight
-	result["actual_height_used"] = opts.FromHeight
-
-	// Convert result to JSON string and output
-	resultBytes, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal result to JSON: %w", err)
-	}
-
-	fmt.Printf("SetupHeadersForUpdate0 result:\n%s\n", string(resultBytes))
-	return nil
-}
-
 // ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations
-func SHFUExecuteSetupHeadersForUpdate(ctx context.Context, target *core.ProvableChain, fromHeight ibcexported.Height) ([]*shfu_storage.UpdateClientResult, error) {
+func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counterpartyChainID string, fromHeight ibcexported.Height, storage shfu_storage.SHFUStorage) (*shfu_storage.SHFURecord, error) {
 	// Try to get the finalized header
 	latestFinalizedHeader, err := target.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
+	}
+
+	fromHeightValue := fromHeight.GetRevisionHeight()
+	toHeight := latestFinalizedHeader.GetHeight().GetRevisionHeight()
+
+	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
+	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterpartyChainID, fromHeightValue, toHeight)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing records: %w", err)
+	}
+	if len(existingRecords) > 0 {
+		return nil, nil
 	}
 
 	// Create the height for SHFUMockChain from the specified height
@@ -231,8 +158,27 @@ func SHFUExecuteSetupHeadersForUpdate(ctx context.Context, target *core.Provable
 		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)
 	}
 
-	// Return the UpdateClientResult array directly
-	return results, nil
+	// Create SHFU record for database storage
+	record := &shfu_storage.SHFURecord{
+		ChainID:                   target.ChainID(),
+		CounterpartyChainID:       counterpartyChainID,
+		FromHeight:                *fromHeight.(*clienttypes.Height),
+		LatestFinalizedHeight:     *latestFinalizedHeader.GetHeight().(*clienttypes.Height),
+		LatestFinalizedHeightTime: time.Now(), // Could be extracted from header if available
+		UpdatedAt:                 time.Now(),
+		UpdateClientResults:       results,
+	}
+
+	// Save the record to database
+	err = storage.SaveSHFUResult(ctx, record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save SHFU result to database: %w", err)
+	}
+
+	fmt.Printf("Successfully saved SHFU result to database for chain %s (counterparty: %s)\n", target.ChainID(), counterpartyChainID)
+
+	// Return the saved record
+	return record, nil
 }
 
 // SHFUMockChain is a dummy implementation of core.FinalityAwareChain

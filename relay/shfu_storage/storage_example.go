@@ -10,8 +10,8 @@ import (
 
 // StorageExample demonstrates how to use the SHFU storage system
 func StorageExample() error {
-	// Create SQLite storage
-	storage, err := NewSQLiteStorage("./shfu_cache.db")
+	// Create SQLite storage (use InitSQLiteStorage for new database)
+	storage, err := InitSQLiteStorage("./shfu_cache.db")
 	if err != nil {
 		return fmt.Errorf("failed to create storage: %w", err)
 	}
@@ -32,7 +32,6 @@ func StorageExample() error {
 	}
 
 	record := &SHFURecord{
-		ID:                  "example_record_1",
 		ChainID:             "chain-a",
 		CounterpartyChainID: "chain-b",
 		FromHeight: clienttypes.Height{
@@ -53,7 +52,7 @@ func StorageExample() error {
 		return fmt.Errorf("failed to save record: %w", err)
 	}
 
-	fmt.Printf("Successfully saved SHFU record: %s\n", record.ID)
+	fmt.Printf("Successfully saved SHFU record for chain %s (counterparty: %s)\n", record.ChainID, record.CounterpartyChainID)
 
 	// Retrieve the latest record for the chain pair
 	latest, err := storage.GetLatestSHFUForChainPair(ctx, "chain-a", "chain-b")
@@ -62,8 +61,8 @@ func StorageExample() error {
 	}
 
 	if latest != nil {
-		fmt.Printf("Retrieved latest record: %s, updated at: %s\n",
-			latest.ID, latest.UpdatedAt.Format(time.RFC3339))
+		fmt.Printf("Retrieved latest record for %s-%s, updated at: %s\n",
+			latest.ChainID, latest.CounterpartyChainID, latest.UpdatedAt.Format(time.RFC3339))
 		fmt.Printf("Latest finalized height time: %s\n", latest.LatestFinalizedHeightTime.Format(time.RFC3339))
 	}
 

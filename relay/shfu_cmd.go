@@ -1,92 +1,214 @@
 package relay
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
-	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/config"
+	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 const (
-	// SHFU cache flags
-	flagDBPath         = "db_path"
-	flagForce          = "force"
+	// SHFU flags
+	flagSQLitePath     = "sqlite_path"
 	flagGRPCAddr       = "grpc_addr"
 	flagUpdateInterval = "update_interval"
 	flagCacheSize      = "cache_size"
 )
 
-// UpdateClientCacheCmd creates the update-client-cache command (alias for shfu-cache)
+// UpdateClientCacheCmd creates the update-client-cache command (alias for shfu)
 func UpdateClientCacheCmd(ctx *config.Context) *cobra.Command {
 	return SHFUCacheCmd(ctx)
 }
 
-// SHFUCacheCmd creates the shfu-cache command with subcommands
+// SHFUCacheCmd creates the shfu command with subcommands
 func SHFUCacheCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "shfu-cache",
-		Short: "SHFU cache management commands",
+		Use:   "shfu",
+		Short: "SHFU management commands",
 	}
 
 	cmd.AddCommand(
-		cacheCmd(ctx),
+		dbInitCmd(ctx),
 		serverCmd(ctx),
-		queryLCPCmd(ctx),
+		updateCmd(ctx),
 		queryChainCmd(ctx),
+		dbListCmd(ctx),
+		dbgetCmd(ctx),
 	)
-
 	return cmd
 }
 
-func cacheCmd(ctx *config.Context) *cobra.Command {
+// dbListCmd lists all SHFU records in the database
+func dbListCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "cache [chain-id]",
-		Short: "Cache SetupHeadersForUpdate results to SQLite",
-		Args:  cobra.ExactArgs(1),
+		Use:   "dblist",
+		Short: "List all SHFU records in the database",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("chain ID is required")
-			}
-
-			targetChainID := args[0]
-
-			// Get the target chain by chain ID
-			target, err := ctx.Config.GetChain(targetChainID)
-			if err != nil {
-				return fmt.Errorf("chain ID '%s' not found in configuration: %w", targetChainID, err)
-			}
-
-			dbPath := viper.GetString(flagDBPath)
+			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				dbPath = "./shfu_cache.db"
+				return fmt.Errorf("database path is required (use --sqlite_path flag)")
 			}
 
-			height := viper.GetUint64(flagHeight)
-			force := viper.GetBool(flagForce)
+			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			if err != nil {
+				return fmt.Errorf("failed to open storage: %w", err)
+			}
+			defer storage.Close()
 
-			// Create Height object with revision number 0 (default)
-			fromHeight := clienttypes.NewHeight(0, height)
-
-			opts := SHFUUpdateClientCacheOptions{
-				DBPath:     dbPath,
-				FromHeight: fromHeight,
-				Force:      force,
+			records, err := storage.ListAllSHFURecords(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to list SHFU records: %w", err)
 			}
 
-			return SHFUCacheUpdateClient(cmd.Context(), target, opts)
+			if len(records) == 0 {
+				fmt.Println("No SHFU records found.")
+				return nil
+			}
+
+			fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "from_height", "latest_finalized_height", "latest_finalized_height_time")
+			for _, r := range records {
+				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
+					r.ChainID,
+					r.CounterpartyChainID,
+					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
+					r.LatestFinalizedHeight.RevisionNumber, r.LatestFinalizedHeight.RevisionHeight,
+					r.LatestFinalizedHeightTime.Format(time.RFC3339),
+				)
+			}
+			return nil
 		},
 	}
-	cmd = dbPathFlag(forceFlag(cmd))
-	cmd.Flags().Uint64(flagHeight, 0, "a height to restore")
-	if err := viper.BindPFlag(flagHeight, cmd.Flags().Lookup(flagHeight)); err != nil {
-		panic(err)
+	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	return cmd
+}
+
+// parseUint64Arg parses a uint64 argument and returns an error if invalid
+func parseUint64Arg(s string, name string) (uint64, error) {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid value for %s: %s", name, s)
 	}
+	return v, nil
+}
+
+// dbgetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
+func dbgetCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dbget [chain-id] [counterparty-chain-id] [from-height] [to-height]",
+		Short: "Get SHFU records by chainId, counterpartyChainId, fromHeight, toHeight",
+		Args:  cobra.ExactArgs(4),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dbPath := viper.GetString(flagSQLitePath)
+			if dbPath == "" {
+				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+			}
+
+			chainID := args[0]
+			counterpartyChainID := args[1]
+			fromHeight, err := parseUint64Arg(args[2], "from-height")
+			if err != nil {
+				return err
+			}
+			toHeight, err := parseUint64Arg(args[3], "to-height")
+			if err != nil {
+				return err
+			}
+
+			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			if err != nil {
+				return fmt.Errorf("failed to open storage: %w", err)
+			}
+
+			defer storage.Close()
+
+			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, counterpartyChainID, fromHeight, toHeight)
+			if err != nil {
+				return fmt.Errorf("failed to query SHFU records: %w", err)
+			}
+
+			if len(records) == 0 {
+				fmt.Println("No SHFU records found.")
+				return nil
+			}
+
+			for _, r := range records {
+				PrintSHFURecordSummary(r)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	return cmd
+}
+
+// PrintSHFURecordSummary prints a detailed summary of the SHFU record
+func PrintSHFURecordSummary(record *shfu_storage.SHFURecord) {
+	results := record.UpdateClientResults
+	fmt.Printf("Received %d updateClient results\n", len(results))
+	for i, result := range results {
+		fmt.Printf("Result %d: message_size=%d bytes, signature_size=%d bytes\n",
+			i+1,
+			len(result.Message),
+			len(result.Signature))
+	}
+
+	resultSummary := map[string]interface{}{
+		"chain_id":                     record.ChainID,
+		"counterparty_chain_id":        record.CounterpartyChainID,
+		"from_height":                  record.FromHeight,
+		"latest_finalized_height":      record.LatestFinalizedHeight,
+		"latest_finalized_height_time": record.LatestFinalizedHeightTime.Format(time.RFC3339),
+		"results_received_count":       len(results),
+		"message":                      "SHFU executed and saved to database successfully",
+		"success":                      true,
+		"timestamp":                    time.Now().Format(time.RFC3339),
+	}
+
+	resultBytes, err := json.MarshalIndent(resultSummary, "", "  ")
+	if err != nil {
+		fmt.Printf("failed to marshal result to JSON: %w\n", err)
+	} else {
+		fmt.Printf("SetupHeadersForUpdate result:\n%s\n", string(resultBytes))
+	}
+}
+
+func dbInitCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dbinit",
+		Short: "Initialize SHFU database",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Get database path from flag
+			dbPath := viper.GetString(flagSQLitePath)
+			if dbPath == "" {
+				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+			}
+
+			fmt.Printf("Initializing database at: %s\n", dbPath)
+
+			// Create storage factory and initialize database
+			storage, err := shfu_storage.InitSQLiteStorage(dbPath)
+			if err != nil {
+				return fmt.Errorf("failed to create storage: %w", err)
+			}
+			defer storage.Close()
+
+			fmt.Printf("Database initialized successfully at: %s\n", dbPath)
+
+			return nil
+		},
+	}
+
+	// Add database path flag
+	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+
 	return cmd
 }
 
@@ -108,7 +230,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("chain ID '%s' not found in configuration: %w", targetChainID, err)
 			}
 
-			dbPath := viper.GetString(flagDBPath)
+			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
 				dbPath = "./shfu_cache.db"
 			}
@@ -142,51 +264,114 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 	return cmd
 }
 
-func queryLCPCmd(ctx *config.Context) *cobra.Command {
+func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "query-lcp [chain-id] [from-height]",
-		Short: "Query LCP from the specified height (format: <revision_number>-<revision height>)",
-		Args:  cobra.ExactArgs(2),
+		Use:   "update --sqlite_path <sqlite file path> <ibc path>",
+		Short: "Execute SHFU (SetupHeadersForUpdate) and save results to database",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 2 {
-				return fmt.Errorf("chain ID and from-height are required")
+			if len(args) != 1 {
+				return fmt.Errorf("ibc path name is required")
 			}
 
-			targetChainID := args[0]
-			revisionHeightStr := args[1]
+			ibcPathName := args[0]
 
-			// Parse revision-height in format "revision_number-height"
-			parts := strings.Split(revisionHeightStr, "-")
-			if len(parts) != 2 {
-				return fmt.Errorf("invalid from-height format '%s': expected format is '<revision_number>-<revision_height>'", revisionHeightStr)
-			}
-
-			revisionNumber, err := strconv.ParseUint(parts[0], 10, 64)
+			chains, _, _, err := ctx.Config.ChainsFromPath(ibcPathName)
 			if err != nil {
-				return fmt.Errorf("invalid revision number '%s': %w", parts[0], err)
+				return fmt.Errorf("failed to get chains from path '%s': %w", ibcPathName, err)
+			}
+			// Get the path configuration to extract channel ID
+			path, exists := ctx.Config.Paths[ibcPathName]
+			if !exists {
+				return fmt.Errorf("path '%s' not found in configuration", ibcPathName)
 			}
 
-			revisionHeight, err := strconv.ParseUint(parts[1], 10, 64)
+			// Get database path from flag
+			dbPath := viper.GetString(flagSQLitePath)
+			if dbPath == "" {
+				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+			}
+
+			// Open existing database connection
+			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
 			if err != nil {
-				return fmt.Errorf("invalid revision height '%s': %w", parts[1], err)
+				return fmt.Errorf("failed to open storage: %w", err)
+			}
+			defer storage.Close()
+
+			getClientStateLatestHeight := func(chain *core.ProvableChain) (*ibcexported.Height, error) {
+				// Get the latest height from the target chain
+				latestHeight, err := chain.LatestHeight(cmd.Context())
+				if err != nil {
+					return nil, fmt.Errorf("failed to get latest height: %w", err)
+				}
+
+				qctx := core.NewQueryContext(cmd.Context(), latestHeight)
+				clientStateRes, err := chain.QueryClientState(qctx)
+				if err != nil {
+					return nil, err
+				}
+				var clientState ibcexported.ClientState
+				if err := chain.Codec().UnpackAny(clientStateRes.ClientState, &clientState); err != nil {
+					return nil, fmt.Errorf("failed to unpack client state: %w", err)
+				}
+				clientLatestHeight := clientState.GetLatestHeight()
+				return &clientLatestHeight, nil
 			}
 
-			// Create Height object with parsed revision number and height
-			fromHeight := clienttypes.NewHeight(revisionNumber, revisionHeight)
-
-			// Get the target chain by chain ID
-			target, err := ctx.Config.GetChain(targetChainID)
+			// Create client.Context using cosmos-sdk's GetClientQueryContext
+			clientCtx, err := client.GetClientQueryContext(cmd)
 			if err != nil {
-				return fmt.Errorf("chain ID '%s' not found in configuration: %w", targetChainID, err)
+				return fmt.Errorf("failed to get client query context: %w", err)
+			}
+			_ = clientCtx // clientCtx will be used later if needed
+
+			srcChain := chains[path.Src.ChainID]
+			dstChain := chains[path.Dst.ChainID]
+
+			srcFromHeight, err := getClientStateLatestHeight(dstChain)
+			if err != nil {
+				return fmt.Errorf("failed to get client state latest height for src chain: %w", err)
 			}
 
-			opts := SHFUQueryLCPOptions{
-				FromHeight: fromHeight,
+			dstFromHeight, err := getClientStateLatestHeight(srcChain)
+			if err != nil {
+				return fmt.Errorf("failed to get client state latest height for dst chain: %w", err)
 			}
 
-			return SHFUQueryLCP(cmd.Context(), target, opts)
+			srcRecord, err := SHFUExecuteAndStore(cmd.Context(), srcChain, dstChain.ChainID(), *srcFromHeight, storage)
+			if err != nil {
+				return fmt.Errorf("failed to execute and store SHFU for source chain: %w", err)
+			}
+
+			dstRecord, err := SHFUExecuteAndStore(cmd.Context(), dstChain, srcChain.ChainID(), *dstFromHeight, storage)
+			if err != nil {
+				return fmt.Errorf("failed to execute and store SHFU for destination chain: %w", err)
+			}
+
+			fmt.Printf("Successfully executed SHFU for both chains:\n")
+
+			// Print detailed summary for source chain
+			if srcRecord == nil {
+				fmt.Printf("No new SHFU record created for %s->%s\n", srcChain.ChainID(), dstChain.ChainID())
+			} else {
+				PrintSHFURecordSummary(srcRecord)
+			}
+
+			// Print detailed summary for destination chain
+			if dstRecord == nil {
+				fmt.Printf("No new SHFU record created for %s->%s\n", dstChain.ChainID(), srcChain.ChainID())
+			} else {
+				PrintSHFURecordSummary(dstRecord)
+			}
+
+			return nil
 		},
 	}
+
+	// Add database path flag
+	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+
 	return cmd
 }
 
@@ -240,17 +425,9 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 }
 
 // Flag functions
-func forceFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().Bool(flagForce, false, "force update cache even if entry exists")
-	if err := viper.BindPFlag(flagForce, cmd.Flags().Lookup(flagForce)); err != nil {
-		panic(err)
-	}
-	return cmd
-}
-
 func dbPathFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagDBPath, "", "path to SQLite database file")
-	if err := viper.BindPFlag(flagDBPath, cmd.Flags().Lookup(flagDBPath)); err != nil {
+	cmd.Flags().String(flagSQLitePath, "", "path to SQLite database file")
+	if err := viper.BindPFlag(flagSQLitePath, cmd.Flags().Lookup(flagSQLitePath)); err != nil {
 		panic(err)
 	}
 	return cmd
