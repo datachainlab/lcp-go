@@ -7,16 +7,25 @@ import (
 	"fmt"
 	"time"
 
+	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/jmoiron/sqlx"
 )
+
+// SELECT clause for SHFU records - must match the order in scanSHFURecord
+const shfuRecordSelectClause = `
+	SELECT chain_id, from_height_revision_number, 
+	       from_height_revision_height, to_height_revision_number, 
+	       to_height_revision_height, to_height_time, 
+	       updated_at, update_client_results
+	FROM shfu_records`
 
 /*
 DB Schema Overview:
 
 1. shfu_records - Main records table for SHFU (SetupHeadersForUpdate) operations
-   - Stores chain information, counterparty details, height data, and execution metadata
-   - Primary key: id (TEXT)
-   - Key fields: chain_id, counterparty_chain_id, various height revisions
+   - Stores chain information, height data, and execution metadata
+   - Primary key: combination of chain_id and height fields
+   - Key fields: chain_id, various height revisions
    - Includes error tracking and timestamps
 
 2. shfu_headers - Headers associated with each SHFU record
@@ -26,7 +35,7 @@ DB Schema Overview:
    - Auto-incrementing primary key with proper indexing
 
 Indexes:
-   - Chain/counterparty combination for efficient filtering
+   - Chain for efficient filtering
    - Height-based queries for chronological operations
    - Creation time for temporal analysis
    - Record ID for header lookups
@@ -103,13 +112,9 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 
 // ListAllSHFURecords lists all SHFU records in the database
 func (s *SqlxSHFUStorage) ListAllSHFURecords(ctx context.Context) ([]*SHFURecord, error) {
-	query := `
-	       SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
-		      from_height_revision_height, latest_finalized_height_revision_number, 
-		      latest_finalized_height_revision_height, latest_finalized_height_time, 
-		      updated_at, update_client_results
-	       FROM shfu_records
-	       ORDER BY updated_at DESC`
+	query := shfuRecordSelectClause + `
+	       ORDER BY chain_id, from_height_revision_number, from_height_revision_height, 
+	                to_height_revision_number, to_height_revision_height`
 
 	rows, err := s.db.QueryxContext(ctx, query)
 	if err != nil {
@@ -128,22 +133,20 @@ func (s *SqlxSHFUStorage) ListAllSHFURecords(ctx context.Context) ([]*SHFURecord
 	return records, nil
 }
 
-// FindSHFUByChainAndHeight finds SHFU records for a specific chain and from height range
-func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight, toHeight uint64) ([]*SHFURecord, error) {
-	p1, p2, p3, p4 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2), s.dialect.GetPlaceholder(3), s.dialect.GetPlaceholder(4)
+// FindSHFUByChainAndHeight finds SHFU records for a specific chain and exact height match
+func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID string, fromHeight, toHeight ibcexported.Height) ([]*SHFURecord, error) {
+	p1, p2, p3, p4, p5 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2), s.dialect.GetPlaceholder(3), s.dialect.GetPlaceholder(4), s.dialect.GetPlaceholder(5)
 
-	query := fmt.Sprintf(`
-		SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
-		       from_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, latest_finalized_height_time, 
-		       updated_at, update_client_results
-		FROM shfu_records 
-		WHERE chain_id = %s AND counterparty_chain_id = %s 
-		  AND from_height_revision_height BETWEEN %s AND %s
+	query := fmt.Sprintf(shfuRecordSelectClause+` 
+		WHERE chain_id = %s 
+		  AND from_height_revision_number = %s 
+		  AND from_height_revision_height = %s 
+		  AND to_height_revision_number = %s 
+		  AND to_height_revision_height = %s
 		ORDER BY updated_at DESC
-	`, p1, p2, p3, p4)
+	`, p1, p2, p3, p4, p5)
 
-	rows, err := s.db.QueryxContext(ctx, query, chainID, counterpartyChainID, fromHeight, toHeight)
+	rows, err := s.db.QueryxContext(ctx, query, chainID, fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(), toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
 	if err != nil {
 		return nil, fmt.Errorf("failed to query SHFU records: %w", err)
 	}
@@ -166,22 +169,17 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 	return records, nil
 }
 
-// GetLatestSHFUForChainPair retrieves the most recent SHFU record for a chain pair
-func (s *SqlxSHFUStorage) GetLatestSHFUForChainPair(ctx context.Context, chainID string, counterpartyChainID string) (*SHFURecord, error) {
-	p1, p2 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2)
+// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
+func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID string) (*SHFURecord, error) {
+	p1 := s.dialect.GetPlaceholder(1)
 
-	query := fmt.Sprintf(`
-		SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
-		       from_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, latest_finalized_height_time, 
-		       updated_at, update_client_results
-		FROM shfu_records 
-		WHERE chain_id = %s AND counterparty_chain_id = %s
+	query := fmt.Sprintf(shfuRecordSelectClause+` 
+		WHERE chain_id = %s
 		ORDER BY updated_at DESC 
 		LIMIT 1
-	`, p1, p2)
+	`, p1)
 
-	row := s.db.QueryRowxContext(ctx, query, chainID, counterpartyChainID)
+	row := s.db.QueryRowxContext(ctx, query, chainID)
 
 	record, err := s.scanSHFURecord(row)
 	if err != nil {
@@ -198,12 +196,7 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChainPair(ctx context.Context, chainID
 func (s *SqlxSHFUStorage) FindSHFUByTimeRange(ctx context.Context, chainID string, fromTime, toTime time.Time) ([]*SHFURecord, error) {
 	p1, p2, p3 := s.dialect.GetPlaceholder(1), s.dialect.GetPlaceholder(2), s.dialect.GetPlaceholder(3)
 
-	query := fmt.Sprintf(`
-		SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
-		       from_height_revision_height, latest_finalized_height_revision_number, 
-		       latest_finalized_height_revision_height, latest_finalized_height_time, 
-		       updated_at, update_client_results
-		FROM shfu_records 
+	query := fmt.Sprintf(shfuRecordSelectClause+` 
 		WHERE chain_id = %s AND updated_at BETWEEN %s AND %s
 		ORDER BY updated_at DESC
 	`, p1, p2, p3)
@@ -256,11 +249,11 @@ func (s *SqlxSHFUStorage) Close() error {
 
 func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, record *SHFURecord) error {
 	query := `INSERT INTO shfu_records (
-		chain_id, counterparty_chain_id,
+		chain_id,
 		from_height_revision_number, from_height_revision_height,
-		latest_finalized_height_revision_number, latest_finalized_height_revision_height,
-		latest_finalized_height_time, updated_at, update_client_results
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		to_height_revision_number, to_height_revision_height,
+		to_height_time, updated_at, update_client_results
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// Serialize UpdateClientResults to JSON
 	updateClientResultsJSON, err := json.Marshal(record.UpdateClientResults)
@@ -270,12 +263,11 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 
 	_, err = tx.ExecContext(ctx, query,
 		record.ChainID,
-		record.CounterpartyChainID,
 		record.FromHeight.RevisionNumber,
 		record.FromHeight.RevisionHeight,
-		record.LatestFinalizedHeight.RevisionNumber,
-		record.LatestFinalizedHeight.RevisionHeight,
-		s.dialect.ConvertTimeToDB(record.LatestFinalizedHeightTime),
+		record.ToHeight.RevisionNumber,
+		record.ToHeight.RevisionHeight,
+		s.dialect.ConvertTimeToDB(record.ToHeightTime),
 		s.dialect.ConvertTimeToDB(record.UpdatedAt),
 		updateClientResultsJSON,
 	)
@@ -286,20 +278,32 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, error) {
 	var record SHFURecord
 	var updateClientResultsJSON []byte
+	var toHeightTimeStr string
+	var updatedAtStr string
 
 	err := scanner.Scan(
 		&record.ChainID,
-		&record.CounterpartyChainID,
 		&record.FromHeight.RevisionNumber,
 		&record.FromHeight.RevisionHeight,
-		&record.LatestFinalizedHeight.RevisionNumber,
-		&record.LatestFinalizedHeight.RevisionHeight,
-		&record.LatestFinalizedHeightTime,
-		&record.UpdatedAt,
+		&record.ToHeight.RevisionNumber,
+		&record.ToHeight.RevisionHeight,
+		&toHeightTimeStr,
+		&updatedAtStr,
 		&updateClientResultsJSON,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Convert string timestamps to time.Time using the dialect converter
+	record.ToHeightTime, err = s.dialect.ConvertTimeFromDB(toHeightTimeStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert ToHeightTime: %w", err)
+	}
+
+	record.UpdatedAt, err = s.dialect.ConvertTimeFromDB(updatedAtStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert UpdatedAt: %w", err)
 	}
 
 	// Deserialize UpdateClientResults from JSON

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 )
 
 // UpdateClientResult represents the result of updateClient operation
@@ -15,13 +16,12 @@ type UpdateClientResult struct {
 
 // SHFURecord represents a SetupHeadersForUpdate record for persistence
 type SHFURecord struct {
-	ChainID                   string                `json:"chain_id"`
-	CounterpartyChainID       string                `json:"counterparty_chain_id"`
-	FromHeight                clienttypes.Height    `json:"from_height"`
-	LatestFinalizedHeight     clienttypes.Height    `json:"latest_finalized_height"`
-	LatestFinalizedHeightTime time.Time             `json:"latest_finalized_height_time"`
-	UpdatedAt                 time.Time             `json:"updated_at"`
-	UpdateClientResults       []*UpdateClientResult `json:"update_client_results"`
+	ChainID             string                `json:"chain_id"`
+	FromHeight          clienttypes.Height    `json:"from_height"`
+	ToHeight            clienttypes.Height    `json:"to_height"`
+	ToHeightTime        time.Time             `json:"to_height_time"`
+	UpdatedAt           time.Time             `json:"updated_at"`
+	UpdateClientResults []*UpdateClientResult `json:"update_client_results"`
 }
 
 // SHFUStorage defines the storage interface for SetupHeadersForUpdate operations
@@ -30,11 +30,11 @@ type SHFUStorage interface {
 	// SaveSHFUResult saves a SetupHeadersForUpdate execution result
 	SaveSHFUResult(ctx context.Context, record *SHFURecord) error
 
-	// FindSHFUByChainAndHeight finds SHFU records for a specific chain and from height range
-	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight, toHeight uint64) ([]*SHFURecord, error)
+	// FindSHFUByChainAndHeight finds SHFU records for a specific chain with exact height match
+	FindSHFUByChainAndHeight(ctx context.Context, chainID string, fromHeight, toHeight ibcexported.Height) ([]*SHFURecord, error)
 
-	// GetLatestSHFUForChainPair retrieves the most recent SHFU record for a chain pair
-	GetLatestSHFUForChainPair(ctx context.Context, chainID string, counterpartyChainID string) (*SHFURecord, error)
+	// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
+	GetLatestSHFUForChain(ctx context.Context, chainID string) (*SHFURecord, error)
 
 	// FindSHFUByTimeRange finds SHFU records within a time range
 	FindSHFUByTimeRange(ctx context.Context, chainID string, fromTime, toTime time.Time) ([]*SHFURecord, error)

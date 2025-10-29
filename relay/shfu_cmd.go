@@ -1,13 +1,14 @@
 package relay
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/client"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/config"
@@ -74,14 +75,13 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 				return nil
 			}
 
-			fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "from_height", "latest_finalized_height", "latest_finalized_height_time")
+			fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "from_height", "to_height", "to_height_time")
 			for _, r := range records {
-				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
+				fmt.Printf("%-24s %d-%d           %d-%d           %s\n",
 					r.ChainID,
-					r.CounterpartyChainID,
 					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
-					r.LatestFinalizedHeight.RevisionNumber, r.LatestFinalizedHeight.RevisionHeight,
-					r.LatestFinalizedHeightTime.Format(time.RFC3339),
+					r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight,
+					r.ToHeightTime.Format(time.RFC3339),
 				)
 			}
 			return nil
@@ -101,33 +101,36 @@ func parseUint64Arg(s string, name string) (uint64, error) {
 }
 
 // parseHeightArg parses a height argument in "<revision>-<height>" format
-func parseHeightArg(s string, name string) (uint64, error) {
+func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 	parts := strings.Split(s, "-")
 	if len(parts) != 2 {
-		return 0, fmt.Errorf("invalid %s format: expected '<revision>-<height>', got '%s'", name, s)
+		return nil, fmt.Errorf("invalid %s format: expected '<revision>-<height>', got '%s'", name, s)
 	}
 
-	// Parse revision number (we don't use it for the query, but validate it)
-	_, err := strconv.ParseUint(parts[0], 10, 64)
+	// Parse revision number
+	revisionNumber, err := strconv.ParseUint(parts[0], 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid revision in %s: %s", name, parts[0])
+		return nil, fmt.Errorf("invalid revision in %s: %s", name, parts[0])
 	}
 
 	// Parse height
-	height, err := strconv.ParseUint(parts[1], 10, 64)
+	revisionHeight, err := strconv.ParseUint(parts[1], 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid height in %s: %s", name, parts[1])
+		return nil, fmt.Errorf("invalid height in %s: %s", name, parts[1])
 	}
 
-	return height, nil
+	return clienttypes.Height{
+		RevisionNumber: revisionNumber,
+		RevisionHeight: revisionHeight,
+	}, nil
 }
 
 // dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget [chain-id] [counterparty-chain-id] [from-height] [to-height]",
-		Short: "Get SHFU records by chainId, counterpartyChainId, fromHeight, toHeight (heights in <revision>-<height> format)",
-		Args:  cobra.ExactArgs(4),
+		Use:   "dbget [chain-id] [from-height] [to-height]",
+		Short: "Get SHFU records by chainId, fromHeight, toHeight (heights in <revision>-<height> format)",
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
@@ -135,12 +138,11 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			chainID := args[0]
-			counterpartyChainID := args[1]
-			fromHeight, err := parseHeightArg(args[2], "from-height")
+			fromHeight, err := parseHeightArg(args[1], "from-height")
 			if err != nil {
 				return err
 			}
-			toHeight, err := parseHeightArg(args[3], "to-height")
+			toHeight, err := parseHeightArg(args[2], "to-height")
 			if err != nil {
 				return err
 			}
@@ -152,7 +154,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 
 			defer storage.Close()
 
-			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, counterpartyChainID, fromHeight, toHeight)
+			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, fromHeight, toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query SHFU records: %w", err)
 			}
@@ -163,7 +165,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			for _, r := range records {
-				PrintSHFURecordSummary(r)
+				printSHFURecordSummary(r)
 			}
 			return nil
 		},
@@ -173,7 +175,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 }
 
 // PrintSHFURecordSummary prints a detailed summary of the SHFU record
-func PrintSHFURecordSummary(record *shfu_storage.SHFURecord) {
+func printSHFURecordSummary(record *shfu_storage.SHFURecord) {
 	results := record.UpdateClientResults
 	fmt.Printf("Received %d updateClient results\n", len(results))
 	for i, result := range results {
@@ -181,18 +183,29 @@ func PrintSHFURecordSummary(record *shfu_storage.SHFURecord) {
 			i+1,
 			len(result.Message),
 			len(result.Signature))
+		fmt.Printf("  Message (hex): %s\n", hex.EncodeToString(result.Message))
+		fmt.Printf("  Signature (hex): %s\n", hex.EncodeToString(result.Signature))
+	}
+
+	// Prepare update client results for JSON output
+	updateClientResults := make([]map[string]interface{}, len(results))
+	for i, result := range results {
+		updateClientResults[i] = map[string]interface{}{
+			"message_hex":    hex.EncodeToString(result.Message),
+			"signature_hex":  hex.EncodeToString(result.Signature),
+			"message_size":   len(result.Message),
+			"signature_size": len(result.Signature),
+		}
 	}
 
 	resultSummary := map[string]interface{}{
-		"chain_id":                     record.ChainID,
-		"counterparty_chain_id":        record.CounterpartyChainID,
-		"from_height":                  record.FromHeight,
-		"latest_finalized_height":      record.LatestFinalizedHeight,
-		"latest_finalized_height_time": record.LatestFinalizedHeightTime.Format(time.RFC3339),
-		"results_received_count":       len(results),
-		"message":                      "SHFU executed and saved to database successfully",
-		"success":                      true,
-		"timestamp":                    time.Now().Format(time.RFC3339),
+		"chain_id":               record.ChainID,
+		"from_height":            record.FromHeight,
+		"to_height":              record.ToHeight,
+		"to_height_time":         record.ToHeightTime.Format(time.RFC3339),
+		"results_received_count": len(results),
+		"update_client_results":  updateClientResults,
+		"timestamp":              time.Now().Format(time.RFC3339),
 	}
 
 	resultBytes, err := json.MarshalIndent(resultSummary, "", "  ")
@@ -253,24 +266,27 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 
 func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update --sqlite_path <sqlite file path> <ibc path>",
-		Short: "Execute SHFU (SetupHeadersForUpdate) and save results to database",
-		Args:  cobra.ExactArgs(1),
+		Use:   "update --sqlite_path <sqlite file path> <chain-id> <from-height>",
+		Short: "Execute SHFU (SetupHeadersForUpdate) for specified chain and save results to database",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 1 {
-				return fmt.Errorf("ibc path name is required")
+			if len(args) != 2 {
+				return fmt.Errorf("chain ID and from-height are required")
 			}
 
-			ibcPathName := args[0]
+			targetChainID := args[0]
+			fromHeightArg := args[1]
 
-			chains, _, _, err := ctx.Config.ChainsFromPath(ibcPathName)
+			// Parse from-height argument
+			fromHeight, err := parseHeightArg(fromHeightArg, "from-height")
 			if err != nil {
-				return fmt.Errorf("failed to get chains from path '%s': %w", ibcPathName, err)
+				return err
 			}
-			// Get the path configuration to extract channel ID
-			path, exists := ctx.Config.Paths[ibcPathName]
-			if !exists {
-				return fmt.Errorf("path '%s' not found in configuration", ibcPathName)
+
+			// Get target chain using config.GetChain
+			targetChain, err := ctx.Config.GetChain(targetChainID)
+			if err != nil {
+				return fmt.Errorf("failed to get chain '%s': %w", targetChainID, err)
 			}
 
 			// Get database path from flag
@@ -286,70 +302,19 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 			defer storage.Close()
 
-			getClientStateLatestHeight := func(chain *core.ProvableChain) (*ibcexported.Height, error) {
-				// Get the latest height from the target chain
-				latestHeight, err := chain.LatestHeight(cmd.Context())
-				if err != nil {
-					return nil, fmt.Errorf("failed to get latest height: %w", err)
-				}
-
-				qctx := core.NewQueryContext(cmd.Context(), latestHeight)
-				clientStateRes, err := chain.QueryClientState(qctx)
-				if err != nil {
-					return nil, err
-				}
-				var clientState ibcexported.ClientState
-				if err := chain.Codec().UnpackAny(clientStateRes.ClientState, &clientState); err != nil {
-					return nil, fmt.Errorf("failed to unpack client state: %w", err)
-				}
-				clientLatestHeight := clientState.GetLatestHeight()
-				return &clientLatestHeight, nil
-			}
-
-			// Create client.Context using cosmos-sdk's GetClientQueryContext
-			clientCtx, err := client.GetClientQueryContext(cmd)
+			// Execute SHFU for the target chain only
+			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, fromHeight, storage)
 			if err != nil {
-				return fmt.Errorf("failed to get client query context: %w", err)
-			}
-			_ = clientCtx // clientCtx will be used later if needed
-
-			srcChain := chains[path.Src.ChainID]
-			dstChain := chains[path.Dst.ChainID]
-
-			srcFromHeight, err := getClientStateLatestHeight(dstChain)
-			if err != nil {
-				return fmt.Errorf("failed to get client state latest height for src chain: %w", err)
+				return fmt.Errorf("failed to execute and store SHFU for target chain: %w", err)
 			}
 
-			dstFromHeight, err := getClientStateLatestHeight(srcChain)
-			if err != nil {
-				return fmt.Errorf("failed to get client state latest height for dst chain: %w", err)
-			}
+			fmt.Printf("Successfully executed SHFU for chain %s:\n", targetChainID)
 
-			srcRecord, err := SHFUExecuteAndStore(cmd.Context(), srcChain, dstChain.ChainID(), *srcFromHeight, storage)
-			if err != nil {
-				return fmt.Errorf("failed to execute and store SHFU for source chain: %w", err)
-			}
-
-			dstRecord, err := SHFUExecuteAndStore(cmd.Context(), dstChain, srcChain.ChainID(), *dstFromHeight, storage)
-			if err != nil {
-				return fmt.Errorf("failed to execute and store SHFU for destination chain: %w", err)
-			}
-
-			fmt.Printf("Successfully executed SHFU for both chains:\n")
-
-			// Print detailed summary for source chain
-			if srcRecord == nil {
-				fmt.Printf("No new SHFU record created for %s->%s\n", srcChain.ChainID(), dstChain.ChainID())
+			// Print detailed summary for target chain
+			if record == nil {
+				fmt.Printf("No new SHFU record created for %s\n", targetChain.ChainID())
 			} else {
-				PrintSHFURecordSummary(srcRecord)
-			}
-
-			// Print detailed summary for destination chain
-			if dstRecord == nil {
-				fmt.Printf("No new SHFU record created for %s->%s\n", dstChain.ChainID(), srcChain.ChainID())
-			} else {
-				PrintSHFURecordSummary(dstRecord)
+				printSHFURecordSummary(record)
 			}
 
 			return nil
@@ -393,19 +358,85 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("chain ID '%s' not found in path '%s' configuration", targetChainID, pathName)
 			}
 
-			// Create client.Context using cosmos-sdk's GetClientQueryContext
-			clientCtx, err := client.GetClientQueryContext(cmd)
+			// Execute query chain logic inline
+			fmt.Printf("QueryChain called with path: %s, channel: %s\n", pathName, channelID)
+			fmt.Printf("Target chain: %s\n", target.ChainID())
+
+			// Get the latest height from the target chain
+			latestHeight, err := target.LatestHeight(cmd.Context())
 			if err != nil {
-				return fmt.Errorf("failed to get client query context: %w", err)
+				return fmt.Errorf("failed to get latest height: %w", err)
 			}
 
-			// Query chain information with path and channel information
-			opts := SHFUQueryChainOptions{
-				PathName:  pathName,
-				ChannelID: channelID,
+			// Try to get the finalized header
+			latestFinalizedHeader, err := target.GetLatestFinalizedHeader(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to get latest finalized header: %w", err)
 			}
 
-			return SHFUQueryChain(cmd.Context(), target, clientCtx, opts)
+			fmt.Printf("Latest finalized header height: %d\n", latestFinalizedHeader.GetHeight().GetRevisionHeight())
+
+			var latestConsensusInfo interface{}
+
+			// Try to query the client state using yui-relayer's QueryClientState
+			// This uses the target chain's own RPC client instead of cosmos-sdk's offline client
+			qctx := core.NewQueryContext(cmd.Context(), latestHeight)
+			if clientStateRes, err := target.QueryClientState(qctx); err != nil {
+				// If QueryClientState fails, just note the error but continue
+				latestConsensusInfo = map[string]interface{}{
+					"error": err.Error(),
+					"note":  "Failed to query client state from yui-relayer",
+				}
+			} else {
+				// Unpack the ClientState from Any using target chain's codec
+				var clientState ibcexported.ClientState
+				if err := target.Codec().UnpackAny(clientStateRes.ClientState, &clientState); err != nil {
+					latestConsensusInfo = map[string]interface{}{
+						"error": fmt.Sprintf("Failed to unpack client state: %v", err),
+						"note":  "Could not decode ClientState from Any",
+					}
+				} else {
+					// Extract information from the unpacked client state
+					latestHeight := clientState.GetLatestHeight()
+					latestConsensusInfo = map[string]interface{}{
+						"proof_height": clientStateRes.ProofHeight,
+						"client_state_info": map[string]interface{}{
+							"chain_id":          pathName,
+							"channel_id":        channelID,
+							"client_state_type": fmt.Sprintf("%T", clientState),
+							"latest_height_from_client": map[string]interface{}{
+								"revision_number": latestHeight.GetRevisionNumber(),
+								"revision_height": latestHeight.GetRevisionHeight(),
+							},
+							"latest_height_from_proof": map[string]interface{}{
+								"revision_number": clientStateRes.ProofHeight.RevisionNumber,
+								"revision_height": clientStateRes.ProofHeight.RevisionHeight,
+							},
+						},
+					}
+				}
+			}
+
+			result := map[string]interface{}{
+				"chain_id":                       target.ChainID(),
+				"path_name":                      pathName,
+				"channel_id":                     channelID,
+				"latest_height":                  latestHeight.GetRevisionHeight(),
+				"latest_finalized_header_height": latestFinalizedHeader.GetHeight().GetRevisionHeight(),
+				"latest_consensus_state":         latestConsensusInfo,
+				"message":                        "Chain information displayed with LatestConsensusState and path info",
+				"success":                        true,
+				"timestamp":                      time.Now().Format(time.RFC3339),
+			}
+
+			// Convert result to JSON string and output
+			resultBytes, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal result to JSON: %w", err)
+			}
+
+			fmt.Printf("Chain information with LatestConsensusState:\n%s\n", string(resultBytes))
+			return nil
 		},
 	}
 	return cmd

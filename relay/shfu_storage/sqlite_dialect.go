@@ -18,18 +18,17 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 	return []string{
 		`CREATE TABLE IF NOT EXISTS shfu_records (
 			chain_id TEXT NOT NULL,
-			counterparty_chain_id TEXT NOT NULL,
 			from_height_revision_number INTEGER NOT NULL,
 			from_height_revision_height INTEGER NOT NULL,
-			latest_finalized_height_revision_number INTEGER NOT NULL,
-			latest_finalized_height_revision_height INTEGER NOT NULL,
-			latest_finalized_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
+			to_height_revision_number INTEGER NOT NULL,
+			to_height_revision_height INTEGER NOT NULL,
+			to_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			updated_at TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			update_client_results BLOB,
-			PRIMARY KEY (chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, latest_finalized_height_revision_number, latest_finalized_height_revision_height)
+			PRIMARY KEY (chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain_counterparty 
-		 ON shfu_records(chain_id, counterparty_chain_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain 
+		 ON shfu_records(chain_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_height 
 		 ON shfu_records(from_height_revision_height)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_updated_at 
@@ -45,14 +44,38 @@ func (d *SQLiteDialect) ConvertTimeToDB(t time.Time) interface{} {
 }
 
 // ConvertTimeFromDB converts SQLite time to Go time
-// sqlx automatically converts TEXT datetime to time.Time, so we only handle time.Time
+// Handles both string format (when manually scanning) and time.Time (if sqlx auto-converts)
 func (d *SQLiteDialect) ConvertTimeFromDB(dbTime interface{}) (time.Time, error) {
-	// sqlx automatically converts SQLite datetime TEXT to time.Time
-	if t, ok := dbTime.(time.Time); ok {
-		return t.UTC(), nil
-	}
+	switch v := dbTime.(type) {
+	case time.Time:
+		// Already converted by sqlx
+		return v.UTC(), nil
+	case string:
+		// Parse ISO 8601 format string manually
+		if v == "" {
+			return time.Time{}, nil
+		}
+		// Try parsing with different layouts
+		layouts := []string{
+			"2006-01-02 15:04:05",      // SQLite default format
+			"2006-01-02T15:04:05Z",     // ISO 8601 with Z
+			"2006-01-02T15:04:05",      // ISO 8601 without timezone
+			"2006-01-02T15:04:05.000Z", // ISO 8601 with milliseconds
+			time.RFC3339,               // Full RFC3339
+		}
 
-	return time.Time{}, fmt.Errorf("expected time.Time from sqlx, got %T", dbTime)
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, v); err == nil {
+				return t.UTC(), nil
+			}
+		}
+		return time.Time{}, fmt.Errorf("cannot parse time string: %s", v)
+	case []byte:
+		// Handle byte slice (some drivers might return this)
+		return d.ConvertTimeFromDB(string(v))
+	default:
+		return time.Time{}, fmt.Errorf("expected time.Time or string from DB, got %T", dbTime)
+	}
 }
 
 // GetPlaceholder returns SQLite placeholder syntax (always "?")

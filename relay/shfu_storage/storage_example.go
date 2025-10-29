@@ -32,19 +32,18 @@ func StorageExample() error {
 	}
 
 	record := &SHFURecord{
-		ChainID:             "chain-a",
-		CounterpartyChainID: "chain-b",
+		ChainID: "chain-a",
 		FromHeight: clienttypes.Height{
 			RevisionNumber: 1,
 			RevisionHeight: 100,
 		},
-		LatestFinalizedHeight: clienttypes.Height{
+		ToHeight: clienttypes.Height{
 			RevisionNumber: 1,
 			RevisionHeight: 103,
 		},
-		LatestFinalizedHeightTime: time.Now(),
-		UpdatedAt:                 time.Now(),
-		UpdateClientResults:       sampleResults,
+		ToHeightTime:        time.Now(),
+		UpdatedAt:           time.Now(),
+		UpdateClientResults: sampleResults,
 	}
 
 	// Save the record
@@ -52,18 +51,18 @@ func StorageExample() error {
 		return fmt.Errorf("failed to save record: %w", err)
 	}
 
-	fmt.Printf("Successfully saved SHFU record for chain %s (counterparty: %s)\n", record.ChainID, record.CounterpartyChainID)
+	fmt.Printf("Successfully saved SHFU record for chain %s\n", record.ChainID)
 
-	// Retrieve the latest record for the chain pair
-	latest, err := storage.GetLatestSHFUForChainPair(ctx, "chain-a", "chain-b")
+	// Retrieve the latest record for the chain
+	latest, err := storage.GetLatestSHFUForChain(ctx, "chain-a")
 	if err != nil {
 		return fmt.Errorf("failed to get latest record: %w", err)
 	}
 
 	if latest != nil {
-		fmt.Printf("Retrieved latest record for %s-%s, updated at: %s\n",
-			latest.ChainID, latest.CounterpartyChainID, latest.UpdatedAt.Format(time.RFC3339))
-		fmt.Printf("Latest finalized height time: %s\n", latest.LatestFinalizedHeightTime.Format(time.RFC3339))
+		fmt.Printf("Retrieved latest record for %s, updated at: %s\n",
+			latest.ChainID, latest.UpdatedAt.Format(time.RFC3339))
+		fmt.Printf("To height time: %s\n", latest.ToHeightTime.Format(time.RFC3339))
 	}
 
 	return nil
