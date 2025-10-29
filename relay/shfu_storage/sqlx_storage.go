@@ -254,11 +254,6 @@ func (s *SqlxSHFUStorage) Close() error {
 
 // Helper methods (implemented below)
 
-// rowScanner interface for both sql.Row and sqlx.Rows
-type rowScanner interface {
-	Scan(dest ...interface{}) error
-}
-
 func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, record *SHFURecord) error {
 	query := `INSERT INTO shfu_records (
 		chain_id, counterparty_chain_id,
@@ -288,9 +283,8 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 	return err
 }
 
-func (s *SqlxSHFUStorage) scanSHFURecord(scanner rowScanner) (*SHFURecord, error) {
+func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, error) {
 	var record SHFURecord
-	var updatedAtDB, latestFinalizedHeightTimeDB interface{}
 	var updateClientResultsJSON []byte
 
 	err := scanner.Scan(
@@ -300,23 +294,12 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner rowScanner) (*SHFURecord, error
 		&record.FromHeight.RevisionHeight,
 		&record.LatestFinalizedHeight.RevisionNumber,
 		&record.LatestFinalizedHeight.RevisionHeight,
-		&latestFinalizedHeightTimeDB,
-		&updatedAtDB,
+		&record.LatestFinalizedHeightTime,
+		&record.UpdatedAt,
 		&updateClientResultsJSON,
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	// Parse timestamps
-	record.UpdatedAt, err = s.dialect.ConvertTimeFromDB(updatedAtDB)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse updated_at: %w", err)
-	}
-
-	record.LatestFinalizedHeightTime, err = s.dialect.ConvertTimeFromDB(latestFinalizedHeightTimeDB)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse latest_finalized_height_time: %w", err)
 	}
 
 	// Deserialize UpdateClientResults from JSON

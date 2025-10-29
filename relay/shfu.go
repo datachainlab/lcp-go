@@ -15,25 +15,10 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
 )
 
-// SHFUUpdateClientServerOptions holds options for update client server
-type SHFUUpdateClientServerOptions struct {
-	DBPath         string
-	GRPCAddr       string
-	UpdateInterval time.Duration
-	CacheSize      int
-}
-
 // SHFUQueryChainOptions holds options for query chain operations
 type SHFUQueryChainOptions struct {
 	PathName  string
 	ChannelID string
-}
-
-// SHFUStartUpdateClientServer starts a gRPC server for update client operations
-func SHFUStartUpdateClientServer(ctx context.Context, target *core.ProvableChain, opts SHFUUpdateClientServerOptions) error {
-	// TODO: Implement gRPC server functionality
-	fmt.Printf("StartUpdateClientServer called with options: %+v\n", opts)
-	return fmt.Errorf("not implemented yet")
 }
 
 // SHFUQueryChain queries chain information including latest consensus state
@@ -158,12 +143,18 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)
 	}
 
+	h2h := func(h ibcexported.Height) clienttypes.Height {
+		return clienttypes.Height{
+			RevisionNumber: h.GetRevisionNumber(),
+			RevisionHeight: h.GetRevisionHeight(),
+		}
+	}
 	// Create SHFU record for database storage
 	record := &shfu_storage.SHFURecord{
 		ChainID:                   target.ChainID(),
 		CounterpartyChainID:       counterpartyChainID,
-		FromHeight:                *fromHeight.(*clienttypes.Height),
-		LatestFinalizedHeight:     *latestFinalizedHeader.GetHeight().(*clienttypes.Height),
+		FromHeight:                h2h(fromHeight),
+		LatestFinalizedHeight:     h2h(latestFinalizedHeader.GetHeight()),
 		LatestFinalizedHeightTime: time.Now(), // Could be extracted from header if available
 		UpdatedAt:                 time.Now(),
 		UpdateClientResults:       results,

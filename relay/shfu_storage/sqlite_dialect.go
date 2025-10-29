@@ -23,8 +23,8 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			from_height_revision_height INTEGER NOT NULL,
 			latest_finalized_height_revision_number INTEGER NOT NULL,
 			latest_finalized_height_revision_height INTEGER NOT NULL,
-			latest_finalized_height_time DATETIME NOT NULL,
-			updated_at DATETIME NOT NULL,
+			latest_finalized_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
+			updated_at TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			update_client_results BLOB,
 			PRIMARY KEY (chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, latest_finalized_height_revision_number, latest_finalized_height_revision_height)
 		)`,
@@ -37,35 +37,22 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 	}
 }
 
-// ConvertTimeToDB converts Go time to SQLite format (string)
+// ConvertTimeToDB converts Go time to SQLite DATETIME format
 func (d *SQLiteDialect) ConvertTimeToDB(t time.Time) interface{} {
-	return t.UTC().Format("2006-01-02 15:04:05.000")
+	// Use SQLite's preferred ISO 8601 format for DATETIME columns
+	// This enables proper date/time comparisons and functions
+	return t.UTC().Format("2006-01-02 15:04:05")
 }
 
-// ConvertTimeFromDB converts SQLite time string to Go time
+// ConvertTimeFromDB converts SQLite time to Go time
+// sqlx automatically converts TEXT datetime to time.Time, so we only handle time.Time
 func (d *SQLiteDialect) ConvertTimeFromDB(dbTime interface{}) (time.Time, error) {
-	timeStr, ok := dbTime.(string)
-	if !ok {
-		return time.Time{}, fmt.Errorf("expected string for time, got %T", dbTime)
+	// sqlx automatically converts SQLite datetime TEXT to time.Time
+	if t, ok := dbTime.(time.Time); ok {
+		return t.UTC(), nil
 	}
 
-	// Try multiple time formats that SQLite might return
-	formats := []string{
-		"2006-01-02 15:04:05.000",
-		"2006-01-02 15:04:05",
-		"2006-01-02T15:04:05.000Z",
-		"2006-01-02T15:04:05Z",
-		time.RFC3339Nano,
-		time.RFC3339,
-	}
-
-	for _, format := range formats {
-		if t, err := time.Parse(format, timeStr); err == nil {
-			return t.UTC(), nil
-		}
-	}
-
-	return time.Time{}, fmt.Errorf("unable to parse time string: %s", timeStr)
+	return time.Time{}, fmt.Errorf("expected time.Time from sqlx, got %T", dbTime)
 }
 
 // GetPlaceholder returns SQLite placeholder syntax (always "?")

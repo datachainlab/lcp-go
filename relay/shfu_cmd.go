@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -41,7 +42,7 @@ func SHFUCacheCmd(ctx *config.Context) *cobra.Command {
 		updateCmd(ctx),
 		queryChainCmd(ctx),
 		dbListCmd(ctx),
-		dbgetCmd(ctx),
+		dbGetCmd(ctx),
 	)
 	return cmd
 }
@@ -99,11 +100,33 @@ func parseUint64Arg(s string, name string) (uint64, error) {
 	return v, nil
 }
 
-// dbgetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
-func dbgetCmd(ctx *config.Context) *cobra.Command {
+// parseHeightArg parses a height argument in "<revision>-<height>" format
+func parseHeightArg(s string, name string) (uint64, error) {
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("invalid %s format: expected '<revision>-<height>', got '%s'", name, s)
+	}
+
+	// Parse revision number (we don't use it for the query, but validate it)
+	_, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid revision in %s: %s", name, parts[0])
+	}
+
+	// Parse height
+	height, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid height in %s: %s", name, parts[1])
+	}
+
+	return height, nil
+}
+
+// dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
+func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dbget [chain-id] [counterparty-chain-id] [from-height] [to-height]",
-		Short: "Get SHFU records by chainId, counterpartyChainId, fromHeight, toHeight",
+		Short: "Get SHFU records by chainId, counterpartyChainId, fromHeight, toHeight (heights in <revision>-<height> format)",
 		Args:  cobra.ExactArgs(4),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
@@ -113,11 +136,11 @@ func dbgetCmd(ctx *config.Context) *cobra.Command {
 
 			chainID := args[0]
 			counterpartyChainID := args[1]
-			fromHeight, err := parseUint64Arg(args[2], "from-height")
+			fromHeight, err := parseHeightArg(args[2], "from-height")
 			if err != nil {
 				return err
 			}
-			toHeight, err := parseUint64Arg(args[3], "to-height")
+			toHeight, err := parseHeightArg(args[3], "to-height")
 			if err != nil {
 				return err
 			}
@@ -221,43 +244,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("chain ID is required")
 			}
-
-			targetChainID := args[0]
-
-			// Get the target chain by chain ID
-			target, err := ctx.Config.GetChain(targetChainID)
-			if err != nil {
-				return fmt.Errorf("chain ID '%s' not found in configuration: %w", targetChainID, err)
-			}
-
-			dbPath := viper.GetString(flagSQLitePath)
-			if dbPath == "" {
-				dbPath = "./shfu_cache.db"
-			}
-
-			grpcAddr := viper.GetString(flagGRPCAddr)
-			if grpcAddr == "" {
-				grpcAddr = "localhost:9090"
-			}
-
-			updateInterval := viper.GetDuration(flagUpdateInterval)
-			if updateInterval == 0 {
-				updateInterval = 30 * time.Second
-			}
-
-			cacheSize := viper.GetInt(flagCacheSize)
-			if cacheSize == 0 {
-				cacheSize = 1000
-			}
-
-			opts := SHFUUpdateClientServerOptions{
-				DBPath:         dbPath,
-				GRPCAddr:       grpcAddr,
-				UpdateInterval: updateInterval,
-				CacheSize:      cacheSize,
-			}
-
-			return SHFUStartUpdateClientServer(cmd.Context(), target, opts)
+			return nil
 		},
 	}
 	cmd = cacheSizeFlag(updateIntervalFlag(grpcAddrFlag(dbPathFlag(cmd))))
