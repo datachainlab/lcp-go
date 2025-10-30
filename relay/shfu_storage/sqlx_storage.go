@@ -175,7 +175,7 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 
 	query := fmt.Sprintf(shfuRecordSelectClause+` 
 		WHERE chain_id = %s
-		ORDER BY updated_at DESC 
+		ORDER BY to_height_revision_number DESC, to_height_revision_height DESC, from_height_revision_number DESC, from_height_revision_height DESC
 		LIMIT 1
 	`, p1)
 

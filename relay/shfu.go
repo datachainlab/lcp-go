@@ -13,18 +13,36 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
 )
 
+// Re-export types from storage package for backward compatibility
+type SHFURecord = shfu_storage.SHFURecord
+type SHFUStorage = shfu_storage.SHFUStorage
+
 // ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations
-func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHeight ibcexported.Height, storage shfu_storage.SHFUStorage) (*shfu_storage.SHFURecord, error) {
+func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHeight ibcexported.Height, storage SHFUStorage) (*SHFURecord, error) {
 	// Try to get the finalized header
 	latestFinalizedHeader, err := target.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
 	}
 
+	toHeight := latestFinalizedHeader.GetHeight()
+
+	// Compare fromHeight and toHeight
+	if fromHeight.EQ(toHeight) {
+		// fromHeight == toHeight: do nothing and return nil
+		return nil, nil
+	}
+	if toHeight.LT(fromHeight) {
+		// fromHeight > toHeight: return error
+		return nil, fmt.Errorf("fromHeight (%d-%d) is greater than toHeight (%d-%d)",
+			fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(),
+			toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
+	}
+
 	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
-	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), fromHeight, latestFinalizedHeader.GetHeight())
+	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), fromHeight, toHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing records: %w", err)
 	}
@@ -33,7 +51,7 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 	}
 
 	// Create the height for SHFUMockChain from the specified height
-	mockHeight := clienttypes.NewHeight(latestFinalizedHeader.GetHeight().GetRevisionNumber(), fromHeight.GetRevisionHeight())
+	mockHeight := clienttypes.NewHeight(toHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight())
 
 	// Create a SHFUMockChain instance for counterparty argument
 	counterparty := NewSHFUMockChain("mock-counterparty-chain", mockHeight)
@@ -57,10 +75,10 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 		}
 	}
 	// Create SHFU record for database storage
-	record := &shfu_storage.SHFURecord{
+	record := &SHFURecord{
 		ChainID:             target.ChainID(),
 		FromHeight:          h2h(fromHeight),
-		ToHeight:            h2h(latestFinalizedHeader.GetHeight()),
+		ToHeight:            h2h(toHeight),
 		ToHeightTime:        time.Now(), // Could be extracted from header if available
 		UpdatedAt:           time.Now(),
 		UpdateClientResults: results,

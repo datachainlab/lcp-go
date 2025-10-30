@@ -128,7 +128,7 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 // dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget [chain-id] [from-height] [to-height]",
+		Use:   "dbget <chain-id> <from-height> <to-height>",
 		Short: "Get SHFU records by chainId, fromHeight, toHeight (heights in <revision>-<height> format)",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -175,7 +175,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 }
 
 // PrintSHFURecordSummary prints a detailed summary of the SHFU record
-func printSHFURecordSummary(record *shfu_storage.SHFURecord) {
+func printSHFURecordSummary(record *SHFURecord) {
 	results := record.UpdateClientResults
 	fmt.Printf("Received %d updateClient results\n", len(results))
 	for i, result := range results {
@@ -250,17 +250,50 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "server [chain-id]",
+		Use:   "server <chain-id>",
 		Short: "Start SetupHeadersForUpdate cache server",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("chain ID is required")
+			targetChainID := args[0]
+
+			// Get SQLite database path
+			dbPath, err := cmd.Flags().GetString(flagSQLitePath)
+			if err != nil {
+				return fmt.Errorf("failed to get SQLite path: %w", err)
 			}
+			if dbPath == "" {
+				return fmt.Errorf("SQLite database path is required (use --%s flag)", flagSQLitePath)
+			}
+
+			// Open storage
+			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			if err != nil {
+				return fmt.Errorf("failed to open storage: %w", err)
+			}
+			defer storage.Close()
+
+			// Get target chain
+			targetChain, err := ctx.Config.GetChain(targetChainID)
+			if err != nil {
+				return fmt.Errorf("failed to get chain '%s': %w", targetChainID, err)
+			}
+
+			// Create and start SHFU service
+			service := NewSHFUService(storage, targetChain)
+
+			fmt.Printf("Starting SHFU Service for chain '%s'...\n", targetChainID)
+			fmt.Printf("Database: %s\n", dbPath)
+			fmt.Printf("Polling interval: %v\n", service.PollInterval)
+			fmt.Println("Press Ctrl+C to stop the service")
+
+			// Start the service (this will block until stopped)
+			service.SHFUServiceRun(cmd.Context())
+
+			fmt.Println("SHFU Service stopped")
 			return nil
 		},
 	}
-	cmd = cacheSizeFlag(updateIntervalFlag(grpcAddrFlag(dbPathFlag(cmd))))
+	cmd = dbPathFlag(cmd)
 	return cmd
 }
 
@@ -329,7 +362,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 
 func queryChainCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "query-chain [path-name] [chain-id]",
+		Use:   "query-chain <path-name> <chain-id>",
 		Short: "Query chain information including latest consensus state",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
