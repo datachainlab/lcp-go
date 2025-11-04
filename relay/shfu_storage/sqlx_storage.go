@@ -5,11 +5,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/jmoiron/sqlx"
 )
+
+// errWithStack creates an error with stack trace information
+func errWithStack(format string, args ...interface{}) error {
+	baseErr := fmt.Errorf(format, args...)
+	stack := debug.Stack()
+	return fmt.Errorf("%w\nStack trace:\n%s", baseErr, string(stack))
+}
 
 // SELECT clause for SHFU records - must match the order in scanSHFURecord
 const shfuRecordSelectClause = `
@@ -71,7 +79,7 @@ func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect) (*SqlxSHFUStorage, error
 
 	// Initialize schema
 	if err := storage.initSchema(); err != nil {
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+		return nil, errWithStack("failed to initialize schema: %w", err)
 	}
 
 	return storage, nil
@@ -82,7 +90,7 @@ func (s *SqlxSHFUStorage) initSchema() error {
 	statements := s.dialect.GetCreateTableSQL()
 	for _, stmt := range statements {
 		if _, err := s.db.Exec(stmt); err != nil {
-			return fmt.Errorf("failed to execute schema statement: %w", err)
+			return errWithStack("failed to execute schema statement: %w", err)
 		}
 	}
 	return nil
@@ -93,18 +101,18 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 	// Start transaction for consistency
 	tx, err := s.db.BeginTxx(ctx, &sql.TxOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return errWithStack("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
 	// Insert the main SHFU record
 	if err := s.insertSHFURecord(ctx, tx, record); err != nil {
-		return fmt.Errorf("failed to insert SHFU record: %w", err)
+		return errWithStack("failed to insert SHFU record: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return errWithStack("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -148,7 +156,7 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 
 	rows, err := s.db.QueryxContext(ctx, query, chainID, fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(), toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
 	if err != nil {
-		return nil, fmt.Errorf("failed to query SHFU records: %w", err)
+		return nil, errWithStack("failed to query SHFU records: %w", err)
 	}
 	defer rows.Close()
 
@@ -156,14 +164,14 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 	for rows.Next() {
 		record, err := s.scanSHFURecord(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan SHFU record: %w", err)
+			return nil, errWithStack("failed to scan SHFU record: %w", err)
 		}
 
 		records = append(records, record)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
+		return nil, errWithStack("row iteration error: %w", err)
 	}
 
 	return records, nil
@@ -186,7 +194,7 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to scan latest SHFU record: %w", err)
+		return nil, errWithStack("failed to scan latest SHFU record: %w", err)
 	}
 
 	return record, nil
@@ -203,7 +211,7 @@ func (s *SqlxSHFUStorage) FindSHFUByTimeRange(ctx context.Context, chainID strin
 
 	rows, err := s.db.QueryxContext(ctx, query, chainID, s.dialect.ConvertTimeToDB(fromTime), s.dialect.ConvertTimeToDB(toTime))
 	if err != nil {
-		return nil, fmt.Errorf("failed to query SHFU records by time range: %w", err)
+		return nil, errWithStack("failed to query SHFU records by time range: %w", err)
 	}
 	defer rows.Close()
 
@@ -211,7 +219,7 @@ func (s *SqlxSHFUStorage) FindSHFUByTimeRange(ctx context.Context, chainID strin
 	for rows.Next() {
 		record, err := s.scanSHFURecord(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan SHFU record: %w", err)
+			return nil, errWithStack("failed to scan SHFU record: %w", err)
 		}
 
 		records = append(records, record)
@@ -229,12 +237,12 @@ func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Dur
 	recordQuery := fmt.Sprintf(`DELETE FROM shfu_records WHERE created_at < %s`, p1)
 	result, err := s.db.ExecContext(ctx, recordQuery, s.dialect.ConvertTimeToDB(cutoffTime))
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete old SHFU records: %w", err)
+		return 0, errWithStack("failed to delete old SHFU records: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+		return 0, errWithStack("failed to get rows affected: %w", err)
 	}
 
 	return rowsAffected, nil
@@ -258,7 +266,7 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 	// Serialize UpdateClientResults to JSON
 	updateClientResultsJSON, err := json.Marshal(record.UpdateClientResults)
 	if err != nil {
-		return fmt.Errorf("failed to marshal UpdateClientResults: %w", err)
+		return errWithStack("failed to marshal UpdateClientResults: %w", err)
 	}
 
 	_, err = tx.ExecContext(ctx, query,
@@ -298,19 +306,19 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 	// Convert string timestamps to time.Time using the dialect converter
 	record.ToHeightTime, err = s.dialect.ConvertTimeFromDB(toHeightTimeStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert ToHeightTime: %w", err)
+		return nil, errWithStack("failed to convert ToHeightTime: %w", err)
 	}
 
 	record.UpdatedAt, err = s.dialect.ConvertTimeFromDB(updatedAtStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert UpdatedAt: %w", err)
+		return nil, errWithStack("failed to convert UpdatedAt: %w", err)
 	}
 
 	// Deserialize UpdateClientResults from JSON
 	if updateClientResultsJSON != nil {
 		err = json.Unmarshal(updateClientResultsJSON, &record.UpdateClientResults)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal UpdateClientResults: %w", err)
+			return nil, errWithStack("failed to unmarshal UpdateClientResults: %w", err)
 		}
 	}
 

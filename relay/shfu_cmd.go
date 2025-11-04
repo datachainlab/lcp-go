@@ -250,11 +250,11 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "server <chain-id>",
-		Short: "Start SetupHeadersForUpdate cache server",
-		Args:  cobra.ExactArgs(1),
+		Use:   "server <chain-id> [chain-id...]",
+		Short: "Start SetupHeadersForUpdate SHFU server for one or more chains",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targetChainID := args[0]
+			targetChainIDs := args
 
 			// Get SQLite database path
 			dbPath, err := cmd.Flags().GetString(flagSQLitePath)
@@ -278,17 +278,20 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 			defer storage.Close()
 
-			// Get target chain
-			targetChain, err := ctx.Config.GetChain(targetChainID)
-			if err != nil {
-				return fmt.Errorf("failed to get chain '%s': %w", targetChainID, err)
+			// Get target chains
+			targetChains := make([]*core.ProvableChain, len(targetChainIDs))
+			for i, chainID := range targetChainIDs {
+				chain, err := ctx.Config.GetChain(chainID)
+				if err != nil {
+					return fmt.Errorf("failed to get chain '%s': %w", chainID, err)
+				}
+				targetChains[i] = chain
 			}
 
-			// Create and start SHFU service
-			service := NewSHFUService(storage, targetChain)
-			service.GRPCAddr = grpcAddr
+			// Create and start multi-chain SHFU service
+			service := NewSHFUService(storage, targetChains, grpcAddr)
 
-			fmt.Printf("Starting SHFU Service for chain '%s'...\n", targetChainID)
+			fmt.Printf("Starting SHFU Service for chains: %v...\n", targetChainIDs)
 			fmt.Printf("Database: %s\n", dbPath)
 			fmt.Printf("gRPC server address: %s\n", service.GRPCAddr)
 			fmt.Printf("Polling interval: %v\n", service.PollInterval)
@@ -400,10 +403,6 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("chain ID '%s' not found in path '%s' configuration", targetChainID, pathName)
 			}
 
-			// Execute query chain logic inline
-			fmt.Printf("QueryChain called with path: %s, channel: %s\n", pathName, channelID)
-			fmt.Printf("Target chain: %s\n", target.ChainID())
-
 			// Get the latest height from the target chain
 			latestHeight, err := target.LatestHeight(cmd.Context())
 			if err != nil {
@@ -415,8 +414,6 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to get latest finalized header: %w", err)
 			}
-
-			fmt.Printf("Latest finalized header height: %d\n", latestFinalizedHeader.GetHeight().GetRevisionHeight())
 
 			var latestConsensusInfo interface{}
 
@@ -447,8 +444,9 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 							"channel_id":        channelID,
 							"client_state_type": fmt.Sprintf("%T", clientState),
 							"latest_height_from_client": map[string]interface{}{
-								"revision_number": latestHeight.GetRevisionNumber(),
-								"revision_height": latestHeight.GetRevisionHeight(),
+								"revision_number":        latestHeight.GetRevisionNumber(),
+								"revision_height":        latestHeight.GetRevisionHeight(),
+								"revision_number_height": fmt.Sprintf("%d-%d", latestHeight.GetRevisionNumber(), latestHeight.GetRevisionHeight()),
 							},
 							"latest_height_from_proof": map[string]interface{}{
 								"revision_number": clientStateRes.ProofHeight.RevisionNumber,
@@ -477,7 +475,7 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("failed to marshal result to JSON: %w", err)
 			}
 
-			fmt.Printf("Chain information with LatestConsensusState:\n%s\n", string(resultBytes))
+			fmt.Println(string(resultBytes))
 			return nil
 		},
 	}

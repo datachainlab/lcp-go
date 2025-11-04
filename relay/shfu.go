@@ -31,7 +31,7 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 
 	// Compare fromHeight and toHeight
 	if fromHeight.EQ(toHeight) {
-		// fromHeight == toHeight: do nothing and return nil
+		fmt.Printf("fromHeight == toHeight: do nothing and return nil: from=%v, to=%v\n", fromHeight, toHeight)
 		return nil, nil
 	}
 	if toHeight.LT(fromHeight) {
