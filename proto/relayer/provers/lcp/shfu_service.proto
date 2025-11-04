@@ -1,0 +1,48 @@
+syntax = "proto3";
+package relayer.provers.lcp;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/datachainlab/lcp-go/relay/shfu_grpc";
+option (gogoproto.goproto_getters_all) = false;
+
+// Height represents IBC height with revision number and revision height
+message Height {
+  uint64 revision_number = 1;
+  uint64 revision_height = 2;
+}
+
+// UpdateClientResult represents the result of updateClient operation
+message UpdateClientResult {
+  bytes message = 1;
+  bytes signature = 2;
+}
+
+// SHFURecord represents a SetupHeadersForUpdate record
+message SHFURecord {
+  string chain_id = 1;
+  Height from_height = 2;
+  Height to_height = 3;
+  google.protobuf.Timestamp to_height_time = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp updated_at = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  repeated UpdateClientResult update_client_results = 6;
+}
+
+// GetLatestSHFURequest represents a request to get the latest SHFU record for a chain
+message GetLatestSHFURequest {
+  string chain_id = 1;
+}
+
+// GetLatestSHFUResponse represents a response containing the latest SHFU record
+message GetLatestSHFUResponse {
+  SHFURecord record = 1; // nil if no record found
+  bool found = 2;        // true if record was found
+}
+
+// SHFUService provides operations for SetupHeadersForUpdate records
+service SHFUService {
+  // GetLatestSHFU retrieves the most recent SHFU record for a specific chain
+  rpc GetLatestSHFU(GetLatestSHFURequest) returns (GetLatestSHFUResponse);
+}
+

@@ -265,6 +265,12 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("SQLite database path is required (use --%s flag)", flagSQLitePath)
 			}
 
+			// Get gRPC server address
+			grpcAddr, err := cmd.Flags().GetString(flagGRPCAddr)
+			if err != nil {
+				return fmt.Errorf("failed to get gRPC address: %w", err)
+			}
+
 			// Open storage
 			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
 			if err != nil {
@@ -280,9 +286,11 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 
 			// Create and start SHFU service
 			service := NewSHFUService(storage, targetChain)
+			service.GRPCAddr = grpcAddr
 
 			fmt.Printf("Starting SHFU Service for chain '%s'...\n", targetChainID)
 			fmt.Printf("Database: %s\n", dbPath)
+			fmt.Printf("gRPC server address: %s\n", service.GRPCAddr)
 			fmt.Printf("Polling interval: %v\n", service.PollInterval)
 			fmt.Println("Press Ctrl+C to stop the service")
 
@@ -294,6 +302,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 	cmd = dbPathFlag(cmd)
+	cmd = grpcAddrFlag(cmd)
 	return cmd
 }
 
@@ -485,7 +494,7 @@ func dbPathFlag(cmd *cobra.Command) *cobra.Command {
 }
 
 func grpcAddrFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagGRPCAddr, "", "gRPC server address")
+	cmd.Flags().String(flagGRPCAddr, ":8080", "gRPC server address (default: :8080)")
 	if err := viper.BindPFlag(flagGRPCAddr, cmd.Flags().Lookup(flagGRPCAddr)); err != nil {
 		panic(err)
 	}

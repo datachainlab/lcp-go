@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -10,13 +11,16 @@ import (
 	"time"
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"google.golang.org/grpc"
 )
 
 type SHFUService struct {
 	Storage      SHFUStorage
 	TargetChain  *core.ProvableChain
 	PollInterval time.Duration
+	GRPCAddr     string // gRPC server address (e.g., ":8080")
 }
 
 // NewSHFUService creates a new SHFUService with default polling interval
@@ -25,6 +29,7 @@ func NewSHFUService(storage SHFUStorage, targetChain *core.ProvableChain) *SHFUS
 		Storage:      storage,
 		TargetChain:  targetChain,
 		PollInterval: 30 * time.Second, // Default 30 seconds polling interval
+		GRPCAddr:     "",               // Will be set by command line flag
 	}
 }
 
@@ -32,7 +37,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// シグナルハンドリング用のチャネル
+	// Channel for signal handling
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
@@ -40,10 +45,10 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
 
-	fails := make(chan error, 3) // シグナルハンドリング用に1つ増やす
+	fails := make(chan error, 3) // Buffer size of 3 for signal handling
 	defer close(fails)
 
-	// シグナルハンドリング用のgoroutine
+	// Goroutine for signal handling
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -52,7 +57,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 			fmt.Printf("SHFU Service received signal: %v, shutting down gracefully...\n", sig)
 			cancel()
 		case <-ctx.Done():
-			// 他の理由でcontextがキャンセルされた場合
+			// Context was cancelled for other reasons
 		}
 	}()
 
@@ -68,7 +73,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := srv.RunQuerier()
+		err := srv.RunGRPCServer(ctx)
 		if err != nil {
 			fails <- err
 		}
@@ -79,7 +84,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		defer wg.Done()
 		for e := range fails {
 			fmt.Println("error received. stopping...")
-			fmt.Println(fmt.Sprintf("error details: %+v", e))
+			fmt.Printf("error details: %+v\n", e)
 			cancel()
 		}
 	}()
@@ -140,7 +145,37 @@ func (srv *SHFUService) executeUpdate(ctx context.Context) error {
 	return nil
 }
 
-func (*SHFUService) RunQuerier() error {
+func (srv *SHFUService) RunGRPCServer(ctx context.Context) error {
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+
+	// Create SHFU gRPC service implementation
+	grpcService := shfu_grpc.NewSHFUGRPCServer(srv.Storage)
+
+	// Register SHFU service
+	shfu_grpc.RegisterSHFUServiceServer(grpcServer, grpcService)
+
+	// Create listener
+	lis, err := net.Listen("tcp", srv.GRPCAddr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", srv.GRPCAddr, err)
+	}
+
+	fmt.Printf("Starting SHFU gRPC server on %s\n", srv.GRPCAddr)
+
+	// Start server in a goroutine
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			fmt.Printf("gRPC server error: %v\n", err)
+		}
+	}()
+
+	// Wait for context cancellation
+	<-ctx.Done()
+
+	fmt.Println("Stopping SHFU gRPC server...")
+	grpcServer.GracefulStop()
+
 	return nil
 }
 
