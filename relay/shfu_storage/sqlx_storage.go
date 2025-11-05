@@ -62,6 +62,9 @@ type DBDialect interface {
 
 	// GetPlaceholder returns the placeholder syntax for parameter binding (e.g., "?" for SQLite, "$1" for PostgreSQL)
 	GetPlaceholder(index int) string
+
+	// ConfigureDatabase applies database-specific configuration settings
+	ConfigureDatabase(db *sqlx.DB) error
 }
 
 // SqlxSHFUStorage implements SHFUStorage using sqlx with database abstraction
@@ -77,14 +80,9 @@ func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect) (*SqlxSHFUStorage, error
 		dialect: dialect,
 	}
 
-	// Set SQLite busy timeout for lock handling
-	if err := storage.setBusyTimeout(30000); err != nil { // 30 seconds timeout
-		return nil, errWithStack("failed to set busy timeout: %w", err)
-	}
-
-	// Enable WAL mode for better concurrency
-	if err := storage.enableWALMode(); err != nil {
-		return nil, errWithStack("failed to enable WAL mode: %w", err)
+	// Apply database-specific configuration
+	if err := dialect.ConfigureDatabase(db); err != nil {
+		return nil, errWithStack("failed to configure database: %w", err)
 	}
 
 	// Initialize schema
@@ -93,25 +91,6 @@ func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect) (*SqlxSHFUStorage, error
 	}
 
 	return storage, nil
-}
-
-// setBusyTimeout sets the SQLite busy timeout in milliseconds
-func (s *SqlxSHFUStorage) setBusyTimeout(timeoutMs int) error {
-	query := fmt.Sprintf("PRAGMA busy_timeout = %d", timeoutMs)
-	_, err := s.db.Exec(query)
-	if err != nil {
-		return errWithStack("failed to set busy timeout: %w", err)
-	}
-	return nil
-}
-
-// enableWALMode enables Write-Ahead Logging mode for better concurrency
-func (s *SqlxSHFUStorage) enableWALMode() error {
-	_, err := s.db.Exec("PRAGMA journal_mode = WAL")
-	if err != nil {
-		return errWithStack("failed to enable WAL mode: %w", err)
-	}
-	return nil
 }
 
 // initSchema creates the required tables

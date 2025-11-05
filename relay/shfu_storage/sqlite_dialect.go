@@ -3,6 +3,8 @@ package shfu_storage
 import (
 	"fmt"
 	"time"
+
+	"github.com/jmoiron/sqlx"
 )
 
 // SQLiteDialect implements DBDialect for SQLite databases
@@ -81,4 +83,19 @@ func (d *SQLiteDialect) ConvertTimeFromDB(dbTime interface{}) (time.Time, error)
 // GetPlaceholder returns SQLite placeholder syntax (always "?")
 func (d *SQLiteDialect) GetPlaceholder(index int) string {
 	return "?"
+}
+
+// ConfigureDatabase applies SQLite-specific configuration settings
+func (d *SQLiteDialect) ConfigureDatabase(db *sqlx.DB) error {
+	// Set SQLite busy timeout for lock handling (30 seconds)
+	if _, err := db.Exec("PRAGMA busy_timeout = 30000"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Set journal mode to TRUNCATE
+	if _, err := db.Exec("PRAGMA journal_mode = TRUNCATE"); err != nil {
+		return fmt.Errorf("failed to set journal mode: %w", err)
+	}
+
+	return nil
 }
