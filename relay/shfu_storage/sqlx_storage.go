@@ -24,7 +24,7 @@ const shfuRecordSelectClause = `
 	SELECT chain_id, from_height_revision_number, 
 	       from_height_revision_height, to_height_revision_number, 
 	       to_height_revision_height, to_height_time, 
-	       updated_at, update_client_results
+	       updated_at, update_client_results, client_message_bytes
 	FROM shfu_records`
 
 /*
@@ -106,6 +106,9 @@ func (s *SqlxSHFUStorage) initSchema() error {
 
 // SaveSHFUResult saves a SetupHeadersForUpdate execution result
 func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord) error {
+	// Log transaction start
+	fmt.Printf("[%s] Starting SaveSHFU transaction for chain: %s\n", time.Now().Format("2006-01-02 15:04:05.000"), record.ChainID)
+
 	// Start transaction for consistency
 	tx, err := s.db.BeginTxx(ctx, &sql.TxOptions{})
 	if err != nil {
@@ -122,6 +125,9 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 	if err := tx.Commit(); err != nil {
 		return errWithStack("failed to commit transaction: %w", err)
 	}
+
+	// Log transaction completion
+	fmt.Printf("[%s] Completed SaveSHFU transaction for chain: %s\n", time.Now().Format("2006-01-02 15:04:05.000"), record.ChainID)
 
 	return nil
 }
@@ -162,9 +168,19 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 		ORDER BY updated_at DESC
 	`, p1, p2, p3, p4, p5)
 
+	// Check context deadline for debugging
+	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
+		timeUntilDeadline := time.Until(deadline)
+		if timeUntilDeadline < 30*time.Second {
+			return nil, errWithStack("context deadline (%v) is shorter than SQLite busy timeout (30s)", timeUntilDeadline)
+		}
+	}
+
 	rows, err := s.db.QueryxContext(ctx, query, chainID, fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(), toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
 	if err != nil {
-		return nil, errWithStack("failed to query SHFU records: %w", err)
+		return nil, errWithStack("failed to query SHFU records (chain=%s, fromHeight=%d-%d, toHeight=%d-%d): %w",
+			chainID, fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(),
+			toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight(), err)
 	}
 	defer rows.Close()
 
@@ -268,8 +284,8 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 		chain_id,
 		from_height_revision_number, from_height_revision_height,
 		to_height_revision_number, to_height_revision_height,
-		to_height_time, updated_at, update_client_results
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		to_height_time, updated_at, update_client_results, client_message_bytes
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	// Serialize UpdateClientResults to JSON
 	updateClientResultsJSON, err := json.Marshal(record.UpdateClientResults)
@@ -286,6 +302,7 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 		s.dialect.ConvertTimeToDB(record.ToHeightTime),
 		s.dialect.ConvertTimeToDB(record.UpdatedAt),
 		updateClientResultsJSON,
+		record.ClientMessageBytes,
 	)
 
 	return err
@@ -306,6 +323,7 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 		&toHeightTimeStr,
 		&updatedAtStr,
 		&updateClientResultsJSON,
+		&record.ClientMessageBytes,
 	)
 	if err != nil {
 		return nil, err

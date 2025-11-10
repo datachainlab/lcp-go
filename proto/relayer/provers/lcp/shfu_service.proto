@@ -27,6 +27,9 @@ message SHFURecord {
   google.protobuf.Timestamp to_height_time = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   google.protobuf.Timestamp updated_at = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   repeated UpdateClientResult update_client_results = 6;
+  // Serialized ClientMessage bytes (chain-specific format)
+  // This contains the ClientMessage that was used as latestFinalizedHeader
+  bytes client_message_bytes = 7;
 }
 
 // GetLatestSHFURequest represents a request to get the latest SHFU record for a chain

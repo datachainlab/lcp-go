@@ -63,17 +63,35 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		}
 	}()
 
-	// Start updater goroutines for each chain
-	for _, targetChain := range srv.TargetChains {
-		wg.Add(1)
-		go func(chain *core.ProvableChain) {
-			defer wg.Done()
-			err := srv.runUpdaterForChain(ctx, chain)
-			if err != nil {
-				fails <- fmt.Errorf("updater for chain %s failed: %w", chain.ChainID(), err)
+	// Start a single updater goroutine that handles all chains sequentially
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		
+		ticker := time.NewTicker(srv.PollInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Process each chain sequentially in a single goroutine
+				for _, targetChain := range srv.TargetChains {
+					select {
+					case <-ctx.Done():
+						return
+					default:
+						if err := srv.executeUpdateForChain(ctx, targetChain); err != nil {
+							fmt.Printf("SHFU update failed for chain %s: %v\n", targetChain.ChainID(), err)
+							// Continue with other chains instead of failing
+							continue
+						}
+					}
+				}
 			}
-		}(targetChain)
-	}
+		}
+	}()
 
 	// Start gRPC server
 	wg.Add(1)

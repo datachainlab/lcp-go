@@ -22,6 +22,7 @@ type SHFURecord struct {
 	ToHeightTime        time.Time             `json:"to_height_time"`
 	UpdatedAt           time.Time             `json:"updated_at"`
 	UpdateClientResults []*UpdateClientResult `json:"update_client_results"`
+	ClientMessageBytes  []byte                `json:"client_message_bytes"` // Serialized ClientMessage bytes
 }
 
 // SHFUStorage defines the storage interface for SetupHeadersForUpdate operations

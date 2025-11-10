@@ -27,6 +27,7 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			to_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			updated_at TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			update_client_results BLOB,
+			client_message_bytes BLOB, -- Serialized ClientMessage bytes
 			PRIMARY KEY (chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain 
@@ -92,9 +93,36 @@ func (d *SQLiteDialect) ConfigureDatabase(db *sqlx.DB) error {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 
-	// Set journal mode to TRUNCATE
-	if _, err := db.Exec("PRAGMA journal_mode = TRUNCATE"); err != nil {
+	// Set journal mode to WAL for better concurrency
+	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		return fmt.Errorf("failed to set journal mode: %w", err)
+	}
+
+	// Enable foreign key constraints
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	// Set synchronous to NORMAL for better performance while maintaining safety
+	if _, err := db.Exec("PRAGMA synchronous = NORMAL"); err != nil {
+		return fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
+
+	// Verify settings were applied correctly
+	var busyTimeout int
+	if err := db.Get(&busyTimeout, "PRAGMA busy_timeout"); err != nil {
+		return fmt.Errorf("failed to verify busy timeout: %w", err)
+	}
+	if busyTimeout != 30000 {
+		return fmt.Errorf("busy timeout not set correctly: expected 30000, got %d", busyTimeout)
+	}
+
+	var journalMode string
+	if err := db.Get(&journalMode, "PRAGMA journal_mode"); err != nil {
+		return fmt.Errorf("failed to verify journal mode: %w", err)
+	}
+	if journalMode != "wal" {
+		return fmt.Errorf("journal mode not set correctly: expected 'wal', got '%s'", journalMode)
 	}
 
 	return nil
