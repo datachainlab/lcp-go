@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"google.golang.org/grpc"
@@ -127,24 +126,30 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 }
 
 func (srv *SHFUService) executeUpdateForChainPair(ctx context.Context, chainPair *SHFUChainPair) error {
-	// Get the latest record to determine the fromHeight
-	latestRecord, err := srv.Storage.GetLatestSHFUForChain(ctx, chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID())
-	if err != nil {
-		return fmt.Errorf("failed to get latest SHFU record for chain %s: %w", chainPair.TargetChain.ChainID(), err)
-	}
+	/*
+		Old code (commented out for reference):
+		Get the latest record to determine the fromHeight
+		latestRecord, err := srv.Storage.GetLatestSHFUForChain(ctx, chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID())
+		if err != nil {
+			return fmt.Errorf("failed to get latest SHFU record for chain %s: %w", chainPair.TargetChain.ChainID(), err)
+		}
 
-	if latestRecord == nil {
-		return fmt.Errorf("no previous SHFU records found for chain %s: cannot determine starting height", chainPair.TargetChain.ChainID())
-	}
+		if latestRecord == nil {
+			return fmt.Errorf("no previous SHFU records found for chain %s: cannot determine starting height", chainPair.TargetChain.ChainID())
+		}
 
-	// Use the ToHeight from the latest record as the new fromHeight
-	fromHeight := clienttypes.Height{
-		RevisionNumber: latestRecord.ToHeight.RevisionNumber,
-		RevisionHeight: latestRecord.ToHeight.RevisionHeight,
-	}
+		Use the ToHeight from the latest record as the new fromHeight
+		fromHeight := clienttypes.Height{
+			RevisionNumber: latestRecord.ToHeight.RevisionNumber,
+			RevisionHeight: latestRecord.ToHeight.RevisionHeight,
+		}
+
+		record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, fromHeight, srv.Storage)
+	*/
 
 	// Execute SHFU and store the result with both target and counterparty chains
-	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, fromHeight, srv.Storage)
+	// Pass nil for fromHeight to automatically get it from counterparty's client state
+	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, nil, srv.Storage)
 	if err != nil {
 		return fmt.Errorf("failed to execute SHFU for chain %s: %w", chainPair.TargetChain.ChainID(), err)
 	}

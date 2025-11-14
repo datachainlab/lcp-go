@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 )
 
@@ -46,6 +47,46 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	}
 
 	return &GetLatestSHFUResponse{Found: true, Record: pbRecord}, nil
+}
+
+// GetSHFUByHeight implements the gRPC service method to get SHFU record by height range
+func (srv *SHFUGRPCServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
+	// Convert protobuf Height to clienttypes.Height
+	fromHeight := clienttypes.Height{
+		RevisionNumber: req.FromHeight.RevisionNumber,
+		RevisionHeight: req.FromHeight.RevisionHeight,
+	}
+	toHeight := clienttypes.Height{
+		RevisionNumber: req.ToHeight.RevisionNumber,
+		RevisionHeight: req.ToHeight.RevisionHeight,
+	}
+
+	// Get SHFU records from storage by height range
+	records, err := srv.storage.FindSHFUByChainAndHeight(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
+	}
+
+	if len(records) == 0 {
+		return &GetSHFUByHeightResponse{Found: false}, nil
+	}
+
+	// Return the first matching record (there should typically be only one)
+	record := records[0]
+
+	// Convert to protobuf message
+	pbRecord := &SHFURecord{
+		ChainId:               record.ChainID,
+		CounterpartyChainId:   record.CounterpartyChainID,
+		FromHeight:            &Height{RevisionNumber: record.FromHeight.GetRevisionNumber(), RevisionHeight: record.FromHeight.GetRevisionHeight()},
+		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
+		ToHeightTime:          record.ToHeightTime,
+		UpdatedAt:             record.UpdatedAt,
+		UpdateClientResults:   convertUpdateClientResults(record.UpdateClientResults),
+		LatestFinalizedHeader: record.LatestFinalizedHeader,
+	}
+
+	return &GetSHFUByHeightResponse{Found: true, Record: pbRecord}, nil
 }
 
 // convertUpdateClientResults converts storage UpdateClientResults to protobuf format

@@ -119,7 +119,6 @@ type SHFURecord struct {
 	ToHeightTime        time.Time             `protobuf:"bytes,5,opt,name=to_height_time,json=toHeightTime,proto3,stdtime" json:"to_height_time"`
 	UpdatedAt           time.Time             `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3,stdtime" json:"updated_at"`
 	UpdateClientResults []*UpdateClientResult `protobuf:"bytes,7,rep,name=update_client_results,json=updateClientResults,proto3" json:"update_client_results,omitempty"`
-	// Serialized core.Header bytes (latestFinalizedHeader)
 	// This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
 	LatestFinalizedHeader []byte `protobuf:"bytes,8,opt,name=latest_finalized_header,json=latestFinalizedHeader,proto3" json:"latest_finalized_header,omitempty"`
 }
@@ -235,12 +234,94 @@ func (m *GetLatestSHFUResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetLatestSHFUResponse proto.InternalMessageInfo
 
+// GetSHFUByHeightRequest represents a request to get SHFU record by from/to heights
+type GetSHFUByHeightRequest struct {
+	ChainId             string  `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
+	CounterpartyChainId string  `protobuf:"bytes,2,opt,name=counterparty_chain_id,json=counterpartyChainId,proto3" json:"counterparty_chain_id,omitempty"`
+	FromHeight          *Height `protobuf:"bytes,3,opt,name=from_height,json=fromHeight,proto3" json:"from_height,omitempty"`
+	ToHeight            *Height `protobuf:"bytes,4,opt,name=to_height,json=toHeight,proto3" json:"to_height,omitempty"`
+}
+
+func (m *GetSHFUByHeightRequest) Reset()         { *m = GetSHFUByHeightRequest{} }
+func (m *GetSHFUByHeightRequest) String() string { return proto.CompactTextString(m) }
+func (*GetSHFUByHeightRequest) ProtoMessage()    {}
+func (*GetSHFUByHeightRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_37abe7f9a71f71d3, []int{5}
+}
+func (m *GetSHFUByHeightRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSHFUByHeightRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSHFUByHeightRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSHFUByHeightRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSHFUByHeightRequest.Merge(m, src)
+}
+func (m *GetSHFUByHeightRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSHFUByHeightRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSHFUByHeightRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSHFUByHeightRequest proto.InternalMessageInfo
+
+// GetSHFUByHeightResponse represents a response containing the SHFU record for specified heights
+type GetSHFUByHeightResponse struct {
+	Record *SHFURecord `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+	Found  bool        `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+}
+
+func (m *GetSHFUByHeightResponse) Reset()         { *m = GetSHFUByHeightResponse{} }
+func (m *GetSHFUByHeightResponse) String() string { return proto.CompactTextString(m) }
+func (*GetSHFUByHeightResponse) ProtoMessage()    {}
+func (*GetSHFUByHeightResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_37abe7f9a71f71d3, []int{6}
+}
+func (m *GetSHFUByHeightResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSHFUByHeightResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSHFUByHeightResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSHFUByHeightResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSHFUByHeightResponse.Merge(m, src)
+}
+func (m *GetSHFUByHeightResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSHFUByHeightResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSHFUByHeightResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSHFUByHeightResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*Height)(nil), "relayer.provers.lcp.Height")
 	proto.RegisterType((*UpdateClientResult)(nil), "relayer.provers.lcp.UpdateClientResult")
 	proto.RegisterType((*SHFURecord)(nil), "relayer.provers.lcp.SHFURecord")
 	proto.RegisterType((*GetLatestSHFURequest)(nil), "relayer.provers.lcp.GetLatestSHFURequest")
 	proto.RegisterType((*GetLatestSHFUResponse)(nil), "relayer.provers.lcp.GetLatestSHFUResponse")
+	proto.RegisterType((*GetSHFUByHeightRequest)(nil), "relayer.provers.lcp.GetSHFUByHeightRequest")
+	proto.RegisterType((*GetSHFUByHeightResponse)(nil), "relayer.provers.lcp.GetSHFUByHeightResponse")
 }
 
 func init() {
@@ -248,44 +329,47 @@ func init() {
 }
 
 var fileDescriptor_37abe7f9a71f71d3 = []byte{
-	// 592 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0x4d, 0x6f, 0xd3, 0x4c,
-	0x10, 0x8e, 0xfb, 0x91, 0x26, 0x93, 0xbe, 0x7d, 0xa5, 0x6d, 0x23, 0x4c, 0x40, 0x4e, 0x95, 0x03,
-	0x2d, 0x48, 0xd8, 0x52, 0x90, 0x80, 0x03, 0x17, 0x5a, 0xa9, 0x14, 0x54, 0x71, 0x70, 0xe9, 0xa5,
-	0x1c, 0xac, 0x8d, 0x3d, 0x76, 0x56, 0x72, 0xbc, 0x66, 0x3f, 0x2a, 0x95, 0x5f, 0xd1, 0x9f, 0xd5,
-	0x63, 0x8f, 0x9c, 0xf8, 0x68, 0x7f, 0x05, 0x37, 0x94, 0x5d, 0xbb, 0x25, 0x34, 0x12, 0x20, 0x71,
-	0xf3, 0xcc, 0x3c, 0xcf, 0x33, 0x9a, 0x79, 0xc6, 0x0b, 0x0f, 0x04, 0xe6, 0xf4, 0x14, 0x45, 0x50,
-	0x0a, 0x7e, 0x82, 0x42, 0x06, 0x79, 0x5c, 0x06, 0x72, 0x9c, 0xea, 0x48, 0xa2, 0x38, 0x61, 0x31,
-	0xfa, 0xa5, 0xe0, 0x8a, 0x93, 0xf5, 0x0a, 0xe7, 0x57, 0x38, 0x3f, 0x8f, 0xcb, 0xde, 0x46, 0xc6,
-	0x33, 0x6e, 0xea, 0xc1, 0xf4, 0xcb, 0x42, 0x7b, 0xfd, 0x8c, 0xf3, 0x2c, 0xc7, 0xc0, 0x44, 0x23,
-	0x9d, 0x06, 0x8a, 0x4d, 0x50, 0x2a, 0x3a, 0x29, 0x2d, 0x60, 0x70, 0x0c, 0xcd, 0x7d, 0x64, 0xd9,
-	0x58, 0x91, 0x2d, 0xf8, 0x5f, 0xe0, 0x09, 0x93, 0x8c, 0x17, 0x51, 0xa1, 0x27, 0x23, 0x14, 0xae,
-	0xb3, 0xe9, 0x6c, 0x2f, 0x85, 0x6b, 0x75, 0xfa, 0xad, 0xc9, 0xce, 0x00, 0xc7, 0x86, 0xeb, 0x2e,
-	0xcc, 0x02, 0xad, 0xe2, 0xe0, 0x00, 0xc8, 0x51, 0x99, 0x50, 0x85, 0xbb, 0x39, 0xc3, 0x42, 0x85,
-	0x28, 0x75, 0xae, 0x88, 0x0b, 0x2b, 0x13, 0x94, 0x92, 0x66, 0x68, 0xf4, 0x57, 0xc3, 0x3a, 0x24,
-	0xf7, 0xa1, 0x2d, 0x59, 0x56, 0x50, 0xa5, 0x05, 0x1a, 0xc9, 0xd5, 0xf0, 0x26, 0x31, 0xf8, 0xbe,
-	0x08, 0x70, 0xb8, 0xbf, 0x77, 0x14, 0x62, 0xcc, 0x45, 0x42, 0xee, 0x42, 0x2b, 0x1e, 0x53, 0x56,
-	0x44, 0x2c, 0x31, 0x3a, 0xed, 0x70, 0xc5, 0xc4, 0xaf, 0x13, 0x32, 0x84, 0x6e, 0xcc, 0x75, 0xa1,
-	0x50, 0x94, 0x54, 0xa8, 0xd3, 0xe8, 0x1a, 0xb7, 0x60, 0x70, 0xeb, 0x3f, 0x17, 0x77, 0x2b, 0xce,
-	0x0b, 0xe8, 0xa4, 0x82, 0x4f, 0xea, 0x81, 0x16, 0x37, 0x9d, 0xed, 0xce, 0xf0, 0x9e, 0x3f, 0x67,
-	0xd3, 0xbe, 0x9d, 0x2e, 0x84, 0x29, 0xbe, 0xda, 0xdd, 0x73, 0x68, 0x2b, 0x5e, 0x73, 0x97, 0x7e,
-	0xcf, 0x6d, 0x29, 0x5e, 0x31, 0xdf, 0xc0, 0xda, 0x35, 0x33, 0x9a, 0x9a, 0xe3, 0x2e, 0x1b, 0x7a,
-	0xcf, 0xb7, 0xce, 0xf9, 0xb5, 0x73, 0xfe, 0xbb, 0xda, 0xb9, 0x9d, 0xd6, 0xf9, 0xe7, 0x7e, 0xe3,
-	0xec, 0x4b, 0xdf, 0x09, 0x57, 0x6b, 0x9d, 0x69, 0x91, 0xec, 0x02, 0x68, 0xb3, 0xef, 0x24, 0xa2,
-	0xca, 0x6d, 0xfe, 0x85, 0x4e, 0xbb, 0xe2, 0xbd, 0x54, 0xe4, 0x3d, 0x74, 0x6d, 0x10, 0xc5, 0xc6,
-	0xb5, 0x48, 0x18, 0xdb, 0xa4, 0xbb, 0xb2, 0xb9, 0xb8, 0xdd, 0x19, 0x6e, 0xcd, 0x1d, 0xeb, 0xb6,
-	0xcd, 0xe1, 0xba, 0xbe, 0x95, 0x93, 0xe4, 0x29, 0xdc, 0xc9, 0xa9, 0x42, 0xa9, 0xa2, 0x94, 0x15,
-	0x34, 0x67, 0x1f, 0x31, 0x89, 0xc6, 0x48, 0x13, 0x14, 0x6e, 0xcb, 0xf8, 0xdd, 0xb5, 0xe5, 0xbd,
-	0xba, 0xba, 0x6f, 0x8a, 0x03, 0x84, 0x8d, 0x57, 0xa8, 0x0e, 0x4c, 0xcd, 0xde, 0xc0, 0x07, 0x8d,
-	0x52, 0xfd, 0xe3, 0x23, 0x18, 0xa4, 0xd0, 0xfd, 0xa5, 0x8d, 0x2c, 0x79, 0x21, 0x91, 0x3c, 0x83,
-	0xa6, 0x30, 0x67, 0x67, 0xba, 0x74, 0x86, 0xfd, 0xb9, 0x5b, 0xb8, 0xb9, 0xce, 0xb0, 0x82, 0x93,
-	0x0d, 0x58, 0x4e, 0xb9, 0x2e, 0x6c, 0xd7, 0x56, 0x68, 0x83, 0xa1, 0x86, 0xce, 0x14, 0x7b, 0x68,
-	0xff, 0x6a, 0x92, 0xc2, 0x7f, 0x33, 0x6d, 0xc9, 0xc3, 0xb9, 0xf2, 0xf3, 0x36, 0xd0, 0x7b, 0xf4,
-	0x27, 0x50, 0x3b, 0xc5, 0xce, 0xc1, 0xf9, 0x37, 0xaf, 0x71, 0x7e, 0xe9, 0x39, 0x17, 0x97, 0x9e,
-	0xf3, 0xf5, 0xd2, 0x73, 0xce, 0xae, 0xbc, 0xc6, 0xc5, 0x95, 0xd7, 0xf8, 0x74, 0xe5, 0x35, 0x8e,
-	0xfd, 0x8c, 0xa9, 0xb1, 0x1e, 0xf9, 0x31, 0x9f, 0x04, 0x09, 0x55, 0xd4, 0x2c, 0x2c, 0xa7, 0xa3,
-	0xe9, 0x2b, 0xf4, 0x38, 0xe3, 0x81, 0xe9, 0x63, 0x9f, 0xa3, 0x4c, 0x94, 0xf1, 0xa8, 0x69, 0x2e,
-	0xea, 0xc9, 0x8f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x15, 0x4a, 0x0e, 0x35, 0xb6, 0x04, 0x00, 0x00,
+	// 638 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0x4d, 0x4f, 0xd4, 0x50,
+	0x14, 0x9d, 0xf2, 0x31, 0xcc, 0xdc, 0x41, 0x48, 0x1e, 0x8c, 0xd4, 0xd1, 0x74, 0x48, 0x17, 0x82,
+	0x5f, 0x6d, 0x32, 0x26, 0xea, 0xc2, 0x8d, 0x90, 0x00, 0x1a, 0xe2, 0xa2, 0xc8, 0x06, 0x17, 0xcd,
+	0x9b, 0xf6, 0xf6, 0x23, 0xe9, 0xf4, 0xd5, 0xf7, 0x5e, 0x49, 0xf0, 0x57, 0xf0, 0xb3, 0x58, 0xb2,
+	0x74, 0x25, 0xca, 0xfc, 0x0a, 0x77, 0x66, 0x5e, 0x5b, 0x10, 0x66, 0x8c, 0x98, 0x48, 0xdc, 0xf5,
+	0xde, 0x7b, 0xce, 0xbd, 0xb9, 0xf7, 0x9c, 0xf4, 0xc1, 0x43, 0x8e, 0x09, 0x3d, 0x42, 0x6e, 0x67,
+	0x9c, 0x1d, 0x22, 0x17, 0x76, 0xe2, 0x65, 0xb6, 0x88, 0x82, 0xdc, 0x15, 0xc8, 0x0f, 0x63, 0x0f,
+	0xad, 0x8c, 0x33, 0xc9, 0xc8, 0x52, 0x89, 0xb3, 0x4a, 0x9c, 0x95, 0x78, 0x59, 0x67, 0x39, 0x64,
+	0x21, 0x53, 0x75, 0x7b, 0xf4, 0x55, 0x40, 0x3b, 0xdd, 0x90, 0xb1, 0x30, 0x41, 0x5b, 0x45, 0xfd,
+	0x3c, 0xb0, 0x65, 0x3c, 0x40, 0x21, 0xe9, 0x20, 0x2b, 0x00, 0xe6, 0x01, 0xd4, 0x77, 0x30, 0x0e,
+	0x23, 0x49, 0xd6, 0x60, 0x91, 0xe3, 0x61, 0x2c, 0x62, 0x96, 0xba, 0x69, 0x3e, 0xe8, 0x23, 0xd7,
+	0xb5, 0x55, 0x6d, 0x7d, 0xc6, 0x59, 0xa8, 0xd2, 0xef, 0x55, 0xf6, 0x0a, 0x30, 0x52, 0x5c, 0x7d,
+	0xea, 0x2a, 0xb0, 0xe8, 0x68, 0xee, 0x02, 0xd9, 0xcf, 0x7c, 0x2a, 0x71, 0x33, 0x89, 0x31, 0x95,
+	0x0e, 0x8a, 0x3c, 0x91, 0x44, 0x87, 0xb9, 0x01, 0x0a, 0x41, 0x43, 0x54, 0xfd, 0xe7, 0x9d, 0x2a,
+	0x24, 0x0f, 0xa0, 0x29, 0xe2, 0x30, 0xa5, 0x32, 0xe7, 0xa8, 0x5a, 0xce, 0x3b, 0x97, 0x09, 0xf3,
+	0xc7, 0x34, 0xc0, 0xde, 0xce, 0xd6, 0xbe, 0x83, 0x1e, 0xe3, 0x3e, 0xb9, 0x07, 0x0d, 0x2f, 0xa2,
+	0x71, 0xea, 0xc6, 0xbe, 0xea, 0xd3, 0x74, 0xe6, 0x54, 0xfc, 0xd6, 0x27, 0x3d, 0x68, 0x7b, 0x2c,
+	0x4f, 0x25, 0xf2, 0x8c, 0x72, 0x79, 0xe4, 0x5e, 0xe0, 0xa6, 0x14, 0x6e, 0xe9, 0xd7, 0xe2, 0x66,
+	0xc9, 0x79, 0x0d, 0xad, 0x80, 0xb3, 0x41, 0xb5, 0xd0, 0xf4, 0xaa, 0xb6, 0xde, 0xea, 0xdd, 0xb7,
+	0x26, 0x5c, 0xda, 0x2a, 0xb6, 0x73, 0x60, 0x84, 0x2f, 0x6f, 0xf7, 0x0a, 0x9a, 0x92, 0x55, 0xdc,
+	0x99, 0x3f, 0x73, 0x1b, 0x92, 0x95, 0xcc, 0x77, 0xb0, 0x70, 0xc1, 0x74, 0x47, 0xe2, 0xe8, 0xb3,
+	0x8a, 0xde, 0xb1, 0x0a, 0xe5, 0xac, 0x4a, 0x39, 0xeb, 0x43, 0xa5, 0xdc, 0x46, 0xe3, 0xe4, 0x6b,
+	0xb7, 0x76, 0x7c, 0xd6, 0xd5, 0x9c, 0xf9, 0xaa, 0xcf, 0xa8, 0x48, 0x36, 0x01, 0x72, 0x75, 0x6f,
+	0xdf, 0xa5, 0x52, 0xaf, 0xff, 0x45, 0x9f, 0x66, 0xc9, 0x7b, 0x23, 0xc9, 0x47, 0x68, 0x17, 0x81,
+	0xeb, 0x29, 0xd5, 0x5c, 0xae, 0x64, 0x13, 0xfa, 0xdc, 0xea, 0xf4, 0x7a, 0xab, 0xb7, 0x36, 0x71,
+	0xad, 0x71, 0x99, 0x9d, 0xa5, 0x7c, 0x2c, 0x27, 0xc8, 0x0b, 0x58, 0x49, 0xa8, 0x44, 0x21, 0xdd,
+	0x20, 0x4e, 0x69, 0x12, 0x7f, 0x46, 0xdf, 0x8d, 0x90, 0xfa, 0xc8, 0xf5, 0x86, 0xd2, 0xbb, 0x5d,
+	0x94, 0xb7, 0xaa, 0xea, 0x8e, 0x2a, 0x9a, 0x08, 0xcb, 0xdb, 0x28, 0x77, 0x55, 0xad, 0xf0, 0xc0,
+	0xa7, 0x1c, 0x85, 0xfc, 0xc7, 0x26, 0x30, 0x03, 0x68, 0x5f, 0x1b, 0x23, 0x32, 0x96, 0x0a, 0x24,
+	0x2f, 0xa1, 0xce, 0x95, 0xed, 0xd4, 0x94, 0x56, 0xaf, 0x3b, 0xf1, 0x0a, 0x97, 0xee, 0x74, 0x4a,
+	0x38, 0x59, 0x86, 0xd9, 0x80, 0xe5, 0x69, 0x31, 0xb5, 0xe1, 0x14, 0x81, 0x79, 0xa6, 0xc1, 0xdd,
+	0x6d, 0x54, 0x23, 0x36, 0x8e, 0x4a, 0x4b, 0xdc, 0xca, 0x46, 0xff, 0xcb, 0xd6, 0x66, 0x04, 0x2b,
+	0x63, 0x0b, 0xde, 0xca, 0x2d, 0x7b, 0x43, 0x0d, 0x5a, 0x23, 0xf0, 0x5e, 0xf1, 0x8b, 0x24, 0x01,
+	0xdc, 0xb9, 0xa2, 0x21, 0x79, 0x34, 0xb1, 0xff, 0x24, 0x3b, 0x75, 0x1e, 0xdf, 0x04, 0x5a, 0xae,
+	0x91, 0xc0, 0xe2, 0xb5, 0x0d, 0xc9, 0x93, 0xdf, 0xd1, 0x27, 0x08, 0xdd, 0x79, 0x7a, 0x33, 0x70,
+	0x31, 0x6d, 0x63, 0xf7, 0xe4, 0xbb, 0x51, 0x3b, 0x39, 0x37, 0xb4, 0xd3, 0x73, 0x43, 0xfb, 0x76,
+	0x6e, 0x68, 0xc7, 0x43, 0xa3, 0x76, 0x3a, 0x34, 0x6a, 0x5f, 0x86, 0x46, 0xed, 0xc0, 0x0a, 0x63,
+	0x19, 0xe5, 0x7d, 0xcb, 0x63, 0x03, 0xdb, 0xa7, 0x92, 0x2a, 0x67, 0x24, 0xb4, 0x3f, 0x7a, 0x40,
+	0x9e, 0x85, 0xcc, 0x56, 0x93, 0x8a, 0x97, 0x24, 0xe4, 0x99, 0xd7, 0xaf, 0xab, 0x9f, 0xc1, 0xf3,
+	0x9f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xdb, 0x4e, 0x67, 0x6e, 0x71, 0x06, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -302,6 +386,8 @@ const _ = grpc.SupportPackageIsVersion4
 type SHFUServiceClient interface {
 	// GetLatestSHFU retrieves the most recent SHFU record for a specific chain
 	GetLatestSHFU(ctx context.Context, in *GetLatestSHFURequest, opts ...grpc.CallOption) (*GetLatestSHFUResponse, error)
+	// GetSHFUByHeight retrieves SHFU record for specific from/to heights
+	GetSHFUByHeight(ctx context.Context, in *GetSHFUByHeightRequest, opts ...grpc.CallOption) (*GetSHFUByHeightResponse, error)
 }
 
 type sHFUServiceClient struct {
@@ -321,10 +407,21 @@ func (c *sHFUServiceClient) GetLatestSHFU(ctx context.Context, in *GetLatestSHFU
 	return out, nil
 }
 
+func (c *sHFUServiceClient) GetSHFUByHeight(ctx context.Context, in *GetSHFUByHeightRequest, opts ...grpc.CallOption) (*GetSHFUByHeightResponse, error) {
+	out := new(GetSHFUByHeightResponse)
+	err := c.cc.Invoke(ctx, "/relayer.provers.lcp.SHFUService/GetSHFUByHeight", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SHFUServiceServer is the server API for SHFUService service.
 type SHFUServiceServer interface {
 	// GetLatestSHFU retrieves the most recent SHFU record for a specific chain
 	GetLatestSHFU(context.Context, *GetLatestSHFURequest) (*GetLatestSHFUResponse, error)
+	// GetSHFUByHeight retrieves SHFU record for specific from/to heights
+	GetSHFUByHeight(context.Context, *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error)
 }
 
 // UnimplementedSHFUServiceServer can be embedded to have forward compatible implementations.
@@ -333,6 +430,9 @@ type UnimplementedSHFUServiceServer struct {
 
 func (*UnimplementedSHFUServiceServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFURequest) (*GetLatestSHFUResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLatestSHFU not implemented")
+}
+func (*UnimplementedSHFUServiceServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSHFUByHeight not implemented")
 }
 
 func RegisterSHFUServiceServer(s grpc1.Server, srv SHFUServiceServer) {
@@ -357,6 +457,24 @@ func _SHFUService_GetLatestSHFU_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SHFUService_GetSHFUByHeight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSHFUByHeightRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SHFUServiceServer).GetSHFUByHeight(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/relayer.provers.lcp.SHFUService/GetSHFUByHeight",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SHFUServiceServer).GetSHFUByHeight(ctx, req.(*GetSHFUByHeightRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _SHFUService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "relayer.provers.lcp.SHFUService",
 	HandlerType: (*SHFUServiceServer)(nil),
@@ -364,6 +482,10 @@ var _SHFUService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetLatestSHFU",
 			Handler:    _SHFUService_GetLatestSHFU_Handler,
+		},
+		{
+			MethodName: "GetSHFUByHeight",
+			Handler:    _SHFUService_GetSHFUByHeight_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -620,6 +742,112 @@ func (m *GetLatestSHFUResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *GetSHFUByHeightRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSHFUByHeightRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSHFUByHeightRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ToHeight != nil {
+		{
+			size, err := m.ToHeight.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintShfuService(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.FromHeight != nil {
+		{
+			size, err := m.FromHeight.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintShfuService(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.CounterpartyChainId) > 0 {
+		i -= len(m.CounterpartyChainId)
+		copy(dAtA[i:], m.CounterpartyChainId)
+		i = encodeVarintShfuService(dAtA, i, uint64(len(m.CounterpartyChainId)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.ChainId) > 0 {
+		i -= len(m.ChainId)
+		copy(dAtA[i:], m.ChainId)
+		i = encodeVarintShfuService(dAtA, i, uint64(len(m.ChainId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetSHFUByHeightResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSHFUByHeightResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSHFUByHeightResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Found {
+		i--
+		if m.Found {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.Record != nil {
+		{
+			size, err := m.Record.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintShfuService(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintShfuService(dAtA []byte, offset int, v uint64) int {
 	offset -= sovShfuService(v)
 	base := offset
@@ -720,6 +948,47 @@ func (m *GetLatestSHFURequest) Size() (n int) {
 }
 
 func (m *GetLatestSHFUResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Record != nil {
+		l = m.Record.Size()
+		n += 1 + l + sovShfuService(uint64(l))
+	}
+	if m.Found {
+		n += 2
+	}
+	return n
+}
+
+func (m *GetSHFUByHeightRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ChainId)
+	if l > 0 {
+		n += 1 + l + sovShfuService(uint64(l))
+	}
+	l = len(m.CounterpartyChainId)
+	if l > 0 {
+		n += 1 + l + sovShfuService(uint64(l))
+	}
+	if m.FromHeight != nil {
+		l = m.FromHeight.Size()
+		n += 1 + l + sovShfuService(uint64(l))
+	}
+	if m.ToHeight != nil {
+		l = m.ToHeight.Size()
+		n += 1 + l + sovShfuService(uint64(l))
+	}
+	return n
+}
+
+func (m *GetSHFUByHeightResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1408,6 +1677,298 @@ func (m *GetLatestSHFUResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: GetLatestSHFUResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Record", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Record == nil {
+				m.Record = &SHFURecord{}
+			}
+			if err := m.Record.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Found", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Found = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipShfuService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowShfuService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSHFUByHeightRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSHFUByHeightRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChainId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ChainId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CounterpartyChainId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CounterpartyChainId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromHeight", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FromHeight == nil {
+				m.FromHeight = &Height{}
+			}
+			if err := m.FromHeight.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ToHeight", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ToHeight == nil {
+				m.ToHeight = &Height{}
+			}
+			if err := m.ToHeight.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipShfuService(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetSHFUByHeightResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowShfuService
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSHFUByHeightResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSHFUByHeightResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

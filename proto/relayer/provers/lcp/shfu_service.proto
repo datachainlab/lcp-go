@@ -27,8 +27,7 @@ message SHFURecord {
   Height to_height = 4;
   google.protobuf.Timestamp to_height_time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   google.protobuf.Timestamp updated_at = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  repeated UpdateClientResult update_client_results = 7;
-  // Serialized core.Header bytes (latestFinalizedHeader)
+  repeated UpdateClientResult update_client_results = 7;  // Serialized core.Header bytes (latestFinalizedHeader)
   // This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
   bytes latest_finalized_header = 8;
 }
@@ -45,9 +44,26 @@ message GetLatestSHFUResponse {
   bool found = 2;        // true if record was found
 }
 
+// GetSHFUByHeightRequest represents a request to get SHFU record by from/to heights
+message GetSHFUByHeightRequest {
+  string chain_id = 1;
+  string counterparty_chain_id = 2;
+  Height from_height = 3;
+  Height to_height = 4;
+}
+
+// GetSHFUByHeightResponse represents a response containing the SHFU record for specified heights
+message GetSHFUByHeightResponse {
+  SHFURecord record = 1; // nil if no record found
+  bool found = 2;        // true if record was found
+}
+
 // SHFUService provides operations for SetupHeadersForUpdate records
 service SHFUService {
   // GetLatestSHFU retrieves the most recent SHFU record for a specific chain
   rpc GetLatestSHFU(GetLatestSHFURequest) returns (GetLatestSHFUResponse);
+  
+  // GetSHFUByHeight retrieves SHFU record for specific from/to heights
+  rpc GetSHFUByHeight(GetSHFUByHeightRequest) returns (GetSHFUByHeightResponse);
 }
 

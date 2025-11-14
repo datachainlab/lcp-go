@@ -6,6 +6,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -14,8 +15,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// GetLatestFinalizedHeaderFromSHFUGRPC retrieves the latest finalized header from gRPC server
-func GetLatestFinalizedHeaderFromSHFUGRPC(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, codec codec.ProtoCodecMarshaler) (core.Header, error) {
+// GetLatestFinalizedHeader retrieves the latest finalized header from gRPC server
+func GetLatestFinalizedHeader(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, codec codec.ProtoCodecMarshaler) (core.Header, error) {
 	if grpcAddress == "" {
 		return nil, fmt.Errorf("SHFU gRPC address not provided")
 	}
@@ -114,4 +115,75 @@ func GetUpdateClientResults(ctx context.Context, grpcAddress string, chainID str
 	}
 
 	return results, nil
+}
+
+// GetSHFUByHeight retrieves SHFU record by height range from gRPC server
+func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+	if grpcAddress == "" {
+		return nil, fmt.Errorf("SHFU gRPC address not provided")
+	}
+
+	// Connect to SHFU gRPC server
+	conn, err := grpc.DialContext(ctx, grpcAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
+	}
+	defer conn.Close()
+
+	client := NewSHFUServiceClient(conn)
+
+	// Request SHFU record by height range
+	req := &GetSHFUByHeightRequest{
+		ChainId:             chainID,
+		CounterpartyChainId: counterpartyChainID,
+		FromHeight: &Height{
+			RevisionNumber: fromHeight.GetRevisionNumber(),
+			RevisionHeight: fromHeight.GetRevisionHeight(),
+		},
+		ToHeight: &Height{
+			RevisionNumber: toHeight.GetRevisionNumber(),
+			RevisionHeight: toHeight.GetRevisionHeight(),
+		},
+	}
+
+	resp, err := client.GetSHFUByHeight(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SHFU by height from gRPC server: %w", err)
+	}
+
+	if !resp.Found || resp.Record == nil {
+		return nil, nil // No record found
+	}
+
+	// Convert gRPC response to storage SHFURecord
+	record := &shfu_storage.SHFURecord{
+		ChainID:             resp.Record.ChainId,
+		CounterpartyChainID: resp.Record.CounterpartyChainId,
+		FromHeight: clienttypes.Height{
+			RevisionNumber: resp.Record.FromHeight.RevisionNumber,
+			RevisionHeight: resp.Record.FromHeight.RevisionHeight,
+		},
+		ToHeight: clienttypes.Height{
+			RevisionNumber: resp.Record.ToHeight.RevisionNumber,
+			RevisionHeight: resp.Record.ToHeight.RevisionHeight,
+		},
+		ToHeightTime:          resp.Record.ToHeightTime,
+		UpdatedAt:             resp.Record.UpdatedAt,
+		LatestFinalizedHeader: resp.Record.LatestFinalizedHeader,
+	}
+
+	// Convert UpdateClientResults
+	for _, grpcResult := range resp.Record.UpdateClientResults {
+		result := &shfu_storage.UpdateClientResult{
+			Message:   grpcResult.Message,
+			Signature: grpcResult.Signature,
+		}
+		record.UpdateClientResults = append(record.UpdateClientResults, result)
+	}
+
+	return record, nil
 }

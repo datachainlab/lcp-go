@@ -98,6 +98,49 @@ func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
 	return false, ""
 }
 
+// getUpdateClientFromGRPC retrieves SHFU results from gRPC server using height range
+func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.Chain) ([]*shfu_storage.UpdateClientResult, error) {
+	logger.InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
+
+	// Get chain ID from target chain and counterparty chain
+	chainID := targetChain.ChainID()
+	counterpartyChainID := counterparty.ChainID()
+
+	// Get fromHeight from counterparty's client state
+	fromHeight, err := GetClientStateLatestHeight(ctx, counterparty)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get client state latest height: %w", err)
+	}
+
+	// Use a default toHeight (for now, use fromHeight + 1 as a simple default)
+	toHeight := clienttypes.Height{
+		RevisionNumber: fromHeight.GetRevisionNumber(),
+		RevisionHeight: fromHeight.GetRevisionHeight() + 1,
+	}
+
+	// Get SHFU record by height range
+	record, err := shfu_grpc.GetSHFUByHeight(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
+	}
+
+	if record == nil {
+		logger.InfoContext(ctx, "no SHFU record found from gRPC server",
+			"chain_id", chainID,
+			"from_height", fmt.Sprintf("%d-%d", fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight()),
+			"to_height", fmt.Sprintf("%d-%d", toHeight.RevisionNumber, toHeight.RevisionHeight))
+		return []*shfu_storage.UpdateClientResult{}, nil
+	}
+
+	logger.InfoContext(ctx, "retrieved SHFU record from gRPC server",
+		"chain_id", chainID,
+		"from_height", fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight),
+		"to_height", fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight),
+		"num_results", len(record.UpdateClientResults))
+
+	return record.UpdateClientResults, nil
+}
+
 func NewProver(config ProverConfig, originChain core.Chain, originProver core.Prover) (*Prover, error) {
 	conn, err := grpc.Dial(
 		config.LcpServiceAddress,
@@ -226,7 +269,7 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 		chainID := pr.originChain.ChainID()
 		// Note: This is called from GetLatestFinalizedHeader, so we don't have dstChain info
 		// For now, we'll pass empty string as counterparty chain ID - this needs architectural change
-		header, err := shfu_grpc.GetLatestFinalizedHeaderFromSHFUGRPC(ctx, grpcAddress, chainID, "", pr.codec)
+		header, err := shfu_grpc.GetLatestFinalizedHeader(ctx, grpcAddress, chainID, "", pr.codec)
 		if err != nil {
 			return nil, err
 		}
@@ -245,11 +288,10 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // setupHeadersForUpdate0 performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
-	/*
-		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-			return nil, err
-		}
-	*/
+	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+		return nil, err
+	}
+
 	if pr.activeEnclaveKey == nil {
 		need, err := pr.loadEKIAndCheckUpdateNeeded(ctx, dstChain)
 		fmt.Printf("zzz loadEKIAndCheckUpdateNeeded: need=%v, error=%v\n", need, err)
@@ -299,32 +341,15 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
 	var results []*shfu_storage.UpdateClientResult
 	var err error
-
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-		return nil, err
-	}
-
+	/*
+		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+			return nil, err
+		}
+	*/
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
-		pr.getLogger().InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
-
-		// Get chain ID from origin chain and counterparty chain
-		chainID := pr.originChain.ChainID()
-		counterpartyChainID := dstChain.ChainID()
-
-		results, err = shfu_grpc.GetUpdateClientResults(ctx, grpcAddress, chainID, counterpartyChainID)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(results) == 0 {
-			pr.getLogger().InfoContext(ctx, "no SHFU record found from gRPC server", "chain_id", chainID)
-		} else {
-			pr.getLogger().InfoContext(ctx, "retrieved SHFU results from gRPC server",
-				"chain_id", chainID,
-				"num_results", len(results))
-		}
+		results, err = getUpdateClientFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
 		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)

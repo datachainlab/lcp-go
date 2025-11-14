@@ -126,6 +126,20 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 	}, nil
 }
 
+// parseHeightArgOptional parses height argument, returning nil if empty string
+func parseHeightArgOptional(s string, name string) (*ibcexported.Height, error) {
+	if s == "" {
+		return nil, nil
+	}
+
+	height, err := parseHeightArg(s, name)
+	if err != nil {
+		return nil, err
+	}
+
+	return &height, nil
+}
+
 // dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
@@ -349,8 +363,8 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 			fromHeightArg := args[1]
 
-			// Parse from-height argument
-			fromHeight, err := parseHeightArg(fromHeightArg, "from-height")
+			// Parse from-height argument (returns nil if empty string)
+			fromHeight, err := parseHeightArgOptional(fromHeightArg, "from-height")
 			if err != nil {
 				return err
 			}
