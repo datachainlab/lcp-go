@@ -24,7 +24,7 @@ func NewSHFUGRPCServer(storage shfu_storage.SHFUStorage) *SHFUGRPCServer {
 // GetLatestSHFU implements the gRPC service method
 func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFURequest) (*GetLatestSHFUResponse, error) {
 	// Get latest SHFU record from storage
-	record, err := srv.storage.GetLatestSHFUForChain(ctx, req.ChainId)
+	record, err := srv.storage.GetLatestSHFUForChain(ctx, req.ChainId, req.CounterpartyChainId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest SHFU: %w", err)
 	}
@@ -35,12 +35,14 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 
 	// Convert to protobuf message
 	pbRecord := &SHFURecord{
-		ChainId:             record.ChainID,
-		FromHeight:          &Height{RevisionNumber: record.FromHeight.GetRevisionNumber(), RevisionHeight: record.FromHeight.GetRevisionHeight()},
-		ToHeight:            &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
-		ToHeightTime:        record.ToHeightTime,
-		UpdatedAt:           record.UpdatedAt,
-		UpdateClientResults: convertUpdateClientResults(record.UpdateClientResults),
+		ChainId:               record.ChainID,
+		CounterpartyChainId:   record.CounterpartyChainID,
+		FromHeight:            &Height{RevisionNumber: record.FromHeight.GetRevisionNumber(), RevisionHeight: record.FromHeight.GetRevisionHeight()},
+		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
+		ToHeightTime:          record.ToHeightTime,
+		UpdatedAt:             record.UpdatedAt,
+		UpdateClientResults:   convertUpdateClientResults(record.UpdateClientResults),
+		LatestFinalizedHeader: record.LatestFinalizedHeader,
 	}
 
 	return &GetLatestSHFUResponse{Found: true, Record: pbRecord}, nil

@@ -53,8 +53,10 @@ func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.Final
 	}
 	pr.getLogger().InfoContext(ctx, "loadEKIAndCheckUpdateNeeded", "updateNeeded", updateNeeded)
 	if !updateNeeded {
+		fmt.Printf("zzz UpdateEKIIfNeeded: no update needed\n")
 		return nil
 	}
+	fmt.Printf("zzz UpdateEKIIfNeeded: do update needed\n")
 
 	// if updateNeeded is true,
 	// query new key and register key and set it to memory and save it to file

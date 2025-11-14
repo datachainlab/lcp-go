@@ -77,8 +77,9 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 
 			fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "from_height", "to_height", "to_height_time")
 			for _, r := range records {
-				fmt.Printf("%-24s %d-%d           %d-%d           %s\n",
+				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
 					r.ChainID,
+					r.CounterpartyChainID,
 					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
 					r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight,
 					r.ToHeightTime.Format(time.RFC3339),
@@ -128,8 +129,8 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 // dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget <chain-id> <from-height> <to-height>",
-		Short: "Get SHFU records by chainId, fromHeight, toHeight (heights in <revision>-<height> format)",
+		Use:   "dbget <path-name:chain-id> <from-height> <to-height>",
+		Short: "Get SHFU records by path:chain, fromHeight, toHeight (heights in <revision>-<height> format)",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
@@ -137,7 +138,18 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("database path is required (use --sqlite_path flag)")
 			}
 
-			chainID := args[0]
+			// Parse path:chain format
+			pathName, chainID, err := parsePathChainArg(args[0])
+			if err != nil {
+				return err
+			}
+
+			// Get target chain and counterparty chain using getChainPairFromPath
+			_, counterpartyChain, err := getChainPairFromPath(ctx, pathName, chainID)
+			if err != nil {
+				return fmt.Errorf("failed to get chain '%s' from path '%s': %w", chainID, pathName, err)
+			}
+
 			fromHeight, err := parseHeightArg(args[1], "from-height")
 			if err != nil {
 				return err
@@ -154,7 +166,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 
 			defer storage.Close()
 
-			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, fromHeight, toHeight)
+			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, counterpartyChain.ChainID(), fromHeight, toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query SHFU records: %w", err)
 			}
@@ -250,12 +262,10 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "server <chain-id> [chain-id...]",
-		Short: "Start SetupHeadersForUpdate SHFU server for one or more chains",
+		Use:   "server <path-name:chain-id> [path-name:chain-id...]",
+		Short: "Start SetupHeadersForUpdate SHFU server for one or more path:chain combinations",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			targetChainIDs := args
-
 			// Get SQLite database path
 			dbPath, err := cmd.Flags().GetString(flagSQLitePath)
 			if err != nil {
@@ -278,18 +288,31 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 			defer storage.Close()
 
-			// Get target chains
-			targetChains := make([]*core.ProvableChain, len(targetChainIDs))
-			for i, chainID := range targetChainIDs {
-				chain, err := ctx.Config.GetChain(chainID)
+			// Parse path:chain arguments and create chain pairs
+			chainPairs := make([]*SHFUChainPair, len(args))
+			targetChainIDs := make([]string, len(args))
+			for i, arg := range args {
+				// Parse path:chain format
+				pathName, chainID, err := parsePathChainArg(arg)
 				if err != nil {
-					return fmt.Errorf("failed to get chain '%s': %w", chainID, err)
+					return err
 				}
-				targetChains[i] = chain
+
+				// Get target chain and counterparty chain using getChainPairFromPath
+				targetChain, counterpartyChain, err := getChainPairFromPath(ctx, pathName, chainID)
+				if err != nil {
+					return fmt.Errorf("failed to get chain '%s' from path '%s': %w", chainID, pathName, err)
+				}
+
+				chainPairs[i] = &SHFUChainPair{
+					TargetChain:       targetChain,
+					CounterpartyChain: counterpartyChain,
+				}
+				targetChainIDs[i] = chainID
 			}
 
 			// Create and start multi-chain SHFU service
-			service := NewSHFUService(storage, targetChains, grpcAddr)
+			service := NewSHFUService(storage, chainPairs, grpcAddr)
 
 			fmt.Printf("Starting SHFU Service for chains: %v...\n", targetChainIDs)
 			fmt.Printf("Database: %s\n", dbPath)
@@ -311,15 +334,19 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 
 func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update --sqlite_path <sqlite file path> <chain-id> <from-height>",
+		Use:   "update --sqlite_path <sqlite file path> <path-name:chain-id> <from-height>",
 		Short: "Execute SHFU (SetupHeadersForUpdate) for specified chain and save results to database",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				return fmt.Errorf("chain ID and from-height are required")
+				return fmt.Errorf("path:chain and from-height are required")
 			}
 
-			targetChainID := args[0]
+			// Parse path:chain format
+			pathName, targetChainID, err := parsePathChainArg(args[0])
+			if err != nil {
+				return err
+			}
 			fromHeightArg := args[1]
 
 			// Parse from-height argument
@@ -328,10 +355,10 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
-			// Get target chain using config.GetChain
-			targetChain, err := ctx.Config.GetChain(targetChainID)
+			// Get target chain and counterparty chain using getChainPairFromPath
+			targetChain, counterpartyChain, err := getChainPairFromPath(ctx, pathName, targetChainID)
 			if err != nil {
-				return fmt.Errorf("failed to get chain '%s': %w", targetChainID, err)
+				return fmt.Errorf("failed to get chain '%s' from path '%s': %w", targetChainID, pathName, err)
 			}
 
 			// Get database path from flag
@@ -347,8 +374,8 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 			defer storage.Close()
 
-			// Execute SHFU for the target chain only
-			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, fromHeight, storage)
+			// Execute SHFU for the target chain with counterparty chain
+			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, counterpartyChain, fromHeight, storage)
 			if err != nil {
 				return fmt.Errorf("failed to execute and store SHFU for target chain: %w", err)
 			}
@@ -374,18 +401,20 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 
 func queryChainCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "query-chain <path-name> <chain-id>",
+		Use:   "query-chain <path-name:chain-id>",
 		Short: "Query chain information including latest consensus state",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			chains, _, _, err := ctx.Config.ChainsFromPath(args[0])
+			// Parse path:chain format
+			pathName, targetChainID, err := parsePathChainArg(args[0])
 			if err != nil {
 				return err
 			}
-			target := chains[args[1]]
 
-			pathName := args[0]
-			targetChainID := args[1]
+			target, _, err := getChainPairFromPath(ctx, pathName, targetChainID)
+			if err != nil {
+				return err
+			}
 
 			// Get the path configuration to extract channel ID
 			path, exists := ctx.Config.Paths[pathName]
@@ -513,4 +542,41 @@ func cacheSizeFlag(cmd *cobra.Command) *cobra.Command {
 		panic(err)
 	}
 	return cmd
+}
+
+// getChainPairFromPath returns a pair of chain objects from the given IBC path name and target chain ID
+// The target chain is returned as the first element, and the counterparty chain as the second element
+func getChainPairFromPath(ctx *config.Context, pathName string, targetChainID string) (*core.ProvableChain, *core.ProvableChain, error) {
+	// Get the path configuration
+	path, err := ctx.Config.Paths.Get(pathName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get path %s: %w", pathName, err)
+	}
+
+	srcChain, err := ctx.Config.GetChain(path.Src.ChainID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get source chain %s: %w", path.Src.ChainID, err)
+	}
+
+	dstChain, err := ctx.Config.GetChain(path.Dst.ChainID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get destination chain %s: %w", path.Dst.ChainID, err)
+	}
+
+	if targetChainID == path.Src.ChainID {
+		return srcChain, dstChain, nil
+	} else if targetChainID == path.Dst.ChainID {
+		return dstChain, srcChain, nil
+	} else {
+		return nil, nil, fmt.Errorf("target chain ID %s is not part of path %s", targetChainID, pathName)
+	}
+}
+
+// parsePathChainArg parses "path:chain" format argument and returns the path name and chain ID
+func parsePathChainArg(arg string) (pathName string, chainID string, err error) {
+	parts := strings.Split(arg, ":")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
+	}
+	return parts[0], parts[1], nil
 }

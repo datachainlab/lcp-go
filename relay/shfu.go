@@ -2,12 +2,15 @@ package relay
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
@@ -20,7 +23,19 @@ type SHFUStorage = shfu_storage.SHFUStorage
 // ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations
-func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHeight ibcexported.Height, storage SHFUStorage) (*SHFURecord, error) {
+// counterparty: the counterparty chain object
+func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counterparty *core.ProvableChain, fromHeight ibcexported.Height, storage SHFUStorage) (*SHFURecord, error) {
+	// Check if counterparty chain is provided
+	if counterparty == nil {
+		return nil, fmt.Errorf("counterparty chain is required for SHFU operations")
+	}
+
+	// Unwrap LCP prover from the chain to get configuration
+	lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover)
+	if err != nil {
+		return nil, fmt.Errorf("chain %q is not an LCP prover: %w", target.ChainID(), err)
+	}
+
 	// Try to get the finalized header
 	latestFinalizedHeader, err := target.GetLatestFinalizedHeader(ctx)
 	if err != nil {
@@ -42,7 +57,7 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 	}
 
 	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
-	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), fromHeight, toHeight)
+	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), fromHeight, toHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check existing records: %w", err)
 	}
@@ -50,19 +65,7 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 		return nil, nil
 	}
 
-	// Create the height for SHFUMockChain from the specified height
-	mockHeight := clienttypes.NewHeight(toHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight())
-
-	// Create a SHFUMockChain instance for counterparty argument
-	counterparty := NewSHFUMockChain("mock-counterparty-chain", mockHeight)
-
-	// Try to unwrap the Prover to get the LCP Prover type
-	lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unwrap prover to LCP Prover: %w", err)
-	}
-
-	// Call setupHeadersForUpdate0 with the mock counterparty
+	// Call setupHeadersForUpdate0 with the counterparty chain
 	results, err := lcpProver.setupHeadersForUpdate0(ctx, counterparty, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)
@@ -74,15 +77,31 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 			RevisionHeight: h.GetRevisionHeight(),
 		}
 	}
+
+	// Serialize the latestFinalizedHeader (ClientMessage) to bytes
+	anyMsg, err := types.NewAnyWithValue(latestFinalizedHeader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Any from latestFinalizedHeader: %w", err)
+	}
+
+	latestFinalizedHeaderBytes, err := target.Codec().Marshal(anyMsg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal latestFinalizedHeader: %w", err)
+	}
+
 	// Create SHFU record for database storage
 	record := &SHFURecord{
-		ChainID:             target.ChainID(),
-		FromHeight:          h2h(fromHeight),
-		ToHeight:            h2h(toHeight),
-		ToHeightTime:        time.Now(), // Could be extracted from header if available
-		UpdatedAt:           time.Now(),
-		UpdateClientResults: results,
+		ChainID:               target.ChainID(),
+		CounterpartyChainID:   counterparty.ChainID(),
+		FromHeight:            h2h(fromHeight),
+		ToHeight:              h2h(toHeight),
+		ToHeightTime:          time.Now(), // Could be extracted from header if available
+		UpdatedAt:             time.Now(),
+		UpdateClientResults:   results,
+		LatestFinalizedHeader: latestFinalizedHeaderBytes,
 	}
+
+	fmt.Printf("SHFU executed for target chain %s with counterparty chain %s\n", target.ChainID(), counterparty.ChainID())
 
 	// Save the record to database
 	err = storage.SaveSHFUResult(ctx, record)
@@ -96,36 +115,64 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, fromHe
 	return record, nil
 }
 
+// SHFUMockConfig holds configuration for creating mock client states
+type SHFUMockConfig struct {
+	Mrenclave string   // hex string of mrenclave
+	Operators []string // hex strings of operator addresses
+}
+
 // SHFUMockChain is a dummy implementation of core.FinalityAwareChain
 // that returns a specific height for testing SetupHeadersForUpdate calls.
 // It embeds the interface so unimplemented methods will panic at runtime.
 type SHFUMockChain struct {
 	core.FinalityAwareChain // Embedded interface - unimplemented methods will panic
 	chainID                 string
-	mockClientState         *SHFUMockClientState
+	mockClientState         *lcptypes.ClientState
 }
 
 var (
 	_ core.FinalityAwareChain = (*SHFUMockChain)(nil)
 )
 
-// SHFUMockClientState is a dummy implementation that embeds ibcexported.ClientState
-// All methods will panic at runtime unless specifically implemented
-type SHFUMockClientState struct {
-	ibcexported.ClientState // Embedded interface - unimplemented methods will panic
-	height                  ibcexported.Height
+// decodeHexString decodes a hex string with optional 0x prefix
+func decodeHexString(hexStr string) ([]byte, error) {
+	// Remove 0x prefix if present
+	hexStr = strings.TrimPrefix(hexStr, "0x")
+	return hex.DecodeString(hexStr)
 }
 
-var (
-	_ ibcexported.ClientState = (*SHFUMockClientState)(nil)
-)
-
 // NewSHFUMockChain creates a new SHFUMockChain instance
-func NewSHFUMockChain(chainID string, latestHeight ibcexported.Height) *SHFUMockChain {
+func NewSHFUMockChain(chainID string, latestHeight ibcexported.Height, config SHFUMockConfig) (*SHFUMockChain, error) {
+	// Create LCP ClientState with only LatestHeight set, others default
+	// Convert mrenclave from hex string to bytes
+	mrenclaveBytes, err := decodeHexString(config.Mrenclave)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode mrenclave hex string '%s': %w", config.Mrenclave, err)
+	}
+
+	// Convert operators from hex strings to bytes
+	operatorBytes := make([][]byte, len(config.Operators))
+	for i, op := range config.Operators {
+		bytes, err := decodeHexString(op)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode operator hex string at index %d '%s': %w", i, op, err)
+		}
+		operatorBytes[i] = bytes
+	}
+
+	clientState := &lcptypes.ClientState{
+		LatestHeight: clienttypes.Height{
+			RevisionNumber: latestHeight.GetRevisionNumber(),
+			RevisionHeight: latestHeight.GetRevisionHeight(),
+		},
+		Mrenclave: mrenclaveBytes,
+		Operators: operatorBytes,
+	}
+
 	return &SHFUMockChain{
 		chainID:         chainID,
-		mockClientState: NewSHFUMockClientState(latestHeight),
-	}
+		mockClientState: clientState,
+	}, nil
 }
 
 // ChainID returns the chain ID
@@ -135,7 +182,7 @@ func (c *SHFUMockChain) ChainID() string {
 
 // LatestHeight returns the latest height with context (allowed method)
 func (c *SHFUMockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
-	return c.mockClientState.GetLatestHeight(), nil
+	return c.mockClientState.LatestHeight, nil
 }
 
 // QueryClientState returns a QueryClientStateResponse with mock client state
@@ -152,16 +199,4 @@ func (c *SHFUMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.Q
 	return &clienttypes.QueryClientStateResponse{
 		ClientState: clientStateAny,
 	}, nil
-}
-
-// NewSHFUMockClientState creates a new SHFUMockClientState instance
-func NewSHFUMockClientState(latestHeight ibcexported.Height) *SHFUMockClientState {
-	return &SHFUMockClientState{
-		height: latestHeight,
-	}
-}
-
-// GetLatestHeight returns the configured latest height
-func (s *SHFUMockClientState) GetLatestHeight() ibcexported.Height {
-	return s.height
 }

@@ -16,19 +16,28 @@ import (
 	"google.golang.org/grpc"
 )
 
+// const DefaultPollInterval = 10 * time.Second
+const DefaultPollInterval = 120 * time.Second
+
+// SHFUChainPair represents a target chain and its counterparty chain pair
+type SHFUChainPair struct {
+	TargetChain       *core.ProvableChain
+	CounterpartyChain *core.ProvableChain
+}
+
 type SHFUService struct {
 	Storage      SHFUStorage
-	TargetChains []*core.ProvableChain // Changed from single chain to multiple chains
+	ChainPairs   []*SHFUChainPair // Changed from TargetChains to ChainPairs
 	PollInterval time.Duration
 	GRPCAddr     string // gRPC server address (e.g., ":8080")
 }
 
 // NewSHFUService creates a new SHFUService
-func NewSHFUService(storage SHFUStorage, targetChains []*core.ProvableChain, grpcAddr string) *SHFUService {
+func NewSHFUService(storage SHFUStorage, chainPairs []*SHFUChainPair, grpcAddr string) *SHFUService {
 	return &SHFUService{
 		Storage:      storage,
-		TargetChains: targetChains,
-		PollInterval: 30 * time.Second, // Default 30 seconds polling interval
+		ChainPairs:   chainPairs,
+		PollInterval: DefaultPollInterval,
 		GRPCAddr:     grpcAddr,
 	}
 }
@@ -46,7 +55,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	defer wg.Wait()
 
 	// Calculate fail channel buffer size: signal handling + updaters + grpc server
-	failBufferSize := 1 + len(srv.TargetChains) + 1
+	failBufferSize := 1 + len(srv.ChainPairs) + 1
 	fails := make(chan error, failBufferSize)
 	defer close(fails)
 
@@ -63,35 +72,17 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		}
 	}()
 
-	// Start a single updater goroutine that handles all chains sequentially
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		
-		ticker := time.NewTicker(srv.PollInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				// Process each chain sequentially in a single goroutine
-				for _, targetChain := range srv.TargetChains {
-					select {
-					case <-ctx.Done():
-						return
-					default:
-						if err := srv.executeUpdateForChain(ctx, targetChain); err != nil {
-							fmt.Printf("SHFU update failed for chain %s: %v\n", targetChain.ChainID(), err)
-							// Continue with other chains instead of failing
-							continue
-						}
-					}
-				}
+	// Start updater goroutines for each chain pair
+	for _, chainPair := range srv.ChainPairs {
+		wg.Add(1)
+		go func(pair *SHFUChainPair) {
+			defer wg.Done()
+			err := srv.runUpdaterForChainPair(ctx, pair)
+			if err != nil {
+				fails <- fmt.Errorf("updater for chain %s failed: %w", pair.TargetChain.ChainID(), err)
 			}
-		}
-	}()
+		}(chainPair)
+	}
 
 	// Start gRPC server
 	wg.Add(1)
@@ -118,7 +109,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	srv.GracefulStop(ctx)
 }
 
-func (srv *SHFUService) runUpdaterForChain(ctx context.Context, targetChain *core.ProvableChain) error {
+func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *SHFUChainPair) error {
 	ticker := time.NewTicker(srv.PollInterval)
 	defer ticker.Stop()
 
@@ -127,23 +118,23 @@ func (srv *SHFUService) runUpdaterForChain(ctx context.Context, targetChain *cor
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := srv.executeUpdateForChain(ctx, targetChain); err != nil {
-				fmt.Printf("SHFU update failed for chain %s: %v\n", targetChain.ChainID(), err)
+			if err := srv.executeUpdateForChainPair(ctx, chainPair); err != nil {
+				fmt.Printf("SHFU update failed for chain %s: %v\n", chainPair.TargetChain.ChainID(), err)
 				return err // Return error to stop the service when no records found
 			}
 		}
 	}
 }
 
-func (srv *SHFUService) executeUpdateForChain(ctx context.Context, targetChain *core.ProvableChain) error {
+func (srv *SHFUService) executeUpdateForChainPair(ctx context.Context, chainPair *SHFUChainPair) error {
 	// Get the latest record to determine the fromHeight
-	latestRecord, err := srv.Storage.GetLatestSHFUForChain(ctx, targetChain.ChainID())
+	latestRecord, err := srv.Storage.GetLatestSHFUForChain(ctx, chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID())
 	if err != nil {
-		return fmt.Errorf("failed to get latest SHFU record for chain %s: %w", targetChain.ChainID(), err)
+		return fmt.Errorf("failed to get latest SHFU record for chain %s: %w", chainPair.TargetChain.ChainID(), err)
 	}
 
 	if latestRecord == nil {
-		return fmt.Errorf("no previous SHFU records found for chain %s: cannot determine starting height", targetChain.ChainID())
+		return fmt.Errorf("no previous SHFU records found for chain %s: cannot determine starting height", chainPair.TargetChain.ChainID())
 	}
 
 	// Use the ToHeight from the latest record as the new fromHeight
@@ -152,15 +143,16 @@ func (srv *SHFUService) executeUpdateForChain(ctx context.Context, targetChain *
 		RevisionHeight: latestRecord.ToHeight.RevisionHeight,
 	}
 
-	// Execute SHFU and store the result
-	record, err := SHFUExecuteAndStore(ctx, targetChain, fromHeight, srv.Storage)
+	// Execute SHFU and store the result with both target and counterparty chains
+	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, fromHeight, srv.Storage)
 	if err != nil {
-		return fmt.Errorf("failed to execute SHFU for chain %s: %w", targetChain.ChainID(), err)
+		return fmt.Errorf("failed to execute SHFU for chain %s: %w", chainPair.TargetChain.ChainID(), err)
 	}
 
 	if record != nil {
-		fmt.Printf("SHFU executed successfully for chain %s, from height %d-%d to height %d-%d\n",
+		fmt.Printf("SHFU executed successfully for chain %s (counterparty: %s), from height %d-%d to height %d-%d\n",
 			record.ChainID,
+			chainPair.CounterpartyChain.ChainID(),
 			record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight,
 			record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight)
 	}
@@ -170,19 +162,19 @@ func (srv *SHFUService) executeUpdateForChain(ctx context.Context, targetChain *
 
 // Backward compatibility: keep old methods for single chain use
 func (srv *SHFUService) RunUpdater(ctx context.Context) error {
-	// Use the first chain for backward compatibility
-	if len(srv.TargetChains) == 0 {
-		return fmt.Errorf("no target chains configured")
+	// Use the first chain pair for backward compatibility
+	if len(srv.ChainPairs) == 0 {
+		return fmt.Errorf("no chain pairs configured")
 	}
-	return srv.runUpdaterForChain(ctx, srv.TargetChains[0])
+	return srv.runUpdaterForChainPair(ctx, srv.ChainPairs[0])
 }
 
 func (srv *SHFUService) executeUpdate(ctx context.Context) error {
-	// Use the first chain for backward compatibility
-	if len(srv.TargetChains) == 0 {
-		return fmt.Errorf("no target chains configured")
+	// Use the first chain pair for backward compatibility
+	if len(srv.ChainPairs) == 0 {
+		return fmt.Errorf("no chain pairs configured")
 	}
-	return srv.executeUpdateForChain(ctx, srv.TargetChains[0])
+	return srv.executeUpdateForChainPair(ctx, srv.ChainPairs[0])
 }
 
 func (srv *SHFUService) RunGRPCServer(ctx context.Context) error {

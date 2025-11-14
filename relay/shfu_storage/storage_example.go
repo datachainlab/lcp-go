@@ -53,8 +53,8 @@ func StorageExample() error {
 
 	fmt.Printf("Successfully saved SHFU record for chain %s\n", record.ChainID)
 
-	// Retrieve the latest record for the chain
-	latest, err := storage.GetLatestSHFUForChain(ctx, "chain-a")
+	// Retrieve the latest record for the chain (without counterparty filter)
+	latest, err := storage.GetLatestSHFUForChain(ctx, "chain-a", "")
 	if err != nil {
 		return fmt.Errorf("failed to get latest record: %w", err)
 	}

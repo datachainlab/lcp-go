@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
@@ -127,7 +126,7 @@ func (pr *Prover) GetOriginProver() core.Prover {
 
 // Init initializes the chain
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
-	fmt.Printf("> zzz LCPProver#Init\n")
+	fmt.Println("> zzz LCPProver#Init")
 	pr.homePath = homePath
 	pr.codec = codec
 	res, err := pr.lcpServiceClient.EnclaveInfo(context.Background(), &enclave.QueryEnclaveInfoRequest{})
@@ -222,139 +221,46 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
 		pr.getLogger().InfoContext(ctx, "using SHFU gRPC server for latest finalized header", "address", grpcAddress)
-		return pr.GetLatestFinalizedHeaderFromSHFUGRPC(ctx, grpcAddress)
+
+		// Get chain ID from origin chain
+		chainID := pr.originChain.ChainID()
+		// Note: This is called from GetLatestFinalizedHeader, so we don't have dstChain info
+		// For now, we'll pass empty string as counterparty chain ID - this needs architectural change
+		header, err := shfu_grpc.GetLatestFinalizedHeaderFromSHFUGRPC(ctx, grpcAddress, chainID, "", pr.codec)
+		if err != nil {
+			return nil, err
+		}
+
+		pr.getLogger().InfoContext(ctx, "retrieved finalized header from gRPC server",
+			"chain_id", chainID,
+			"height", header.GetHeight().String())
+
+		return header, nil
 	} else {
 		pr.getLogger().InfoContext(ctx, "using origin prover for latest finalized header")
 		return pr.originProver.GetLatestFinalizedHeader(ctx)
 	}
 }
 
-// setupHeadersFromSHFUGRPC retrieves SHFU results from gRPC server
-func (pr *Prover) setupHeadersFromSHFUGRPC(ctx context.Context, grpcAddress string) ([]*shfu_storage.UpdateClientResult, error) {
-	if grpcAddress == "" {
-		return nil, fmt.Errorf("SHFU gRPC address not provided")
-	}
-
-	// Connect to SHFU gRPC server
-	conn, err := grpc.DialContext(ctx, grpcAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
-	}
-	defer conn.Close()
-
-	client := shfu_grpc.NewSHFUServiceClient(conn)
-
-	// Get chain ID from origin chain
-	chainID := pr.originChain.ChainID()
-
-	// Request latest SHFU record
-	req := &shfu_grpc.GetLatestSHFURequest{
-		ChainId: chainID,
-	}
-
-	resp, err := client.GetLatestSHFU(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest SHFU from gRPC server: %w", err)
-	}
-
-	if resp.Record == nil {
-		pr.getLogger().InfoContext(ctx, "no SHFU record found from gRPC server", "chain_id", chainID)
-		return []*shfu_storage.UpdateClientResult{}, nil
-	}
-
-	// Convert gRPC response to UpdateClientResult
-	var results []*shfu_storage.UpdateClientResult
-	for _, grpcResult := range resp.Record.UpdateClientResults {
-		result := &shfu_storage.UpdateClientResult{
-			Message:   grpcResult.Message,
-			Signature: grpcResult.Signature,
-		}
-		results = append(results, result)
-	}
-
-	pr.getLogger().InfoContext(ctx, "retrieved SHFU results from gRPC server",
-		"chain_id", chainID,
-		"num_results", len(results),
-		"from_height", resp.Record.FromHeight,
-		"to_height", resp.Record.ToHeight)
-
-	return results, nil
-}
-
-// GetLatestFinalizedHeaderFromSHFUGRPC retrieves the latest finalized header from gRPC server
-func (pr *Prover) GetLatestFinalizedHeaderFromSHFUGRPC(ctx context.Context, grpcAddress string) (core.Header, error) {
-	if grpcAddress == "" {
-		return nil, fmt.Errorf("SHFU gRPC address not provided")
-	}
-
-	// Connect to SHFU gRPC server
-	conn, err := grpc.DialContext(ctx, grpcAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
-	}
-	defer conn.Close()
-
-	client := shfu_grpc.NewSHFUServiceClient(conn)
-
-	// Get chain ID from origin chain
-	chainID := pr.originChain.ChainID()
-
-	// Request latest SHFU record
-	req := &shfu_grpc.GetLatestSHFURequest{
-		ChainId: chainID,
-	}
-
-	resp, err := client.GetLatestSHFU(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest SHFU from gRPC server: %w", err)
-	}
-
-	if resp.Record == nil {
-		return nil, fmt.Errorf("no SHFU record found from gRPC server for chain %s", chainID)
-	}
-
-	// Deserialize client message bytes to ClientMessage using Any
-	var anyMsg types.Any
-	if err := pr.codec.Unmarshal(resp.Record.ClientMessageBytes, &anyMsg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal client message bytes: %w", err)
-	}
-
-	clientMessage, ok := anyMsg.GetCachedValue().(exported.ClientMessage)
-	if !ok {
-		return nil, fmt.Errorf("failed to convert Any to ClientMessage")
-	}
-
-	// Convert gRPC Height to exported.Height
-	height := clienttypes.NewHeight(resp.Record.ToHeight.RevisionNumber, resp.Record.ToHeight.RevisionHeight)
-
-	// Reconstruct core.Header
-	header := &reconstructedHeader{
-		clientMessage: clientMessage,
-		height:        height,
-	}
-
-	pr.getLogger().InfoContext(ctx, "retrieved finalized header from gRPC server",
-		"chain_id", chainID,
-		"height", height.String())
-
-	return header, nil
-}
-
 // setupHeadersForUpdate0 performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-		return nil, err
+	/*
+		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+			return nil, err
+		}
+	*/
+	if pr.activeEnclaveKey == nil {
+		need, err := pr.loadEKIAndCheckUpdateNeeded(ctx, dstChain)
+		fmt.Printf("zzz loadEKIAndCheckUpdateNeeded: need=%v, error=%v\n", need, err)
+		if err != nil {
+			return nil, err
+		}
+		if pr.activeEnclaveKey == nil {
+			return nil, fmt.Errorf("activeEnclaveKey is nil after loadEKIAndCheckUpdateNeeded")
+		}
 	}
-
+	fmt.Printf("zzz setupHeadersForUpdate0: activeEnclaveKey=%v\n", pr.activeEnclaveKey)
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
@@ -393,12 +299,32 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
 	var results []*shfu_storage.UpdateClientResult
 	var err error
-	fmt.Println("> zzz LCPProver#SetupHeadersForUpdate")
+
+	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+		return nil, err
+	}
+
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
 		pr.getLogger().InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
-		results, err = pr.setupHeadersFromSHFUGRPC(ctx, grpcAddress)
+
+		// Get chain ID from origin chain and counterparty chain
+		chainID := pr.originChain.ChainID()
+		counterpartyChainID := dstChain.ChainID()
+
+		results, err = shfu_grpc.GetUpdateClientResults(ctx, grpcAddress, chainID, counterpartyChainID)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(results) == 0 {
+			pr.getLogger().InfoContext(ctx, "no SHFU record found from gRPC server", "chain_id", chainID)
+		} else {
+			pr.getLogger().InfoContext(ctx, "retrieved SHFU results from gRPC server",
+				"chain_id", chainID,
+				"num_results", len(results))
+		}
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
 		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)

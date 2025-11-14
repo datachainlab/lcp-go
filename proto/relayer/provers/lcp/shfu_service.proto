@@ -22,19 +22,21 @@ message UpdateClientResult {
 // SHFURecord represents a SetupHeadersForUpdate record
 message SHFURecord {
   string chain_id = 1;
-  Height from_height = 2;
-  Height to_height = 3;
-  google.protobuf.Timestamp to_height_time = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  google.protobuf.Timestamp updated_at = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  repeated UpdateClientResult update_client_results = 6;
-  // Serialized ClientMessage bytes (chain-specific format)
-  // This contains the ClientMessage that was used as latestFinalizedHeader
-  bytes client_message_bytes = 7;
+  string counterparty_chain_id = 2;
+  Height from_height = 3;
+  Height to_height = 4;
+  google.protobuf.Timestamp to_height_time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp updated_at = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  repeated UpdateClientResult update_client_results = 7;
+  // Serialized core.Header bytes (latestFinalizedHeader)
+  // This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
+  bytes latest_finalized_header = 8;
 }
 
 // GetLatestSHFURequest represents a request to get the latest SHFU record for a chain
 message GetLatestSHFURequest {
   string chain_id = 1;
+  string counterparty_chain_id = 2;
 }
 
 // GetLatestSHFUResponse represents a response containing the latest SHFU record
