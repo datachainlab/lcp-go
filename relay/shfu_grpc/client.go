@@ -70,55 +70,15 @@ func GetLatestFinalizedHeader(ctx context.Context, grpcAddress string, chainID s
 	return header, nil
 }
 
-// GetUpdateClientResults retrieves SHFU update client results from gRPC server
-func GetUpdateClientResults(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) ([]*shfu_storage.UpdateClientResult, error) {
-	if grpcAddress == "" {
-		return nil, fmt.Errorf("SHFU gRPC address not provided")
-	}
-
-	// Connect to SHFU gRPC server
-	conn, err := grpc.DialContext(ctx, grpcAddress,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
-	}
-	defer conn.Close()
-
-	client := NewSHFUServiceClient(conn)
-
-	// Request latest SHFU record
-	req := &GetLatestSHFURequest{
-		ChainId:             chainID,
-		CounterpartyChainId: counterpartyChainID,
-	}
-
-	resp, err := client.GetLatestSHFU(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest SHFU from gRPC server: %w", err)
-	}
-
-	if resp.Record == nil {
-		return []*shfu_storage.UpdateClientResult{}, nil
-	}
-
-	// Convert gRPC response to UpdateClientResult
-	var results []*shfu_storage.UpdateClientResult
-	for _, grpcResult := range resp.Record.UpdateClientResults {
-		result := &shfu_storage.UpdateClientResult{
-			Message:   grpcResult.Message,
-			Signature: grpcResult.Signature,
-		}
-		results = append(results, result)
-	}
-
-	return results, nil
+func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+	fmt.Printf("zzz >GetSHFUByHeight called with grpcAddress=%s, chainID=%s, counterpartyChainID=%s, fromHeight=%v, toHeight=%v\n", grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
+	res, err := GetSHFUByHeight0(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
+	fmt.Printf("zzz <GetSHFUByHeight returned res=%v, err=%v\n", res, err)
+	return res, err
 }
 
 // GetSHFUByHeight retrieves SHFU record by height range from gRPC server
-func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
 	if grpcAddress == "" {
 		return nil, fmt.Errorf("SHFU gRPC address not provided")
 	}

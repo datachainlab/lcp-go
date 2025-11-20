@@ -236,7 +236,7 @@ func printSHFURecordSummary(record *SHFURecord) {
 
 	resultBytes, err := json.MarshalIndent(resultSummary, "", "  ")
 	if err != nil {
-		fmt.Printf("failed to marshal result to JSON: %w\n", err)
+		fmt.Printf("failed to marshal result to JSON: %v\n", err)
 	} else {
 		fmt.Printf("SetupHeadersForUpdate result:\n%s\n", string(resultBytes))
 	}
@@ -276,7 +276,7 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "server <path-name:chain-id> [path-name:chain-id...]",
+		Use:   "server <path-name:chain-id> [path-name:chain-id]...",
 		Short: "Start SetupHeadersForUpdate SHFU server for one or more path:chain combinations",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -425,25 +425,10 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
+			// Get chain using getChainPairFromPath to ensure path information is properly configured
 			target, _, err := getChainPairFromPath(ctx, pathName, targetChainID)
 			if err != nil {
-				return err
-			}
-
-			// Get the path configuration to extract channel ID
-			path, exists := ctx.Config.Paths[pathName]
-			if !exists {
-				return fmt.Errorf("path '%s' not found in configuration", pathName)
-			}
-
-			// Determine the channel ID based on the chain ID and path configuration
-			var channelID string
-			if path.Src.ChainID == targetChainID {
-				channelID = path.Src.ChannelID
-			} else if path.Dst.ChainID == targetChainID {
-				channelID = path.Dst.ChannelID
-			} else {
-				return fmt.Errorf("chain ID '%s' not found in path '%s' configuration", targetChainID, pathName)
+				return fmt.Errorf("failed to get chain '%s' from path '%s': %w", targetChainID, pathName, err)
 			}
 
 			// Get the latest height from the target chain
@@ -463,6 +448,9 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 			// Try to query the client state using yui-relayer's QueryClientState
 			// This uses the target chain's own RPC client instead of cosmos-sdk's offline client
 			qctx := core.NewQueryContext(cmd.Context(), latestHeight)
+			fmt.Printf("zzz target=%p\n", target)
+			fmt.Printf("zzz pathEnd=%v\n", target.Path())
+			fmt.Printf("zzz latestHeight=%v\n", latestHeight)
 			if clientStateRes, err := target.QueryClientState(qctx); err != nil {
 				// If QueryClientState fails, just note the error but continue
 				latestConsensusInfo = map[string]interface{}{
@@ -483,8 +471,6 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 					latestConsensusInfo = map[string]interface{}{
 						"proof_height": clientStateRes.ProofHeight,
 						"client_state_info": map[string]interface{}{
-							"chain_id":          pathName,
-							"channel_id":        channelID,
 							"client_state_type": fmt.Sprintf("%T", clientState),
 							"latest_height_from_client": map[string]interface{}{
 								"revision_number":        latestHeight.GetRevisionNumber(),
@@ -502,12 +488,10 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 
 			result := map[string]interface{}{
 				"chain_id":                       target.ChainID(),
-				"path_name":                      pathName,
-				"channel_id":                     channelID,
 				"latest_height":                  latestHeight.GetRevisionHeight(),
 				"latest_finalized_header_height": latestFinalizedHeader.GetHeight().GetRevisionHeight(),
 				"latest_consensus_state":         latestConsensusInfo,
-				"message":                        "Chain information displayed with LatestConsensusState and path info",
+				"message":                        "Chain information displayed with LatestConsensusState",
 				"success":                        true,
 				"timestamp":                      time.Now().Format(time.RFC3339),
 			}
@@ -561,25 +545,25 @@ func cacheSizeFlag(cmd *cobra.Command) *cobra.Command {
 // getChainPairFromPath returns a pair of chain objects from the given IBC path name and target chain ID
 // The target chain is returned as the first element, and the counterparty chain as the second element
 func getChainPairFromPath(ctx *config.Context, pathName string, targetChainID string) (*core.ProvableChain, *core.ProvableChain, error) {
-	// Get the path configuration
-	path, err := ctx.Config.Paths.Get(pathName)
+	// Use ChainsFromPath to get chains with path information properly configured
+	chains, srcChainID, dstChainID, err := ctx.Config.ChainsFromPath(pathName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get path %s: %w", pathName, err)
+		return nil, nil, fmt.Errorf("failed to get chains from path %s: %w", pathName, err)
 	}
 
-	srcChain, err := ctx.Config.GetChain(path.Src.ChainID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get source chain %s: %w", path.Src.ChainID, err)
+	srcChain, srcExists := chains[srcChainID]
+	if !srcExists {
+		return nil, nil, fmt.Errorf("source chain %s not found in chains from path %s", srcChainID, pathName)
 	}
 
-	dstChain, err := ctx.Config.GetChain(path.Dst.ChainID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get destination chain %s: %w", path.Dst.ChainID, err)
+	dstChain, dstExists := chains[dstChainID]
+	if !dstExists {
+		return nil, nil, fmt.Errorf("destination chain %s not found in chains from path %s", dstChainID, pathName)
 	}
 
-	if targetChainID == path.Src.ChainID {
+	if targetChainID == srcChainID {
 		return srcChain, dstChain, nil
-	} else if targetChainID == path.Dst.ChainID {
+	} else if targetChainID == dstChainID {
 		return dstChain, srcChain, nil
 	} else {
 		return nil, nil, fmt.Errorf("target chain ID %s is not part of path %s", targetChainID, pathName)

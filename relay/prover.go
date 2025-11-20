@@ -99,7 +99,7 @@ func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
 }
 
 // getUpdateClientFromGRPC retrieves SHFU results from gRPC server using height range
-func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.Chain) ([]*shfu_storage.UpdateClientResult, error) {
+func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.Chain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
 	logger.InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
 
 	// Get chain ID from target chain and counterparty chain
@@ -114,8 +114,8 @@ func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcA
 
 	// Use a default toHeight (for now, use fromHeight + 1 as a simple default)
 	toHeight := clienttypes.Height{
-		RevisionNumber: fromHeight.GetRevisionNumber(),
-		RevisionHeight: fromHeight.GetRevisionHeight() + 1,
+		RevisionNumber: latestFinalizedHeader.GetHeight().GetRevisionNumber(),
+		RevisionHeight: latestFinalizedHeader.GetHeight().GetRevisionHeight(),
 	}
 
 	// Get SHFU record by height range
@@ -349,7 +349,10 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
-		results, err = getUpdateClientFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain)
+		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+			return nil, err
+		}
+		results, err = getUpdateClientFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
 		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
