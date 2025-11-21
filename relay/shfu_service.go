@@ -148,17 +148,15 @@ func (srv *SHFUService) executeUpdateForChainPair(ctx context.Context, chainPair
 	*/
 
 	// Execute SHFU and store the result with both target and counterparty chains
-	// Pass nil for fromHeight to automatically get it from counterparty's client state
-	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, nil, srv.Storage)
+	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, srv.Storage)
 	if err != nil {
 		return fmt.Errorf("failed to execute SHFU for chain %s: %w", chainPair.TargetChain.ChainID(), err)
 	}
 
 	if record != nil {
-		fmt.Printf("SHFU executed successfully for chain %s (counterparty: %s), from height %d-%d to height %d-%d\n",
+		fmt.Printf("SHFU executed successfully for chain %s (counterparty: %s), to height %d-%d\n",
 			record.ChainID,
 			chainPair.CounterpartyChain.ChainID(),
-			record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight,
 			record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight)
 	}
 

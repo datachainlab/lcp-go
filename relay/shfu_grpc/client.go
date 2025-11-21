@@ -70,15 +70,15 @@ func GetLatestFinalizedHeader(ctx context.Context, grpcAddress string, chainID s
 	return header, nil
 }
 
-func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
-	fmt.Printf("zzz >GetSHFUByHeight called with grpcAddress=%s, chainID=%s, counterpartyChainID=%s, fromHeight=%v, toHeight=%v\n", grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
-	res, err := GetSHFUByHeight0(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
+func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+	fmt.Printf("zzz >GetSHFUByHeight called with grpcAddress=%s, chainID=%s, counterpartyChainID=%s, toHeight=%v\n", grpcAddress, chainID, counterpartyChainID, toHeight)
+	res, err := GetSHFUByHeight0(ctx, grpcAddress, chainID, counterpartyChainID, toHeight)
 	fmt.Printf("zzz <GetSHFUByHeight returned res=%v, err=%v\n", res, err)
 	return res, err
 }
 
 // GetSHFUByHeight retrieves SHFU record by height range from gRPC server
-func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
 	if grpcAddress == "" {
 		return nil, fmt.Errorf("SHFU gRPC address not provided")
 	}
@@ -100,10 +100,6 @@ func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, c
 	req := &GetSHFUByHeightRequest{
 		ChainId:             chainID,
 		CounterpartyChainId: counterpartyChainID,
-		FromHeight: &Height{
-			RevisionNumber: fromHeight.GetRevisionNumber(),
-			RevisionHeight: fromHeight.GetRevisionHeight(),
-		},
 		ToHeight: &Height{
 			RevisionNumber: toHeight.GetRevisionNumber(),
 			RevisionHeight: toHeight.GetRevisionHeight(),
@@ -123,10 +119,6 @@ func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, c
 	record := &shfu_storage.SHFURecord{
 		ChainID:             resp.Record.ChainId,
 		CounterpartyChainID: resp.Record.CounterpartyChainId,
-		FromHeight: clienttypes.Height{
-			RevisionNumber: resp.Record.FromHeight.RevisionNumber,
-			RevisionHeight: resp.Record.FromHeight.RevisionHeight,
-		},
 		ToHeight: clienttypes.Height{
 			RevisionNumber: resp.Record.ToHeight.RevisionNumber,
 			RevisionHeight: resp.Record.ToHeight.RevisionHeight,

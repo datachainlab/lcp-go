@@ -21,7 +21,7 @@ type SHFUStorage = shfu_storage.SHFUStorage
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations (nil for unspecified)
 // counterparty: the counterparty chain object
-func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counterparty *core.ProvableChain, fromHeight *ibcexported.Height, storage SHFUStorage) (*SHFURecord, error) {
+func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counterparty *core.ProvableChain, storage SHFUStorage) (*SHFURecord, error) {
 	// Check if counterparty chain is provided
 	if counterparty == nil {
 		return nil, fmt.Errorf("counterparty chain is required for SHFU operations")
@@ -40,37 +40,37 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 	}
 
 	toHeight := latestFinalizedHeader.GetHeight()
-
-	// Handle nil fromHeight case by getting from counterparty's client state
-	if fromHeight == nil {
-		clientStateHeight, err := GetClientStateLatestHeight(ctx, counterparty)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get fromHeight from counterparty client state: %w", err)
+	/*
+		// Handle nil fromHeight case by getting from counterparty's client state
+		if fromHeight == nil {
+			clientStateHeight, err := GetClientStateLatestHeight(ctx, counterparty)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get fromHeight from counterparty client state: %w", err)
+			}
+			fromHeight = &clientStateHeight
 		}
-		fromHeight = &clientStateHeight
-	}
 
-	// Compare fromHeight and toHeight
-	if (*fromHeight).EQ(toHeight) {
-		fmt.Printf("fromHeight == toHeight: do nothing and return nil: from=%v, to=%v\n", *fromHeight, toHeight)
-		return nil, nil
-	}
-	if toHeight.LT(*fromHeight) {
-		// fromHeight > toHeight: return error
-		return nil, fmt.Errorf("fromHeight (%d-%d) is greater than toHeight (%d-%d)",
-			(*fromHeight).GetRevisionNumber(), (*fromHeight).GetRevisionHeight(),
-			toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
-	}
+		// Compare fromHeight and toHeight
+		if (*fromHeight).EQ(toHeight) {
+			fmt.Printf("fromHeight == toHeight: do nothing and return nil: from=%v, to=%v\n", *fromHeight, toHeight)
+			return nil, nil
+		}
+		if toHeight.LT(*fromHeight) {
+			// fromHeight > toHeight: return error
+			return nil, fmt.Errorf("fromHeight (%d-%d) is greater than toHeight (%d-%d)",
+				(*fromHeight).GetRevisionNumber(), (*fromHeight).GetRevisionHeight(),
+				toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
+		}
 
-	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
-	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), *fromHeight, toHeight)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check existing records: %w", err)
-	}
-	if len(existingRecords) > 0 {
-		return nil, nil
-	}
-
+		// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
+		existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), *fromHeight, toHeight)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check existing records: %w", err)
+		}
+		if len(existingRecords) > 0 {
+			return nil, nil
+		}
+	*/
 	// Call setupHeadersForUpdate0 with the counterparty chain
 	results, err := lcpProver.setupHeadersForUpdate0(ctx, counterparty, latestFinalizedHeader)
 	if err != nil {
@@ -99,7 +99,6 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 	record := &SHFURecord{
 		ChainID:               target.ChainID(),
 		CounterpartyChainID:   counterparty.ChainID(),
-		FromHeight:            h2h(*fromHeight),
 		ToHeight:              h2h(toHeight),
 		ToHeightTime:          time.Now(), // Could be extracted from header if available
 		UpdatedAt:             time.Now(),

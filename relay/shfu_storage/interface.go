@@ -18,7 +18,6 @@ type UpdateClientResult struct {
 type SHFURecord struct {
 	ChainID               string                `json:"chain_id"`
 	CounterpartyChainID   string                `json:"counterparty_chain_id"`
-	FromHeight            clienttypes.Height    `json:"from_height"`
 	ToHeight              clienttypes.Height    `json:"to_height"`
 	ToHeightTime          time.Time             `json:"to_height_time"`
 	UpdatedAt             time.Time             `json:"updated_at"`
@@ -33,7 +32,7 @@ type SHFUStorage interface {
 	SaveSHFUResult(ctx context.Context, record *SHFURecord) error
 
 	// FindSHFUByChainAndHeight finds SHFU records for a specific chain with exact height match
-	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight, toHeight ibcexported.Height) ([]*SHFURecord, error)
+	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, toHeight ibcexported.Height) ([]*SHFURecord, error)
 
 	// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
 	// If counterpartyChainID is empty, it will be ignored in the query

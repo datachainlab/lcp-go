@@ -106,12 +106,6 @@ func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcA
 	chainID := targetChain.ChainID()
 	counterpartyChainID := counterparty.ChainID()
 
-	// Get fromHeight from counterparty's client state
-	fromHeight, err := GetClientStateLatestHeight(ctx, counterparty)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get client state latest height: %w", err)
-	}
-
 	// Use a default toHeight (for now, use fromHeight + 1 as a simple default)
 	toHeight := clienttypes.Height{
 		RevisionNumber: latestFinalizedHeader.GetHeight().GetRevisionNumber(),
@@ -119,7 +113,7 @@ func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcA
 	}
 
 	// Get SHFU record by height range
-	record, err := shfu_grpc.GetSHFUByHeight(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, toHeight)
+	record, err := shfu_grpc.GetSHFUByHeight(ctx, grpcAddress, chainID, counterpartyChainID, toHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
 	}
@@ -127,14 +121,12 @@ func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcA
 	if record == nil {
 		logger.InfoContext(ctx, "no SHFU record found from gRPC server",
 			"chain_id", chainID,
-			"from_height", fmt.Sprintf("%d-%d", fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight()),
 			"to_height", fmt.Sprintf("%d-%d", toHeight.RevisionNumber, toHeight.RevisionHeight))
 		return []*shfu_storage.UpdateClientResult{}, nil
 	}
 
 	logger.InfoContext(ctx, "retrieved SHFU record from gRPC server",
 		"chain_id", chainID,
-		"from_height", fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight),
 		"to_height", fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight),
 		"num_results", len(record.UpdateClientResults))
 

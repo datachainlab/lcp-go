@@ -33,10 +33,6 @@ func StorageExample() error {
 
 	record := &SHFURecord{
 		ChainID: "chain-a",
-		FromHeight: clienttypes.Height{
-			RevisionNumber: 1,
-			RevisionHeight: 100,
-		},
 		ToHeight: clienttypes.Height{
 			RevisionNumber: 1,
 			RevisionHeight: 103,

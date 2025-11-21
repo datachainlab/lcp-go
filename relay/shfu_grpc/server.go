@@ -38,7 +38,6 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	pbRecord := &SHFURecord{
 		ChainId:               record.ChainID,
 		CounterpartyChainId:   record.CounterpartyChainID,
-		FromHeight:            &Height{RevisionNumber: record.FromHeight.GetRevisionNumber(), RevisionHeight: record.FromHeight.GetRevisionHeight()},
 		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
 		ToHeightTime:          record.ToHeightTime,
 		UpdatedAt:             record.UpdatedAt,
@@ -58,17 +57,13 @@ func (srv *SHFUGRPCServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHe
 }
 func (srv *SHFUGRPCServer) GetSHFUByHeight0(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
 	// Convert protobuf Height to clienttypes.Height
-	fromHeight := clienttypes.Height{
-		RevisionNumber: req.FromHeight.RevisionNumber,
-		RevisionHeight: req.FromHeight.RevisionHeight,
-	}
 	toHeight := clienttypes.Height{
 		RevisionNumber: req.ToHeight.RevisionNumber,
 		RevisionHeight: req.ToHeight.RevisionHeight,
 	}
 
-	// Get SHFU records from storage by height range
-	records, err := srv.storage.FindSHFUByChainAndHeight(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
+	// Get SHFU records from storage by height
+	records, err := srv.storage.FindSHFUByChainAndHeight(ctx, req.ChainId, req.CounterpartyChainId, toHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
 	}
@@ -84,7 +79,6 @@ func (srv *SHFUGRPCServer) GetSHFUByHeight0(ctx context.Context, req *GetSHFUByH
 	pbRecord := &SHFURecord{
 		ChainId:               record.ChainID,
 		CounterpartyChainId:   record.CounterpartyChainID,
-		FromHeight:            &Height{RevisionNumber: record.FromHeight.GetRevisionNumber(), RevisionHeight: record.FromHeight.GetRevisionHeight()},
 		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
 		ToHeightTime:          record.ToHeightTime,
 		UpdatedAt:             record.UpdatedAt,

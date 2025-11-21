@@ -75,12 +75,11 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 				return nil
 			}
 
-			fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "from_height", "to_height", "to_height_time")
+			fmt.Printf("%-24s %-24s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "to_height", "to_height_time")
 			for _, r := range records {
-				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
+				fmt.Printf("%-24s %-24s %d-%d           %s\n",
 					r.ChainID,
 					r.CounterpartyChainID,
-					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
 					r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight,
 					r.ToHeightTime.Format(time.RFC3339),
 				)
@@ -140,12 +139,12 @@ func parseHeightArgOptional(s string, name string) (*ibcexported.Height, error) 
 	return &height, nil
 }
 
-// dbGetCmd gets SHFU records by chainId, counterpartyChainId, fromHeight, toHeight
+// dbGetCmd gets SHFU records by chainId, counterpartyChainId, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget <path-name:chain-id> <from-height> <to-height>",
-		Short: "Get SHFU records by path:chain, fromHeight, toHeight (heights in <revision>-<height> format)",
-		Args:  cobra.ExactArgs(3),
+		Use:   "dbget <path-name:chain-id> <to-height>",
+		Short: "Get SHFU records by path:chain, toHeight (heights in <revision>-<height> format)",
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
@@ -164,11 +163,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("failed to get chain '%s' from path '%s': %w", chainID, pathName, err)
 			}
 
-			fromHeight, err := parseHeightArg(args[1], "from-height")
-			if err != nil {
-				return err
-			}
-			toHeight, err := parseHeightArg(args[2], "to-height")
+			toHeight, err := parseHeightArg(args[1], "to-height")
 			if err != nil {
 				return err
 			}
@@ -180,7 +175,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 
 			defer storage.Close()
 
-			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, counterpartyChain.ChainID(), fromHeight, toHeight)
+			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainID, counterpartyChain.ChainID(), toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query SHFU records: %w", err)
 			}
@@ -226,7 +221,6 @@ func printSHFURecordSummary(record *SHFURecord) {
 
 	resultSummary := map[string]interface{}{
 		"chain_id":               record.ChainID,
-		"from_height":            record.FromHeight,
 		"to_height":              record.ToHeight,
 		"to_height_time":         record.ToHeightTime.Format(time.RFC3339),
 		"results_received_count": len(results),
@@ -348,11 +342,11 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 
 func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update --sqlite_path <sqlite file path> <path-name:chain-id> <from-height>",
+		Use:   "update --sqlite_path <sqlite file path> <path-name:chain-id>",
 		Short: "Execute SHFU (SetupHeadersForUpdate) for specified chain and save results to database",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) != 2 {
+			if len(args) != 1 {
 				return fmt.Errorf("path:chain and from-height are required")
 			}
 
@@ -361,14 +355,15 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fromHeightArg := args[1]
+			/*
+				fromHeightArg := args[1]
 
-			// Parse from-height argument (returns nil if empty string)
-			fromHeight, err := parseHeightArgOptional(fromHeightArg, "from-height")
-			if err != nil {
-				return err
-			}
-
+				// Parse from-height argument (returns nil if empty string)
+				fromHeight, err := parseHeightArgOptional(fromHeightArg, "from-height")
+				if err != nil {
+					return err
+				}
+			*/
 			// Get target chain and counterparty chain using getChainPairFromPath
 			targetChain, counterpartyChain, err := getChainPairFromPath(ctx, pathName, targetChainID)
 			if err != nil {
@@ -389,7 +384,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			defer storage.Close()
 
 			// Execute SHFU for the target chain with counterparty chain
-			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, counterpartyChain, fromHeight, storage)
+			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, counterpartyChain, storage)
 			if err != nil {
 				return fmt.Errorf("failed to execute and store SHFU for target chain: %w", err)
 			}
