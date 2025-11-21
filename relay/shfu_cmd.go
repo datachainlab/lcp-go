@@ -443,9 +443,6 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 			// Try to query the client state using yui-relayer's QueryClientState
 			// This uses the target chain's own RPC client instead of cosmos-sdk's offline client
 			qctx := core.NewQueryContext(cmd.Context(), latestHeight)
-			fmt.Printf("zzz target=%p\n", target)
-			fmt.Printf("zzz pathEnd=%v\n", target.Path())
-			fmt.Printf("zzz latestHeight=%v\n", latestHeight)
 			if clientStateRes, err := target.QueryClientState(qctx); err != nil {
 				// If QueryClientState fails, just note the error but continue
 				latestConsensusInfo = map[string]interface{}{

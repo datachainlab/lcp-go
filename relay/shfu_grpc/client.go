@@ -70,15 +70,8 @@ func GetLatestFinalizedHeader(ctx context.Context, grpcAddress string, chainID s
 	return header, nil
 }
 
-func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
-	fmt.Printf("zzz >GetSHFUByHeight called with grpcAddress=%s, chainID=%s, counterpartyChainID=%s, toHeight=%v\n", grpcAddress, chainID, counterpartyChainID, toHeight)
-	res, err := GetSHFUByHeight0(ctx, grpcAddress, chainID, counterpartyChainID, toHeight)
-	fmt.Printf("zzz <GetSHFUByHeight returned res=%v, err=%v\n", res, err)
-	return res, err
-}
-
 // GetSHFUByHeight retrieves SHFU record by height range from gRPC server
-func GetSHFUByHeight0(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
+func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, toHeight exported.Height) (*shfu_storage.SHFURecord, error) {
 	if grpcAddress == "" {
 		return nil, fmt.Errorf("SHFU gRPC address not provided")
 	}

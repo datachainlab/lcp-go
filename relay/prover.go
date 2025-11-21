@@ -161,7 +161,6 @@ func (pr *Prover) GetOriginProver() core.Prover {
 
 // Init initializes the chain
 func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.ProtoCodecMarshaler, debug bool) error {
-	fmt.Println("> zzz LCPProver#Init")
 	pr.homePath = homePath
 	pr.codec = codec
 	res, err := pr.lcpServiceClient.EnclaveInfo(context.Background(), &enclave.QueryEnclaveInfoRequest{})
@@ -283,18 +282,17 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
-
-	if pr.activeEnclaveKey == nil {
-		need, err := pr.loadEKIAndCheckUpdateNeeded(ctx, dstChain)
-		fmt.Printf("zzz loadEKIAndCheckUpdateNeeded: need=%v, error=%v\n", need, err)
-		if err != nil {
-			return nil, err
-		}
+	/*
 		if pr.activeEnclaveKey == nil {
-			return nil, fmt.Errorf("activeEnclaveKey is nil after loadEKIAndCheckUpdateNeeded")
+			_, err := pr.loadEKIAndCheckUpdateNeeded(ctx, dstChain)
+			if err != nil {
+				return nil, err
+			}
+			if pr.activeEnclaveKey == nil {
+				return nil, fmt.Errorf("activeEnclaveKey is nil after loadEKIAndCheckUpdateNeeded")
+			}
 		}
-	}
-	fmt.Printf("zzz setupHeadersForUpdate0: activeEnclaveKey=%v\n", pr.activeEnclaveKey)
+	*/
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)

@@ -62,15 +62,16 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 				toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
 		}
 
-		// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
-		existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), *fromHeight, toHeight)
-		if err != nil {
-			return nil, fmt.Errorf("failed to check existing records: %w", err)
-		}
-		if len(existingRecords) > 0 {
-			return nil, nil
-		}
 	*/
+	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
+	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), toHeight)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing records: %w", err)
+	}
+	if len(existingRecords) > 0 {
+		return nil, nil
+	}
+
 	// Call setupHeadersForUpdate0 with the counterparty chain
 	results, err := lcpProver.setupHeadersForUpdate0(ctx, counterparty, latestFinalizedHeader)
 	if err != nil {

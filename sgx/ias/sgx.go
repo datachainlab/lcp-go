@@ -43,13 +43,11 @@ func VerifyReport(report []byte, signature []byte, signingCertDer []byte, curren
 	if err != nil {
 		return err
 	}
-	fmt.Printf("> zzz VerifyReport: trustRARoots=%v, signingCert=%v\n", trustRARoots, signingCert.Subject)
 	chains, err := signingCert.Verify(x509.VerifyOptions{
 		Roots:       trustRARoots,
 		CurrentTime: currentTime,
 	})
 	if err != nil {
-		fmt.Printf("> zzz VerifyReport: Verify error: %v\n", err)
 		return err
 	}
 

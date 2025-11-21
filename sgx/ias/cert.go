@@ -45,7 +45,6 @@ DaVzWh5aiEx+idkSGMnX
 -----END CERTIFICATE-----`
 
 func initIAS() {
-	fmt.Println("> zzz initIAS")
 	rootCert, _, err := ias.CertFromPEM([]byte(iasTrustRootCert))
 	if err != nil {
 		panic(err)

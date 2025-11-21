@@ -50,12 +50,6 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 
 // GetSHFUByHeight implements the gRPC service method to get SHFU record by height range
 func (srv *SHFUGRPCServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
-	fmt.Printf("zzz >server.GetSHFUByHeight called with req=%v\n", req)
-	ret, err := srv.GetSHFUByHeight0(ctx, req)
-	fmt.Printf("zzz <server.GetSHFUByHeight returning res=%v, err=%v\n", ret, err)
-	return ret, err
-}
-func (srv *SHFUGRPCServer) GetSHFUByHeight0(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
 	// Convert protobuf Height to clienttypes.Height
 	toHeight := clienttypes.Height{
 		RevisionNumber: req.ToHeight.RevisionNumber,
