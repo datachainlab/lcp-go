@@ -1,3 +1,8 @@
+// Package shfu_storage provides SQLite-based storage for SHFU (SetupHeadersForUpdate) operations.
+//
+// Temporary Error Handling:
+// The storage implementation provides IsTemporaryError() to detect database locking,
+// connection issues, and other retryable errors.
 package shfu_storage
 
 import (
@@ -6,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
@@ -331,4 +337,42 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 	}
 
 	return &record, nil
+}
+
+// IsTemporaryError determines if an error is temporary and the operation can be retried
+// For SQLite, this includes database locks, busy errors, and connection issues
+func (s *SqlxSHFUStorage) IsTemporaryError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	// SQLite specific temporary errors
+	// SQLITE_BUSY (5): The database file is locked
+	// SQLITE_LOCKED (6): A table in the database is locked
+	// SQLITE_PROTOCOL (15): Database lock protocol error
+	if strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "database table is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY") ||
+		strings.Contains(errStr, "SQLITE_LOCKED") ||
+		strings.Contains(errStr, "SQLITE_PROTOCOL") {
+		return true
+	}
+
+	// Connection related errors that might be temporary
+	if strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "connection timeout") ||
+		strings.Contains(errStr, "network is unreachable") {
+		return true
+	}
+
+	// Context timeout errors (might be retryable)
+	if strings.Contains(errStr, "context deadline exceeded") ||
+		strings.Contains(errStr, "context canceled") {
+		return true
+	}
+
+	return false
 }

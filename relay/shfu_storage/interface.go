@@ -44,6 +44,11 @@ type SHFUStorage interface {
 	// CleanupOldSHFU removes SHFU records older than the specified duration
 	CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error)
 
+	// IsTemporaryError determines if an error is temporary and the operation can be retried
+	// Returns true for errors like database locks, connection timeouts, etc.
+	// Implementation varies by database type (SQLite, PostgreSQL, etc.)
+	IsTemporaryError(err error) bool
+
 	// Close closes the service and releases any resources
 	Close() error
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/avast/retry-go"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
@@ -109,10 +110,25 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 
 	fmt.Printf("SHFU executed for target chain %s with counterparty chain %s\n", target.ChainID(), counterparty.ChainID())
 
-	// Save the record to database
-	err = storage.SaveSHFUResult(ctx, record)
+	// Save the record to database with retry logic for temporary errors
+	err = retry.Do(
+		func() error {
+			return storage.SaveSHFUResult(ctx, record)
+		},
+		retry.Context(ctx),
+		retry.Attempts(3),
+		retry.Delay(100*time.Millisecond),
+		retry.DelayType(retry.BackOffDelay),
+		retry.RetryIf(func(err error) bool {
+			// Retry only if it's a temporary error according to the storage implementation
+			return storage.IsTemporaryError(err)
+		}),
+		retry.OnRetry(func(n uint, err error) {
+			fmt.Printf("Retry attempt %d for SaveSHFUResult due to temporary error: %v\n", n+1, err)
+		}),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to save SHFU result to database: %w", err)
+		return nil, fmt.Errorf("failed to save SHFU result to database after retries: %w", err)
 	}
 
 	fmt.Printf("Successfully saved SHFU result to database for chain %s\n", target.ChainID())
