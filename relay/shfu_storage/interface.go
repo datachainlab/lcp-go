@@ -2,6 +2,7 @@ package shfu_storage
 
 import (
 	"context"
+	"encoding/hex"
 	"time"
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
@@ -23,6 +24,29 @@ type SHFURecord struct {
 	UpdatedAt             time.Time             `json:"updated_at"`
 	UpdateClientResults   []*UpdateClientResult `json:"update_client_results"`
 	LatestFinalizedHeader []byte                `json:"latest_finalized_header"` // Serialized core.Header bytes
+}
+
+// FormatSummary formats the SHFU record as a map for JSON output
+func (r *SHFURecord) FormatSummary() map[string]interface{} {
+	// Prepare update client results for JSON output
+	updateClientResults := make([]map[string]interface{}, len(r.UpdateClientResults))
+	for i, result := range r.UpdateClientResults {
+		updateClientResults[i] = map[string]interface{}{
+			"message_hex":    hex.EncodeToString(result.Message),
+			"signature_hex":  hex.EncodeToString(result.Signature),
+			"message_size":   len(result.Message),
+			"signature_size": len(result.Signature),
+		}
+	}
+
+	return map[string]interface{}{
+		"chain_id":               r.ChainID,
+		"to_height":              r.ToHeight,
+		"to_height_time":         r.ToHeightTime.Format(time.RFC3339),
+		"results_received_count": len(r.UpdateClientResults),
+		"update_client_results":  updateClientResults,
+		"timestamp":              time.Now().Format(time.RFC3339),
+	}
 }
 
 // SHFUStorage defines the storage interface for SetupHeadersForUpdate operations

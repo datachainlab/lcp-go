@@ -25,21 +25,24 @@ type SHFUChainPair struct {
 }
 
 type SHFUService struct {
-	Storage          SHFUStorage
-	ChainPairs       []*SHFUChainPair // Changed from TargetChains to ChainPairs
-	PollInterval     time.Duration
-	GRPCAddr         string        // gRPC server address (e.g., ":8080")
-	CleanupOlderThan time.Duration // Cleanup interval and age threshold for old records, must be >= MinCleanupInterval to enable
+	Storage    SHFUStorage
+	ChainPairs []*SHFUChainPair // Changed from TargetChains to ChainPairs
+	PollInterval time.Duration
+	GRPCAddr   string        // gRPC server address (e.g., ":8080")
+	CleanupAge time.Duration // Cleanup age threshold for old records, must be >= MinCleanupInterval to enable
 }
 
 // NewSHFUService creates a new SHFUService
-func NewSHFUService(storage SHFUStorage, chainPairs []*SHFUChainPair, grpcAddr string, cleanupOlderThan time.Duration) *SHFUService {
+func NewSHFUService(storage SHFUStorage, chainPairs []*SHFUChainPair, grpcAddr string, pollInterval time.Duration, cleanupAge time.Duration) *SHFUService {
+	if pollInterval <= 0 {
+		pollInterval = DefaultPollInterval
+	}
 	return &SHFUService{
-		Storage:          storage,
-		ChainPairs:       chainPairs,
-		PollInterval:     DefaultPollInterval,
-		GRPCAddr:         grpcAddr,
-		CleanupOlderThan: cleanupOlderThan,
+		Storage:      storage,
+		ChainPairs:   chainPairs,
+		PollInterval: pollInterval,
+		GRPCAddr:     grpcAddr,
+		CleanupAge:   cleanupAge,
 	}
 }
 
@@ -95,8 +98,8 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		}
 	}()
 
-	// Start cleanup goroutine if CleanupOlderThan is configured with minimum interval
-	if srv.CleanupOlderThan >= MinCleanupInterval {
+	// Start cleanup goroutine if CleanupAge is configured with minimum interval
+	if srv.CleanupAge >= MinCleanupInterval {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -202,14 +205,14 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 	const maxConsecutiveErrors = 10000
 
 	fmt.Printf("Started SHFU cleanup routine: cleaning records older than %v, running every %v\n",
-		srv.CleanupOlderThan, cleanupInterval)
+		srv.CleanupAge, cleanupInterval)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupOlderThan)
+			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupAge)
 			if err != nil {
 				consecutiveErrors++
 				fmt.Printf("Cleanup failed (consecutive errors: %d/%d): %v\n",
