@@ -44,6 +44,8 @@ type Prover struct {
 	// if nil, the key is finalized.
 	// if not nil, the key is not finalized yet.
 	unfinalizedMsgID core.MsgID
+
+	gauge *Int64Gauge
 }
 
 var (
@@ -152,7 +154,7 @@ func NewProver(config ProverConfig, originChain core.Chain, originProver core.Pr
 		}
 		eip712Signer = NewEIP712Signer(signer)
 	}
-	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn), eip712Signer: eip712Signer}, nil
+	return &Prover{config: config, originChain: originChain, originProver: originProver, lcpServiceClient: NewLCPServiceClient(conn), eip712Signer: eip712Signer, gauge: nil}, nil
 }
 
 func (pr *Prover) GetOriginProver() core.Prover {
@@ -192,6 +194,16 @@ func (pr *Prover) Init(homePath string, timeout time.Duration, codec codec.Proto
 func (pr *Prover) SetRelayInfo(path *core.PathEnd, counterparty *core.ProvableChain, counterpartyPath *core.PathEnd) error {
 	pr.path = path
 	pr.counterpartyPath = counterpartyPath
+
+	if gauge, err := NewInt64Gauge(
+		fmt.Sprintf("lcp_updater_client_height.%s.%s", pr.originChain.ChainID(), counterparty.ChainID()),
+		fmt.Sprintf("LCP updater client height for chain %s against counterparty %s", pr.originChain.ChainID(), counterparty.ChainID()),
+	); err != nil {
+		return err
+	} else {
+		pr.gauge = gauge
+	}
+
 	return nil
 }
 
@@ -282,17 +294,6 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
-	/*
-		if pr.activeEnclaveKey == nil {
-			_, err := pr.loadEKIAndCheckUpdateNeeded(ctx, dstChain)
-			if err != nil {
-				return nil, err
-			}
-			if pr.activeEnclaveKey == nil {
-				return nil, fmt.Errorf("activeEnclaveKey is nil after loadEKIAndCheckUpdateNeeded")
-			}
-		}
-	*/
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
@@ -321,7 +322,9 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 		})
 		i++
 	}
-
+	if pr.gauge != nil {
+		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
+	}
 	return results, nil
 }
 

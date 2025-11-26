@@ -1,7 +1,55 @@
 package relay
 
-import "go.opentelemetry.io/otel"
+import (
+	"fmt"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+
+	"context"
+	"sync"
+)
+
+type Int64Gauge struct {
+	gauge metric.Int64Gauge
+	mutex sync.RWMutex
+}
 
 var (
 	tracer = otel.Tracer("github.com/datachainlab/lcp-go/relay")
+	meter  = otel.Meter("github.com/datachainlab/lcp-go/relay")
 )
+
+const (
+	namespaceRoot = "lcp-go"
+)
+
+func NewInt64Gauge(name string, desc string) (*Int64Gauge, error) {
+	fullname := fmt.Sprintf("%s.%s", namespaceRoot, name) //TODO: sanitize name
+
+	gauge, err := meter.Int64Gauge(
+		fullname,
+		metric.WithUnit("1"),
+		metric.WithDescription(desc),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &Int64Gauge{
+		gauge: gauge,
+		mutex: sync.RWMutex{},
+	}, nil
+}
+
+func (g *Int64Gauge) Set(ctx context.Context, value int64) {
+	if g == nil {
+		return
+	}
+
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+
+	if g.gauge != nil {
+		g.gauge.Record(ctx, value)
+	}
+}
