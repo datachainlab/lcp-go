@@ -117,50 +117,14 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			if err := srv.executeUpdateForChainPair(ctx, chainPair); err != nil {
+			// Execute SHFU and store the result with both target and counterparty chains
+			_, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, srv.Storage)
+			if err != nil {
 				fmt.Printf("SHFU update failed for chain %s: %v\n", chainPair.TargetChain.ChainID(), err)
-				return err // Return error to stop the service when no records found
+				return fmt.Errorf("failed to execute SHFU for chain %s: %w", chainPair.TargetChain.ChainID(), err)
 			}
 		}
 	}
-}
-
-func (srv *SHFUService) executeUpdateForChainPair(ctx context.Context, chainPair *SHFUChainPair) error {
-	/*
-		Old code (commented out for reference):
-		Get the latest record to determine the fromHeight
-		latestRecord, err := srv.Storage.GetLatestSHFUForChain(ctx, chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID())
-		if err != nil {
-			return fmt.Errorf("failed to get latest SHFU record for chain %s: %w", chainPair.TargetChain.ChainID(), err)
-		}
-
-		if latestRecord == nil {
-			return fmt.Errorf("no previous SHFU records found for chain %s: cannot determine starting height", chainPair.TargetChain.ChainID())
-		}
-
-		Use the ToHeight from the latest record as the new fromHeight
-		fromHeight := clienttypes.Height{
-			RevisionNumber: latestRecord.ToHeight.RevisionNumber,
-			RevisionHeight: latestRecord.ToHeight.RevisionHeight,
-		}
-
-		record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, fromHeight, srv.Storage)
-	*/
-
-	// Execute SHFU and store the result with both target and counterparty chains
-	record, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, srv.Storage)
-	if err != nil {
-		return fmt.Errorf("failed to execute SHFU for chain %s: %w", chainPair.TargetChain.ChainID(), err)
-	}
-
-	if record != nil {
-		fmt.Printf("SHFU executed successfully for chain %s (counterparty: %s), to height %d-%d\n",
-			record.ChainID,
-			chainPair.CounterpartyChain.ChainID(),
-			record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight)
-	}
-
-	return nil
 }
 
 // Backward compatibility: keep old methods for single chain use
@@ -170,14 +134,6 @@ func (srv *SHFUService) RunUpdater(ctx context.Context) error {
 		return fmt.Errorf("no chain pairs configured")
 	}
 	return srv.runUpdaterForChainPair(ctx, srv.ChainPairs[0])
-}
-
-func (srv *SHFUService) executeUpdate(ctx context.Context) error {
-	// Use the first chain pair for backward compatibility
-	if len(srv.ChainPairs) == 0 {
-		return fmt.Errorf("no chain pairs configured")
-	}
-	return srv.executeUpdateForChainPair(ctx, srv.ChainPairs[0])
 }
 
 func (srv *SHFUService) RunGRPCServer(ctx context.Context) error {
