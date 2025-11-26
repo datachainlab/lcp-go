@@ -243,13 +243,13 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 	return record, nil
 }
 
-// CleanupOldSHFU removes SHFU records older than the specified duration
+// CleanupOldSHFU removes SHFU records older than the specified duration based on ToHeightTime
 func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 	p1 := s.dialect.GetPlaceholder(1)
 
-	// Delete records
-	recordQuery := fmt.Sprintf(`DELETE FROM shfu_records WHERE created_at < %s`, p1)
+	// Delete records based on to_height_time
+	recordQuery := fmt.Sprintf(`DELETE FROM shfu_records WHERE to_height_time < %s`, p1)
 	result, err := s.db.ExecContext(ctx, recordQuery, s.dialect.ConvertTimeToDB(cutoffTime))
 	if err != nil {
 		return 0, errWithStack("failed to delete old SHFU records: %w", err)

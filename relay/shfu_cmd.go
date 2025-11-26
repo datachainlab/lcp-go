@@ -23,6 +23,7 @@ const (
 	flagGRPCAddr       = "grpc_addr"
 	flagUpdateInterval = "update_interval"
 	flagCacheSize      = "cache_size"
+	flagCleanup        = "cleanup"
 )
 
 // UpdateClientCacheCmd creates the update-client-cache command (alias for shfu)
@@ -44,6 +45,7 @@ func SHFUCacheCmd(ctx *config.Context) *cobra.Command {
 		queryChainCmd(ctx),
 		dbListCmd(ctx),
 		dbGetCmd(ctx),
+		dbCleanupCmd(ctx),
 	)
 	return cmd
 }
@@ -268,6 +270,50 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 	return cmd
 }
 
+func dbCleanupCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "dbcleanup <duration>",
+		Short: "Clean up old SHFU records from the database (duration: e.g. '7d', '24h', '30m', '600s')",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dbPath := viper.GetString(flagSQLitePath)
+			if dbPath == "" {
+				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+			}
+
+			cleanupStr := args[0]
+			if cleanupStr == "" || cleanupStr == "0" {
+				return fmt.Errorf("cleanup duration argument is required (e.g., '7d', '24h', '30m', '600s')")
+			}
+
+			cleanupDuration, err := time.ParseDuration(cleanupStr)
+			if err != nil {
+				return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m', '600s')", cleanupStr, err)
+			}
+
+			fmt.Printf("Opening database: %s\n", dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			if err != nil {
+				return fmt.Errorf("failed to open storage: %w", err)
+			}
+			defer storage.Close()
+
+			fmt.Printf("Cleaning up records older than: %v\n", cleanupDuration)
+
+			deletedCount, err := storage.CleanupOldSHFU(cmd.Context(), cleanupDuration)
+			if err != nil {
+				return fmt.Errorf("failed to cleanup old SHFU records: %w", err)
+			}
+
+			fmt.Printf("Successfully cleaned up %d old SHFU records\n", deletedCount)
+			return nil
+		},
+	}
+
+	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	return cmd
+}
+
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server <path-name:chain-id> [path-name:chain-id]...",
@@ -287,6 +333,20 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			grpcAddr, err := cmd.Flags().GetString(flagGRPCAddr)
 			if err != nil {
 				return fmt.Errorf("failed to get gRPC address: %w", err)
+			}
+
+			// Get cleanup duration
+			cleanupOlderThanStr, err := cmd.Flags().GetString(flagCleanup)
+			if err != nil {
+				return fmt.Errorf("failed to get cleanup duration: %w", err)
+			}
+
+			var cleanupOlderThan time.Duration
+			if cleanupOlderThanStr != "" && cleanupOlderThanStr != "0" {
+				cleanupOlderThan, err = time.ParseDuration(cleanupOlderThanStr)
+				if err != nil {
+					return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m')", cleanupOlderThanStr, err)
+				}
 			}
 
 			// Open storage
@@ -320,7 +380,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Create and start multi-chain SHFU service
-			service := NewSHFUService(storage, chainPairs, grpcAddr)
+			service := NewSHFUService(storage, chainPairs, grpcAddr, cleanupOlderThan)
 
 			fmt.Printf("Starting SHFU Service for chains: %v...\n", targetChainIDs)
 			fmt.Printf("Database: %s\n", dbPath)
@@ -337,6 +397,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 	}
 	cmd = dbPathFlag(cmd)
 	cmd = grpcAddrFlag(cmd)
+	cmd = cleanupFlag(cmd)
 	return cmd
 }
 
@@ -569,4 +630,12 @@ func parsePathChainArg(arg string) (pathName string, chainID string, err error) 
 		return "", "", fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
 	}
 	return parts[0], parts[1], nil
+}
+
+func cleanupFlag(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().String(flagCleanup, "7d", "cleanup records older than this duration (examples: '7d', '24h', '30m', '600s', empty or '0' to disable)")
+	if err := viper.BindPFlag(flagCleanup, cmd.Flags().Lookup(flagCleanup)); err != nil {
+		panic(err)
+	}
+	return cmd
 }
