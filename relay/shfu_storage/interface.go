@@ -49,6 +49,6 @@ type SHFUStorage interface {
 	// Implementation varies by database type (SQLite, PostgreSQL, etc.)
 	IsTemporaryError(err error) bool
 
-	// Close closes the service and releases any resources
+	// Close closes the storage connection and releases resources
 	Close() error
 }
