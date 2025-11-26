@@ -44,7 +44,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 		activateClientCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
 		updateOperatorsCmd(ctx),
-		SHFUCacheCmd(ctx),
+		shfuCmd(ctx),
 	)
 
 	return cmd

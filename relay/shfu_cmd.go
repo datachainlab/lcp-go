@@ -24,8 +24,8 @@ const (
 	flagCleanupAge     = "cleanup_age"
 )
 
-// UpdateClientCacheCmd creates the update-client-cache command (alias for shfu)
-func UpdateClientCacheCmd(ctx *config.Context) *cobra.Command {
+// shfuCmd creates the shfu subcommand
+func shfuCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shfu",
 		Short: "SHFU management commands",
