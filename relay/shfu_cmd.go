@@ -370,18 +370,11 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Create and start multi-chain SHFU service
-			service := NewSHFUService(storage, chainPairs, grpcAddr, updateInterval, cleanupAge)
-
-			fmt.Printf("Starting SHFU Service for chains: %v...\n", targetChainIDs)
-			fmt.Printf("Database: %s\n", dbPath)
-			fmt.Printf("gRPC server address: %s\n", service.GRPCAddr)
-			fmt.Printf("Polling interval: %v\n", service.PollInterval)
-			fmt.Println("Press Ctrl+C to stop the service")
+			service := NewSHFUService(storage, chainPairs, grpcAddr, updateInterval, cleanupAge, targetChainIDs)
 
 			// Start the service (this will block until stopped)
 			service.SHFUServiceRun(cmd.Context())
 
-			fmt.Println("SHFU Service stopped")
 			return nil
 		},
 	}

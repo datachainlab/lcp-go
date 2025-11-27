@@ -24,7 +24,7 @@ func InitSQLiteStorage(dbPath string) (*SqlxSHFUStorage, error) {
 	}
 
 	dialect := NewSQLiteDialect()
-	return NewSqlxSHFUStorage(db, dialect)
+	return NewSqlxSHFUStorage(db, dialect, dbPath)
 }
 
 // OpenSQLiteStorage opens an existing SQLite database file for SHFU storage
@@ -43,7 +43,7 @@ func OpenSQLiteStorage(dbPath string) (*SqlxSHFUStorage, error) {
 	}
 
 	dialect := NewSQLiteDialect()
-	storage, err := NewSqlxSHFUStorage(db, dialect)
+	storage, err := NewSqlxSHFUStorage(db, dialect, dbPath)
 	if err != nil {
 		db.Close()
 		return nil, err

@@ -75,4 +75,7 @@ type SHFUStorage interface {
 
 	// Close closes the storage connection and releases resources
 	Close() error
+
+	// Description returns a description string of the storage implementation
+	Description() string
 }

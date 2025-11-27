@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -67,15 +68,17 @@ type DBDialect interface {
 
 // SqlxSHFUStorage implements SHFUStorage using sqlx with database abstraction
 type SqlxSHFUStorage struct {
-	db      *sqlx.DB
-	dialect DBDialect
+	db       *sqlx.DB
+	dialect  DBDialect
+	filePath string // SQLite database file path
 }
 
 // NewSqlxSHFUStorage creates a new sqlx-based SHFU storage
-func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect) (*SqlxSHFUStorage, error) {
+func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxSHFUStorage, error) {
 	storage := &SqlxSHFUStorage{
-		db:      db,
-		dialect: dialect,
+		db:       db,
+		dialect:  dialect,
+		filePath: filePath,
 	}
 
 	// Apply database-specific configuration
@@ -368,4 +371,13 @@ func (s *SqlxSHFUStorage) IsTemporaryError(err error) bool {
 	}
 
 	return false
+}
+
+// Description returns a description of this storage instance
+func (s *SqlxSHFUStorage) Description() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+	return fmt.Sprintf("SQLite@%s:%s", hostname, s.filePath)
 }
