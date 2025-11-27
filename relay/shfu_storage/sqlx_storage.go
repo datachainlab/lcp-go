@@ -37,21 +37,14 @@ DB Schema Overview:
 
 1. shfu_records - Main records table for SHFU (SetupHeadersForUpdate) operations
    - Stores chain information, height data, and execution metadata
-   - Primary key: combination of chain_id and height fields
-   - Key fields: chain_id, various height revisions
-   - Includes error tracking and timestamps
-
-2. shfu_headers - Headers associated with each SHFU record
-   - Stores individual header data for each update operation
-   - Links to shfu_records via record_id (foreign key)
-   - Contains header type, binary data, and processing information
-   - Auto-incrementing primary key with proper indexing
+   - Primary key: combination of chain_id, counterparty_chain_id, and height fields
+   - Key fields: chain_id, counterparty_chain_id, to_height_revision_number, to_height_revision_height
+   - Includes timestamps (to_height_time, updated_at), serialized update_client_results, and latest_finalized_header
 
 Indexes:
-   - Chain for efficient filtering
+   - Chain ID for efficient filtering by chain
    - Height-based queries for chronological operations
-   - Creation time for temporal analysis
-   - Record ID for header lookups
+   - Updated timestamp for temporal analysis and cleanup operations
 */
 
 // DBDialect defines database-specific operations to abstract SQL differences
