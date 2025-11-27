@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 )
 
@@ -35,15 +34,7 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	}
 
 	// Convert to protobuf message
-	pbRecord := &SHFURecord{
-		ChainId:               record.ChainID,
-		CounterpartyChainId:   record.CounterpartyChainID,
-		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
-		ToHeightTime:          record.ToHeightTime,
-		UpdatedAt:             record.UpdatedAt,
-		UpdateClientResults:   convertUpdateClientResults(record.UpdateClientResults),
-		LatestFinalizedHeader: record.LatestFinalizedHeader,
-	}
+	pbRecord := ConvertSHFURecordFromDbToPb(record)
 
 	return &GetLatestSHFUResponse{Found: true, Record: pbRecord}, nil
 }
@@ -51,10 +42,7 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 // GetSHFUByHeight implements the gRPC service method to get SHFU record by height range
 func (srv *SHFUGRPCServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
 	// Convert protobuf Height to clienttypes.Height
-	toHeight := clienttypes.Height{
-		RevisionNumber: req.ToHeight.RevisionNumber,
-		RevisionHeight: req.ToHeight.RevisionHeight,
-	}
+	toHeight := ConvertHeightFromPbToDb(req.ToHeight)
 
 	// Get SHFU records from storage by height
 	records, err := srv.storage.FindSHFUByChainAndHeight(ctx, req.ChainId, req.CounterpartyChainId, toHeight)
@@ -70,31 +58,7 @@ func (srv *SHFUGRPCServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHe
 	record := records[0]
 
 	// Convert to protobuf message
-	pbRecord := &SHFURecord{
-		ChainId:               record.ChainID,
-		CounterpartyChainId:   record.CounterpartyChainID,
-		ToHeight:              &Height{RevisionNumber: record.ToHeight.GetRevisionNumber(), RevisionHeight: record.ToHeight.GetRevisionHeight()},
-		ToHeightTime:          record.ToHeightTime,
-		UpdatedAt:             record.UpdatedAt,
-		UpdateClientResults:   convertUpdateClientResults(record.UpdateClientResults),
-		LatestFinalizedHeader: record.LatestFinalizedHeader,
-	}
+	pbRecord := ConvertSHFURecordFromDbToPb(record)
 
 	return &GetSHFUByHeightResponse{Found: true, Record: pbRecord}, nil
-}
-
-// convertUpdateClientResults converts storage UpdateClientResults to protobuf format
-func convertUpdateClientResults(results []*shfu_storage.UpdateClientResult) []*UpdateClientResult {
-	if results == nil {
-		return nil
-	}
-
-	pbResults := make([]*UpdateClientResult, len(results))
-	for i, result := range results {
-		pbResults[i] = &UpdateClientResult{
-			Message:   result.Message,
-			Signature: result.Signature,
-		}
-	}
-	return pbResults
 }

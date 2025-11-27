@@ -6,7 +6,6 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
-	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -93,10 +92,7 @@ func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, co
 	req := &GetSHFUByHeightRequest{
 		ChainId:             chainID,
 		CounterpartyChainId: counterpartyChainID,
-		ToHeight: &Height{
-			RevisionNumber: toHeight.GetRevisionNumber(),
-			RevisionHeight: toHeight.GetRevisionHeight(),
-		},
+		ToHeight:            ConvertHeightFromIbcToPb(toHeight),
 	}
 
 	resp, err := client.GetSHFUByHeight(ctx, req)
@@ -109,26 +105,7 @@ func GetSHFUByHeight(ctx context.Context, grpcAddress string, chainID string, co
 	}
 
 	// Convert gRPC response to storage SHFURecord
-	record := &shfu_storage.SHFURecord{
-		ChainID:             resp.Record.ChainId,
-		CounterpartyChainID: resp.Record.CounterpartyChainId,
-		ToHeight: clienttypes.Height{
-			RevisionNumber: resp.Record.ToHeight.RevisionNumber,
-			RevisionHeight: resp.Record.ToHeight.RevisionHeight,
-		},
-		ToHeightTime:          resp.Record.ToHeightTime,
-		UpdatedAt:             resp.Record.UpdatedAt,
-		LatestFinalizedHeader: resp.Record.LatestFinalizedHeader,
-	}
-
-	// Convert UpdateClientResults
-	for _, grpcResult := range resp.Record.UpdateClientResults {
-		result := &shfu_storage.UpdateClientResult{
-			Message:   grpcResult.Message,
-			Signature: grpcResult.Signature,
-		}
-		record.UpdateClientResults = append(record.UpdateClientResults, result)
-	}
+	record := ConvertSHFURecordFromPbToDb(resp.Record)
 
 	return record, nil
 }
