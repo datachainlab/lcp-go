@@ -41,29 +41,7 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 	}
 
 	toHeight := latestFinalizedHeader.GetHeight()
-	/*
-		// Handle nil fromHeight case by getting from counterparty's client state
-		if fromHeight == nil {
-			clientStateHeight, err := GetClientStateLatestHeight(ctx, counterparty)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get fromHeight from counterparty client state: %w", err)
-			}
-			fromHeight = &clientStateHeight
-		}
 
-		// Compare fromHeight and toHeight
-		if (*fromHeight).EQ(toHeight) {
-			fmt.Printf("fromHeight == toHeight: do nothing and return nil: from=%v, to=%v\n", *fromHeight, toHeight)
-			return nil, nil
-		}
-		if toHeight.LT(*fromHeight) {
-			// fromHeight > toHeight: return error
-			return nil, fmt.Errorf("fromHeight (%d-%d) is greater than toHeight (%d-%d)",
-				(*fromHeight).GetRevisionNumber(), (*fromHeight).GetRevisionHeight(),
-				toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
-		}
-
-	*/
 	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
 	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), toHeight)
 	if err != nil {
@@ -135,30 +113,4 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 
 	// Return the saved record
 	return record, nil
-}
-
-// GetClientStateLatestHeight retrieves the latest height from the client state of the counterparty chain
-func GetClientStateLatestHeight(ctx context.Context, counterparty core.Chain) (ibcexported.Height, error) {
-	// Get the latest height from counterparty chain
-	latestHeight, err := counterparty.LatestHeight(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest height from counterparty chain %s: %w", counterparty.ChainID(), err)
-	}
-
-	// Query the client state from the counterparty chain
-	queryCtx := core.NewQueryContext(ctx, latestHeight)
-	clientStateResp, err := counterparty.QueryClientState(queryCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query client state from counterparty chain %s: %w", counterparty.ChainID(), err)
-	}
-
-	// Unpack the client state from Any type
-	var clientState ibcexported.ClientState
-	if err := counterparty.Codec().UnpackAny(clientStateResp.ClientState, &clientState); err != nil {
-		return nil, fmt.Errorf("failed to unpack client state: %w", err)
-	}
-
-	// Get the latest height from the client state
-	clientStateLatestHeight := clientState.GetLatestHeight()
-	return clientStateLatestHeight, nil
 }

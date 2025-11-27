@@ -25,11 +25,11 @@ type SHFUChainPair struct {
 }
 
 type SHFUService struct {
-	Storage    SHFUStorage
-	ChainPairs []*SHFUChainPair // Changed from TargetChains to ChainPairs
+	Storage      SHFUStorage
+	ChainPairs   []*SHFUChainPair // Changed from TargetChains to ChainPairs
 	PollInterval time.Duration
-	GRPCAddr   string        // gRPC server address (e.g., ":8080")
-	CleanupAge time.Duration // Cleanup age threshold for old records, must be >= MinCleanupInterval to enable
+	GRPCAddr     string        // gRPC server address (e.g., ":8080")
+	CleanupAge   time.Duration // Cleanup age threshold for old records, must be >= MinCleanupInterval to enable
 }
 
 // NewSHFUService creates a new SHFUService
@@ -92,7 +92,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := srv.RunGRPCServer(ctx)
+		err := srv.runGRPCServer(ctx)
 		if err != nil {
 			fails <- fmt.Errorf("gRPC server failed: %w", err)
 		}
@@ -160,7 +160,7 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 	}
 }
 
-func (srv *SHFUService) RunGRPCServer(ctx context.Context) error {
+func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 	// Create gRPC server
 	grpcServer := grpc.NewServer()
 

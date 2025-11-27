@@ -85,6 +85,11 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("database path is required (use --sqlite_path flag)")
 			}
 
+			// Get filter options
+			chainID := cmd.Flag("chain-id").Value.String()
+			counterpartyChainID := cmd.Flag("counterparty-chain-id").Value.String()
+			noHeader, _ := cmd.Flags().GetBool("no-header")
+
 			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
@@ -96,13 +101,26 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 				return fmt.Errorf("failed to list SHFU records: %w", err)
 			}
 
-			if len(records) == 0 {
-				fmt.Println("No SHFU records found.")
-				return nil
+			// Filter records based on provided options
+			var filteredRecords []*shfu_storage.SHFURecord
+			for _, r := range records {
+				// Apply chainID filter if specified
+				if chainID != "" && r.ChainID != chainID {
+					continue
+				}
+				// Apply counterpartyChainID filter if specified
+				if counterpartyChainID != "" && r.CounterpartyChainID != counterpartyChainID {
+					continue
+				}
+				filteredRecords = append(filteredRecords, r)
 			}
 
-			fmt.Printf("%-24s %-24s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "to_height", "to_height_time")
-			for _, r := range records {
+			// Print header unless --no-header is specified
+			if !noHeader {
+				fmt.Printf("%-24s %-24s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "to_height", "to_height_time")
+			}
+
+			for _, r := range filteredRecords {
 				fmt.Printf("%-24s %-24s %d-%d           %s\n",
 					r.ChainID,
 					r.CounterpartyChainID,
@@ -114,6 +132,9 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	cmd.Flags().String("chain-id", "", "Filter by chain ID")
+	cmd.Flags().String("counterparty-chain-id", "", "Filter by counterparty chain ID")
+	cmd.Flags().Bool("no-header", false, "Omit table header in output")
 	return cmd
 }
 
