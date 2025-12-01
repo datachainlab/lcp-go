@@ -182,12 +182,12 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 
 func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 	logger := shfu_logger.GetSHFULogger(ctx)
-	
+
 	// Check if gRPC address is provided
 	if srv.GRPCAddr == "" {
 		return fmt.Errorf("gRPC server address is not configured")
 	}
-	
+
 	// Create gRPC server
 	grpcServer := grpc.NewServer()
 

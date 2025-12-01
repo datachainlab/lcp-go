@@ -26,12 +26,12 @@ func getSHFULogger(ctx context.Context, target *core.ProvableChain) *log.RelayLo
 	if logger := shfu_logger.GetSHFULoggerOrNil(ctx); logger != nil {
 		return logger
 	}
-	
+
 	// If no logger in context, try to get from prover
 	if lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover); err == nil {
 		return lcpProver.getLogger()
 	}
-	
+
 	// Fallback to default SHFU logger
 	return shfu_logger.GetSHFULogger(ctx)
 }
