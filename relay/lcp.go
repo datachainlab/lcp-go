@@ -438,7 +438,7 @@ func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.Fina
 }
 
 func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.Chain, eki *enclave.IASEnclaveKeyInfo) (core.MsgID, error) {
-	clientLogger := pr.getClientLogger()
+	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
 		return nil, fmt.Errorf("failed to verify AVR signature: %w", err)
 	}
@@ -521,7 +521,7 @@ func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.C
 }
 
 func (pr *Prover) registerZKDCAPEnclaveKey(ctx context.Context, counterparty core.Chain, eki *enclave.ZKDCAPEnclaveKeyInfo) (core.MsgID, error) {
-	clientLogger := pr.getClientLogger()
+	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	zkp := eki.Zkp.GetRisc0()
 	if zkp == nil {
 		return nil, errors.New("currently only RISC0 is supported")

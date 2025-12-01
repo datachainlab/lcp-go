@@ -512,11 +512,7 @@ func (pr *Prover) getLogger() *log.RelayLogger {
 	return logger.WithChain(pr.path.ChainID)
 }
 
-func (pr *Prover) getClientLogger() *log.RelayLogger {
-	clientID := ""
-	if pr.originChain.Path() != nil {
-		clientID = pr.originChain.Path().ClientID
-	}
+func (pr *Prover) getClientLogger(clientID string) *log.RelayLogger {
 	logger := pr.getLogger()
 	return &log.RelayLogger{
 		Logger: logger.With(
