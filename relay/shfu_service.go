@@ -6,11 +6,13 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
+	"github.com/datachainlab/lcp-go/relay/shfu_logger"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
@@ -50,18 +52,20 @@ func NewSHFUService(storage SHFUStorage, chainPairs []*SHFUChainPair, grpcAddr s
 }
 
 func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
+	logger := srv.getLogger()
 	// Log service startup information
-	srv.getLogger().InfoContext(ctx, "Starting SHFU Service",
+	logger.InfoContext(ctx, "Starting SHFU Service",
 		"chains", srv.TargetChainIDs,
 		"database", srv.Storage.Description(),
 		"grpc_address", srv.GRPCAddr,
 		"poll_interval", srv.PollInterval)
-	srv.getLogger().InfoContext(ctx, "Press Ctrl+C to stop the service")
+	logger.InfoContext(ctx, "Press Ctrl+C to stop the service")
 
 	ctx, cancel := context.WithCancel(ctx)
+	ctx = shfu_logger.SetSHFULogger(ctx, logger)
 	defer func() {
 		cancel()
-		srv.getLogger().InfoContext(ctx, "SHFU Service stopped")
+		logger.InfoContext(ctx, "SHFU Service stopped")
 	}()
 
 	// Channel for signal handling
@@ -83,7 +87,7 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		defer wg.Done()
 		select {
 		case sig := <-sigCh:
-			srv.getLogger().InfoContext(ctx, "SHFU Service received signal, shutting down gracefully", "signal", sig)
+			logger.InfoContext(ctx, "SHFU Service received signal, shutting down gracefully", "signal", sig)
 			cancel()
 		case <-ctx.Done():
 			// Context was cancelled for other reasons
@@ -129,18 +133,18 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	go func() {
 		defer wg.Done()
 		for e := range fails {
-			srv.getLogger().ErrorContext(ctx, "error received, stopping service", e)
+			logger.ErrorContext(ctx, "error received, stopping service", e)
 			cancel()
 		}
 	}()
 
 	<-ctx.Done()
-	srv.GracefulStop(ctx)
 }
 
 func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *SHFUChainPair) error {
 	ticker := time.NewTicker(srv.PollInterval)
 	defer ticker.Stop()
+	logger := shfu_logger.GetSHFULogger(ctx)
 
 	consecutiveErrors := 0
 	const maxConsecutiveErrors = 10
@@ -154,7 +158,7 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 			_, err := SHFUExecuteAndStore(ctx, chainPair.TargetChain, chainPair.CounterpartyChain, srv.Storage)
 			if err != nil {
 				consecutiveErrors++
-				srv.getLogger().ErrorContext(ctx, "SHFU update failed", err,
+				logger.ErrorContext(ctx, "SHFU update failed", err,
 					"chain_id", chainPair.TargetChain.ChainID(),
 					"consecutive_errors", consecutiveErrors,
 					"max_errors", maxConsecutiveErrors)
@@ -166,7 +170,7 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 			} else {
 				// Reset consecutive error count on success
 				if consecutiveErrors > 0 {
-					srv.getLogger().InfoContext(ctx, "SHFU update succeeded after recovery",
+					logger.InfoContext(ctx, "SHFU update succeeded after recovery",
 						"chain_id", chainPair.TargetChain.ChainID(),
 						"recovered_after_errors", consecutiveErrors)
 				}
@@ -177,6 +181,13 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 }
 
 func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
+	logger := shfu_logger.GetSHFULogger(ctx)
+	
+	// Check if gRPC address is provided
+	if srv.GRPCAddr == "" {
+		return fmt.Errorf("gRPC server address is not configured")
+	}
+	
 	// Create gRPC server
 	grpcServer := grpc.NewServer()
 
@@ -192,19 +203,19 @@ func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 		return fmt.Errorf("failed to listen on %s: %w", srv.GRPCAddr, err)
 	}
 
-	srv.getLogger().InfoContext(ctx, "Starting SHFU gRPC server", "address", srv.GRPCAddr)
+	logger.InfoContext(ctx, "Starting SHFU gRPC server", "address", srv.GRPCAddr)
 
 	// Start server in a goroutine
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
-			srv.getLogger().ErrorContext(ctx, "gRPC server error", err)
+			logger.ErrorContext(ctx, "gRPC server error", err)
 		}
 	}()
 
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	srv.getLogger().InfoContext(ctx, "Stopping SHFU gRPC server")
+	logger.InfoContext(ctx, "Stopping SHFU gRPC server")
 	grpcServer.GracefulStop()
 
 	return nil
@@ -212,6 +223,7 @@ func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 
 // runCleanup periodically runs the CleanupOldSHFU operation
 func (srv *SHFUService) runCleanup(ctx context.Context) error {
+	logger := shfu_logger.GetSHFULogger(ctx)
 	// Run cleanup every 5 minutes
 	cleanupInterval := 5 * time.Minute
 	ticker := time.NewTicker(cleanupInterval)
@@ -220,7 +232,7 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 	consecutiveErrors := 0
 	const maxConsecutiveErrors = 10000
 
-	srv.getLogger().InfoContext(ctx, "Started SHFU cleanup routine",
+	logger.InfoContext(ctx, "Started SHFU cleanup routine",
 		"cleanup_age", srv.CleanupAge.String(),
 		"cleanup_interval", cleanupInterval.String())
 
@@ -232,7 +244,7 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupAge)
 			if err != nil {
 				consecutiveErrors++
-				srv.getLogger().ErrorContext(ctx, "Cleanup failed", err,
+				logger.ErrorContext(ctx, "Cleanup failed", err,
 					"consecutive_errors", consecutiveErrors,
 					"max_errors", maxConsecutiveErrors)
 
@@ -243,13 +255,13 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 			} else {
 				// Reset consecutive error count on success
 				if consecutiveErrors > 0 {
-					srv.getLogger().InfoContext(ctx, "Cleanup recovered after errors",
+					logger.InfoContext(ctx, "Cleanup recovered after errors",
 						"recovered_after_errors", consecutiveErrors)
 				}
 				consecutiveErrors = 0
 
 				if deletedCount > 0 {
-					srv.getLogger().InfoContext(ctx, "Cleanup completed",
+					logger.InfoContext(ctx, "Cleanup completed",
 						"deleted_count", deletedCount)
 				}
 			}
@@ -257,10 +269,15 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 	}
 }
 
-func (*SHFUService) GracefulStop(ctx context.Context) {
-}
-
 // getLogger returns a logger for SHFU service with appropriate module name
 func (srv *SHFUService) getLogger() *log.RelayLogger {
-	return log.GetLogger().WithModule("shfu-service")
+	// strings.Join to create a single string of chain IDs
+	chainIDs := make([]string, 0, len(srv.ChainPairs))
+	for _, cp := range srv.ChainPairs {
+		chainIDs = append(chainIDs, cp.TargetChain.ChainID())
+	}
+
+	return &log.RelayLogger{
+		Logger: log.GetLogger().WithModule("shfu-service").With("chain_ids", strings.Join(chainIDs, ",")),
+	}
 }

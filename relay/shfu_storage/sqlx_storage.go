@@ -16,6 +16,7 @@ import (
 	"time"
 
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/lcp-go/relay/shfu_logger"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -107,8 +108,13 @@ func (s *SqlxSHFUStorage) initSchema() error {
 
 // SaveSHFUResult saves a SetupHeadersForUpdate execution result
 func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord) error {
+	// Get logger from context
+	logger := shfu_logger.GetSHFULogger(ctx)
+
 	// Log transaction start
-	fmt.Printf("[%s] Starting SaveSHFU transaction for chain: %s\n", time.Now().Format("2006-01-02 15:04:05.000"), record.ChainID)
+	logger.InfoContext(ctx, "Starting SaveSHFU transaction",
+		"chain_id", record.ChainID,
+		"counterparty_chain_id", record.CounterpartyChainID)
 
 	// Start transaction for consistency
 	tx, err := s.db.BeginTxx(ctx, &sql.TxOptions{})
@@ -128,7 +134,9 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 	}
 
 	// Log transaction completion
-	fmt.Printf("[%s] Completed SaveSHFU transaction for chain: %s\n", time.Now().Format("2006-01-02 15:04:05.000"), record.ChainID)
+	logger.InfoContext(ctx, "Completed SaveSHFU transaction",
+		"chain_id", record.ChainID,
+		"counterparty_chain_id", record.CounterpartyChainID)
 
 	return nil
 }

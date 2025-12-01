@@ -17,11 +17,10 @@ func TestStorageBasicOperations(t *testing.T) {
 	dbPath := "./test_shfu_cache.db"
 	defer os.Remove(dbPath) // Clean up after test
 	// Create SQLite storage (use InitSQLiteStorage for new database)
-	storage, err := InitSQLiteStorage(dbPath)
+	ctx := context.Background()
+	storage, err := InitSQLiteStorage(ctx, dbPath)
 	require.NoError(t, err, "failed to create storage")
 	defer storage.Close()
-
-	ctx := context.Background()
 
 	// Create a sample SHFU record with UpdateClientResults
 	sampleResults := []*UpdateClientResult{
@@ -77,12 +76,13 @@ func TestStorageFileExistsError(t *testing.T) {
 	defer os.Remove(dbPath) // Clean up after test
 
 	// Initialize database first time (should succeed)
-	storage1, err := InitSQLiteStorage(dbPath)
+	ctx := context.Background()
+	storage1, err := InitSQLiteStorage(ctx, dbPath)
 	require.NoError(t, err, "first initialization should succeed")
 	storage1.Close()
 
 	// Try to initialize the same file again (should fail)
-	storage2, err := InitSQLiteStorage(dbPath)
+	storage2, err := InitSQLiteStorage(ctx, dbPath)
 	assert.Error(t, err, "initializing existing database should fail")
 	assert.Nil(t, storage2, "storage should be nil when initialization fails")
 
@@ -98,7 +98,8 @@ func TestStorageFileNotExistsError(t *testing.T) {
 	os.Remove(dbPath)
 
 	// Try to open non-existent file (should fail)
-	storage, err := OpenSQLiteStorage(dbPath)
+	ctx := context.Background()
+	storage, err := OpenSQLiteStorage(ctx, dbPath)
 	assert.Error(t, err, "opening non-existent database should fail")
 	assert.Nil(t, storage, "storage should be nil when open fails")
 

@@ -450,22 +450,23 @@ func (pr *Prover) ProveHostConsensusState(ctx core.QueryContext, height exported
 }
 
 // shouldUseSHFUGRPC determines whether to use SHFU gRPC server based on config and environment variable
-// Environment variable SHFU_GRPC_ENABLE=yes enables gRPC, address comes from config
+// Environment variable YRLY_LCP_SHFU_GRPC_ENABLE=yes enables gRPC, disabled by default
 func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
-	// Check if gRPC is enabled via environment variable
-	envEnable := os.Getenv("SHFU_GRPC_ENABLE")
-	if envEnable != "yes" {
-		// If environment variable is not "yes", don't use gRPC regardless of config
+	// First check if address is configured
+	if pr.config.ShfuGrpcAddress == "" {
+		// No address configured, cannot use gRPC
 		return false, ""
 	}
 
-	// Environment variable enables gRPC, check if address is configured
-	if pr.config.ShfuGrpcAddress != "" {
-		return true, pr.config.ShfuGrpcAddress
+	// Check if gRPC is enabled via environment variable
+	envEnable := os.Getenv("YRLY_LCP_SHFU_GRPC_ENABLE")
+	if envEnable != "yes" {
+		// Environment variable is not "yes", gRPC disabled by default
+		return false, ""
 	}
 
-	// gRPC enabled but no address configured
-	return false, ""
+	// Address configured and gRPC enabled, use gRPC
+	return true, pr.config.ShfuGrpcAddress
 }
 
 // getUpdateClientFromGRPC retrieves SHFU results from gRPC server using height range

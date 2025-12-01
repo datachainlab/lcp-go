@@ -1,6 +1,7 @@
 package shfu_storage
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -10,7 +11,7 @@ import (
 
 // InitSQLiteStorage creates a new SQLite database file and initializes the SHFU storage
 // Returns error if the database file already exists
-func InitSQLiteStorage(dbPath string) (*SqlxSHFUStorage, error) {
+func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, error) {
 	// Check if file already exists
 	if _, err := os.Stat(dbPath); err == nil {
 		return nil, fmt.Errorf("database file already exists: %s", dbPath)
@@ -29,7 +30,7 @@ func InitSQLiteStorage(dbPath string) (*SqlxSHFUStorage, error) {
 
 // OpenSQLiteStorage opens an existing SQLite database file for SHFU storage
 // Returns error if the database file does not exist
-func OpenSQLiteStorage(dbPath string) (*SqlxSHFUStorage, error) {
+func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, error) {
 	// Check if file exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("database file does not exist: %s", dbPath)

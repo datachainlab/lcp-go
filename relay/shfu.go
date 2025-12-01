@@ -9,20 +9,41 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/lcp-go/relay/shfu_logger"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
+	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 // Re-export types from storage package for backward compatibility
 type SHFURecord = shfu_storage.SHFURecord
 type SHFUStorage = shfu_storage.SHFUStorage
 
+// getSHFULogger gets logger for SHFU operations, first from context, then from prover
+func getSHFULogger(ctx context.Context, target *core.ProvableChain) *log.RelayLogger {
+	// First try to get logger from context
+	if logger := shfu_logger.GetSHFULoggerOrNil(ctx); logger != nil {
+		return logger
+	}
+	
+	// If no logger in context, try to get from prover
+	if lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover); err == nil {
+		return lcpProver.getLogger()
+	}
+	
+	// Fallback to default SHFU logger
+	return shfu_logger.GetSHFULogger(ctx)
+}
+
 // ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations (nil for unspecified)
 // counterparty: the counterparty chain object
 func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counterparty *core.ProvableChain, storage SHFUStorage) (*SHFURecord, error) {
+	// Get SHFU logger once and reuse throughout the function
+	logger := getSHFULogger(ctx, target)
+
 	// Check if counterparty chain is provided
 	if counterparty == nil {
 		return nil, fmt.Errorf("counterparty chain is required for SHFU operations")
@@ -42,12 +63,18 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 
 	toHeight := latestFinalizedHeader.GetHeight()
 
-	// Check for existing records with the same chainId, counterpartyChainId, fromHeight, and toHeight
-	existingRecords, err := storage.FindSHFUByChainAndHeight(ctx, target.ChainID(), counterparty.ChainID(), toHeight)
+	// Check if we already have a record with toHeight >= current toHeight
+	latestRecord, err := storage.GetLatestSHFUForChain(ctx, target.ChainID(), counterparty.ChainID())
 	if err != nil {
-		return nil, fmt.Errorf("failed to check existing records: %w", err)
+		return nil, fmt.Errorf("failed to get latest SHFU record: %w", err)
 	}
-	if len(existingRecords) > 0 {
+	if latestRecord != nil && !latestRecord.ToHeight.LT(toHeight) {
+		// We already have a record with toHeight >= current toHeight, so skip execution
+		logger.InfoContext(ctx, "Skipping SHFU execution: already have record with sufficient height",
+			"chain_id", target.ChainID(),
+			"counterparty_chain_id", counterparty.ChainID(),
+			"current_to_height", toHeight.String(),
+			"existing_to_height", latestRecord.ToHeight.String())
 		return nil, nil
 	}
 
@@ -86,7 +113,9 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 		LatestFinalizedHeader: latestFinalizedHeaderBytes,
 	}
 
-	fmt.Printf("SHFU executed for target chain %s with counterparty chain %s\n", target.ChainID(), counterparty.ChainID())
+	logger.InfoContext(ctx, "SHFU executed successfully",
+		"target_chain_id", target.ChainID(),
+		"counterparty_chain_id", counterparty.ChainID())
 
 	// Save the record to database with retry logic for temporary errors
 	err = retry.Do(
@@ -102,14 +131,18 @@ func SHFUExecuteAndStore(ctx context.Context, target *core.ProvableChain, counte
 			return storage.IsTemporaryError(err)
 		}),
 		retry.OnRetry(func(n uint, err error) {
-			fmt.Printf("Retry attempt %d for SaveSHFUResult due to temporary error: %v\n", n+1, err)
+			logger.ErrorContext(ctx, "Retry attempt for SaveSHFUResult due to temporary error", err,
+				"attempt", n+1,
+				"target_chain_id", target.ChainID())
 		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save SHFU result to database after retries: %w", err)
 	}
 
-	fmt.Printf("Successfully saved SHFU result to database for chain %s\n", target.ChainID())
+	logger.InfoContext(ctx, "Successfully saved SHFU result to database",
+		"target_chain_id", target.ChainID(),
+		"counterparty_chain_id", counterparty.ChainID())
 
 	// Return the saved record
 	return record, nil

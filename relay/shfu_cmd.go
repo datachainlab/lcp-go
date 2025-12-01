@@ -18,10 +18,10 @@ import (
 
 const (
 	// SHFU flags
-	flagSQLitePath     = "sqlite_path"
-	flagGRPCAddr       = "grpc_addr"
-	flagUpdateInterval = "update_interval"
-	flagCleanupAge     = "cleanup_age"
+	flagSQLitePath     = "sqlite-path"
+	flagGRPCAddr       = "grpc-addr"
+	flagUpdateInterval = "update-interval"
+	flagCleanupAge     = "cleanup-age"
 )
 
 // shfuCmd creates the shfu subcommand
@@ -50,13 +50,13 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 			// Get database path from flag
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+				return fmt.Errorf("database path is required (use --sqlite-path flag)")
 			}
 
 			fmt.Printf("Initializing database at: %s\n", dbPath)
 
 			// Create storage factory and initialize database
-			storage, err := shfu_storage.InitSQLiteStorage(dbPath)
+			storage, err := shfu_storage.InitSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to create storage: %w", err)
 			}
@@ -82,7 +82,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+				return fmt.Errorf("database path is required (use --sqlite-path flag)")
 			}
 
 			// Get filter options
@@ -90,7 +90,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			counterpartyChainID := cmd.Flag("counterparty-chain-id").Value.String()
 			noHeader, _ := cmd.Flags().GetBool("no-header")
 
-			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -147,7 +147,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+				return fmt.Errorf("database path is required (use --sqlite-path flag)")
 			}
 
 			// Parse path:chain format and get chains
@@ -161,7 +161,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
-			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -202,7 +202,7 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+				return fmt.Errorf("database path is required (use --sqlite-path flag)")
 			}
 
 			cleanupStr := args[0]
@@ -216,7 +216,7 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			fmt.Printf("Opening database: %s\n", dbPath)
-			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -240,9 +240,9 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 
 func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "update --sqlite_path <sqlite file path> <path-name:chain-id>",
+		Use:   "update --sqlite-path <sqlite file path> <path-name:chain-id>",
 		Short: "Execute SHFU (SetupHeadersForUpdate) for specified chain and save results to database",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("path:chain and from-height are required")
@@ -257,11 +257,11 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			// Get database path from flag
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
-				return fmt.Errorf("database path is required (use --sqlite_path flag)")
+				return fmt.Errorf("database path is required (use --sqlite-path flag)")
 			}
 
 			// Open existing database connection
-			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -346,7 +346,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 					return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m')", cleanupAgeStr, err)
 				}
 			} // Open storage
-			storage, err := shfu_storage.OpenSQLiteStorage(dbPath)
+			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -395,8 +395,11 @@ func dbPathFlag(cmd *cobra.Command) *cobra.Command {
 }
 
 func grpcAddrFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagGRPCAddr, ":8080", "gRPC server address (default: :8080)")
+	cmd.Flags().String(flagGRPCAddr, "", "gRPC server address (required)")
 	if err := viper.BindPFlag(flagGRPCAddr, cmd.Flags().Lookup(flagGRPCAddr)); err != nil {
+		panic(err)
+	}
+	if err := cmd.MarkFlagRequired(flagGRPCAddr); err != nil {
 		panic(err)
 	}
 	return cmd
