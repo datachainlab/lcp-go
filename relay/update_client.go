@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"fmt"
-
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 )
