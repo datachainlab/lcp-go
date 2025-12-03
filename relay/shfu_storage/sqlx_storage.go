@@ -175,14 +175,6 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 		ORDER BY updated_at DESC
 	`, p1, p2, p3, p4)
 
-	// Check context deadline for debugging
-	if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
-		timeUntilDeadline := time.Until(deadline)
-		if timeUntilDeadline < 30*time.Second {
-			return nil, errWithStack("context deadline (%v) is shorter than SQLite busy timeout (30s)", timeUntilDeadline)
-		}
-	}
-
 	rows, err := s.db.QueryxContext(ctx, query, chainID, counterpartyChainID, toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight())
 	if err != nil {
 		return nil, errWithStack("failed to query SHFU records (chain=%s, counterparty=%s, toHeight=%d-%d): %w",

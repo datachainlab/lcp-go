@@ -106,15 +106,17 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		}(chainPair)
 	}
 
-	// Start gRPC server
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := srv.runGRPCServer(ctx)
-		if err != nil {
-			fails <- fmt.Errorf("gRPC server failed: %w", err)
-		}
-	}()
+	// Start gRPC server if address is configured
+	if srv.GRPCAddr != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := srv.runGRPCServer(ctx)
+			if err != nil {
+				fails <- fmt.Errorf("gRPC server failed: %w", err)
+			}
+		}()
+	}
 
 	// Start cleanup goroutine if CleanupAge is configured with minimum interval
 	if srv.CleanupAge >= MinCleanupInterval {
@@ -182,11 +184,6 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair *S
 
 func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 	logger := shfu_logger.GetSHFULogger(ctx)
-
-	// Check if gRPC address is provided
-	if srv.GRPCAddr == "" {
-		return fmt.Errorf("gRPC server address is not configured")
-	}
 
 	// Create gRPC server
 	grpcServer := grpc.NewServer()

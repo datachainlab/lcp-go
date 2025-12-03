@@ -12,7 +12,7 @@ import (
 
 type Int64Gauge struct {
 	gauge metric.Int64Gauge
-	mutex sync.RWMutex
+	mutex sync.Mutex
 }
 
 var (
@@ -37,7 +37,7 @@ func NewInt64Gauge(name string, desc string) (*Int64Gauge, error) {
 	}
 	return &Int64Gauge{
 		gauge: gauge,
-		mutex: sync.RWMutex{},
+		mutex: sync.Mutex{},
 	}, nil
 }
 

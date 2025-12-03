@@ -25,7 +25,13 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, er
 	}
 
 	dialect := NewSQLiteDialect()
-	return NewSqlxSHFUStorage(db, dialect, dbPath)
+
+	storage, err := NewSqlxSHFUStorage(db, dialect, dbPath)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	return storage, nil
 }
 
 // OpenSQLiteStorage opens an existing SQLite database file for SHFU storage

@@ -345,7 +345,9 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m')", cleanupAgeStr, err)
 				}
-			} // Open storage
+			}
+
+			// Open storage
 			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
@@ -395,11 +397,8 @@ func dbPathFlag(cmd *cobra.Command) *cobra.Command {
 }
 
 func grpcAddrFlag(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagGRPCAddr, "", "gRPC server address (required)")
+	cmd.Flags().String(flagGRPCAddr, "", "gRPC server address (optional, if not specified gRPC server will not start)")
 	if err := viper.BindPFlag(flagGRPCAddr, cmd.Flags().Lookup(flagGRPCAddr)); err != nil {
-		panic(err)
-	}
-	if err := cmd.MarkFlagRequired(flagGRPCAddr); err != nil {
 		panic(err)
 	}
 	return cmd
