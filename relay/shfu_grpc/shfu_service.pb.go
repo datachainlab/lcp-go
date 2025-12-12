@@ -114,12 +114,13 @@ var xxx_messageInfo_UpdateClientResult proto.InternalMessageInfo
 type SHFURecord struct {
 	ChainId             string                `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
 	CounterpartyChainId string                `protobuf:"bytes,2,opt,name=counterparty_chain_id,json=counterpartyChainId,proto3" json:"counterparty_chain_id,omitempty"`
-	ToHeight            *Height               `protobuf:"bytes,3,opt,name=to_height,json=toHeight,proto3" json:"to_height,omitempty"`
-	ToHeightTime        time.Time             `protobuf:"bytes,4,opt,name=to_height_time,json=toHeightTime,proto3,stdtime" json:"to_height_time"`
-	UpdatedAt           time.Time             `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,stdtime" json:"updated_at"`
-	UpdateClientResults []*UpdateClientResult `protobuf:"bytes,6,rep,name=update_client_results,json=updateClientResults,proto3" json:"update_client_results,omitempty"`
+	FromHeight          *Height               `protobuf:"bytes,3,opt,name=from_height,json=fromHeight,proto3" json:"from_height,omitempty"`
+	ToHeight            *Height               `protobuf:"bytes,4,opt,name=to_height,json=toHeight,proto3" json:"to_height,omitempty"`
+	ToHeightTime        time.Time             `protobuf:"bytes,5,opt,name=to_height_time,json=toHeightTime,proto3,stdtime" json:"to_height_time"`
+	UpdatedAt           time.Time             `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3,stdtime" json:"updated_at"`
+	UpdateClientResults []*UpdateClientResult `protobuf:"bytes,7,rep,name=update_client_results,json=updateClientResults,proto3" json:"update_client_results,omitempty"`
 	// This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
-	LatestFinalizedHeader []byte `protobuf:"bytes,7,opt,name=latest_finalized_header,json=latestFinalizedHeader,proto3" json:"latest_finalized_header,omitempty"`
+	LatestFinalizedHeader []byte `protobuf:"bytes,8,opt,name=latest_finalized_header,json=latestFinalizedHeader,proto3" json:"latest_finalized_header,omitempty"`
 }
 
 func (m *SHFURecord) Reset()         { *m = SHFURecord{} }
@@ -234,26 +235,27 @@ func (m *GetLatestSHFUResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_GetLatestSHFUResponse proto.InternalMessageInfo
 
-// GetSHFUByHeightRequest represents a request to get SHFU record by from/to heights
-type GetSHFUByHeightRequest struct {
+// GetSequentialSHFURecordsRequest represents a request to get sequential SHFU records from a starting height
+type GetSequentialSHFURecordsRequest struct {
 	ChainId             string  `protobuf:"bytes,1,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
 	CounterpartyChainId string  `protobuf:"bytes,2,opt,name=counterparty_chain_id,json=counterpartyChainId,proto3" json:"counterparty_chain_id,omitempty"`
-	ToHeight            *Height `protobuf:"bytes,3,opt,name=to_height,json=toHeight,proto3" json:"to_height,omitempty"`
-	RequestId           string  `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	FromHeight          *Height `protobuf:"bytes,3,opt,name=from_height,json=fromHeight,proto3" json:"from_height,omitempty"`
+	ToHeight            *Height `protobuf:"bytes,4,opt,name=to_height,json=toHeight,proto3" json:"to_height,omitempty"`
+	RequestId           string  `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 }
 
-func (m *GetSHFUByHeightRequest) Reset()         { *m = GetSHFUByHeightRequest{} }
-func (m *GetSHFUByHeightRequest) String() string { return proto.CompactTextString(m) }
-func (*GetSHFUByHeightRequest) ProtoMessage()    {}
-func (*GetSHFUByHeightRequest) Descriptor() ([]byte, []int) {
+func (m *GetSequentialSHFURecordsRequest) Reset()         { *m = GetSequentialSHFURecordsRequest{} }
+func (m *GetSequentialSHFURecordsRequest) String() string { return proto.CompactTextString(m) }
+func (*GetSequentialSHFURecordsRequest) ProtoMessage()    {}
+func (*GetSequentialSHFURecordsRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_37abe7f9a71f71d3, []int{5}
 }
-func (m *GetSHFUByHeightRequest) XXX_Unmarshal(b []byte) error {
+func (m *GetSequentialSHFURecordsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *GetSHFUByHeightRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *GetSequentialSHFURecordsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_GetSHFUByHeightRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_GetSequentialSHFURecordsRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -263,36 +265,36 @@ func (m *GetSHFUByHeightRequest) XXX_Marshal(b []byte, deterministic bool) ([]by
 		return b[:n], nil
 	}
 }
-func (m *GetSHFUByHeightRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetSHFUByHeightRequest.Merge(m, src)
+func (m *GetSequentialSHFURecordsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSequentialSHFURecordsRequest.Merge(m, src)
 }
-func (m *GetSHFUByHeightRequest) XXX_Size() int {
+func (m *GetSequentialSHFURecordsRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *GetSHFUByHeightRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetSHFUByHeightRequest.DiscardUnknown(m)
+func (m *GetSequentialSHFURecordsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSequentialSHFURecordsRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetSHFUByHeightRequest proto.InternalMessageInfo
+var xxx_messageInfo_GetSequentialSHFURecordsRequest proto.InternalMessageInfo
 
-// GetSHFUByHeightResponse represents a response containing the SHFU record for specified heights
-type GetSHFUByHeightResponse struct {
-	Record *SHFURecord `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
-	Found  bool        `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+// GetSequentialSHFURecordsResponse represents a response containing sequential SHFU records
+type GetSequentialSHFURecordsResponse struct {
+	Records      []*SHFURecord `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	RecordsCount int32         `protobuf:"varint,2,opt,name=records_count,json=recordsCount,proto3" json:"records_count,omitempty"`
 }
 
-func (m *GetSHFUByHeightResponse) Reset()         { *m = GetSHFUByHeightResponse{} }
-func (m *GetSHFUByHeightResponse) String() string { return proto.CompactTextString(m) }
-func (*GetSHFUByHeightResponse) ProtoMessage()    {}
-func (*GetSHFUByHeightResponse) Descriptor() ([]byte, []int) {
+func (m *GetSequentialSHFURecordsResponse) Reset()         { *m = GetSequentialSHFURecordsResponse{} }
+func (m *GetSequentialSHFURecordsResponse) String() string { return proto.CompactTextString(m) }
+func (*GetSequentialSHFURecordsResponse) ProtoMessage()    {}
+func (*GetSequentialSHFURecordsResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_37abe7f9a71f71d3, []int{6}
 }
-func (m *GetSHFUByHeightResponse) XXX_Unmarshal(b []byte) error {
+func (m *GetSequentialSHFURecordsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *GetSHFUByHeightResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *GetSequentialSHFURecordsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_GetSHFUByHeightResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_GetSequentialSHFURecordsResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -302,17 +304,17 @@ func (m *GetSHFUByHeightResponse) XXX_Marshal(b []byte, deterministic bool) ([]b
 		return b[:n], nil
 	}
 }
-func (m *GetSHFUByHeightResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_GetSHFUByHeightResponse.Merge(m, src)
+func (m *GetSequentialSHFURecordsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSequentialSHFURecordsResponse.Merge(m, src)
 }
-func (m *GetSHFUByHeightResponse) XXX_Size() int {
+func (m *GetSequentialSHFURecordsResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *GetSHFUByHeightResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_GetSHFUByHeightResponse.DiscardUnknown(m)
+func (m *GetSequentialSHFURecordsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSequentialSHFURecordsResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_GetSHFUByHeightResponse proto.InternalMessageInfo
+var xxx_messageInfo_GetSequentialSHFURecordsResponse proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Height)(nil), "relayer.provers.lcp.Height")
@@ -320,8 +322,8 @@ func init() {
 	proto.RegisterType((*SHFURecord)(nil), "relayer.provers.lcp.SHFURecord")
 	proto.RegisterType((*GetLatestSHFURequest)(nil), "relayer.provers.lcp.GetLatestSHFURequest")
 	proto.RegisterType((*GetLatestSHFUResponse)(nil), "relayer.provers.lcp.GetLatestSHFUResponse")
-	proto.RegisterType((*GetSHFUByHeightRequest)(nil), "relayer.provers.lcp.GetSHFUByHeightRequest")
-	proto.RegisterType((*GetSHFUByHeightResponse)(nil), "relayer.provers.lcp.GetSHFUByHeightResponse")
+	proto.RegisterType((*GetSequentialSHFURecordsRequest)(nil), "relayer.provers.lcp.GetSequentialSHFURecordsRequest")
+	proto.RegisterType((*GetSequentialSHFURecordsResponse)(nil), "relayer.provers.lcp.GetSequentialSHFURecordsResponse")
 }
 
 func init() {
@@ -329,48 +331,51 @@ func init() {
 }
 
 var fileDescriptor_37abe7f9a71f71d3 = []byte{
-	// 647 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x55, 0x4d, 0x4f, 0xdb, 0x4a,
-	0x14, 0x8d, 0x09, 0x84, 0xe4, 0x86, 0x07, 0xd2, 0x40, 0x1e, 0x7e, 0x79, 0xef, 0x39, 0x28, 0x8b,
-	0x42, 0xbf, 0x6c, 0x29, 0x95, 0xda, 0x6e, 0x0b, 0x12, 0x1f, 0x15, 0xea, 0xc2, 0x94, 0x0d, 0x5d,
-	0x58, 0x13, 0xfb, 0xc6, 0xb6, 0xe4, 0x78, 0xdc, 0x99, 0x31, 0x12, 0x5d, 0xf7, 0x07, 0xf0, 0x7f,
-	0xba, 0xe9, 0x92, 0x25, 0xcb, 0xae, 0xfa, 0x41, 0xfe, 0x48, 0x95, 0x19, 0x1b, 0x1a, 0x48, 0x25,
-	0x5a, 0x95, 0x9d, 0xef, 0xbd, 0xe7, 0x9e, 0x99, 0x7b, 0xce, 0x95, 0x07, 0xee, 0x71, 0x4c, 0xe8,
-	0x09, 0x72, 0x27, 0xe3, 0xec, 0x18, 0xb9, 0x70, 0x12, 0x3f, 0x73, 0x44, 0x34, 0xc8, 0x3d, 0x81,
-	0xfc, 0x38, 0xf6, 0xd1, 0xce, 0x38, 0x93, 0x8c, 0x2c, 0x17, 0x38, 0xbb, 0xc0, 0xd9, 0x89, 0x9f,
-	0xb5, 0x57, 0x42, 0x16, 0x32, 0x55, 0x77, 0xc6, 0x5f, 0x1a, 0xda, 0xee, 0x84, 0x8c, 0x85, 0x09,
-	0x3a, 0x2a, 0xea, 0xe7, 0x03, 0x47, 0xc6, 0x43, 0x14, 0x92, 0x0e, 0x33, 0x0d, 0xe8, 0x1e, 0x41,
-	0x6d, 0x17, 0xe3, 0x30, 0x92, 0x64, 0x1d, 0x96, 0x38, 0x1e, 0xc7, 0x22, 0x66, 0xa9, 0x97, 0xe6,
-	0xc3, 0x3e, 0x72, 0xd3, 0x58, 0x33, 0x36, 0x66, 0xdd, 0xc5, 0x32, 0xfd, 0x4a, 0x65, 0x27, 0x80,
-	0x91, 0xea, 0x35, 0x67, 0x26, 0x81, 0x9a, 0xb1, 0xbb, 0x0f, 0xe4, 0x30, 0x0b, 0xa8, 0xc4, 0xad,
-	0x24, 0xc6, 0x54, 0xba, 0x28, 0xf2, 0x44, 0x12, 0x13, 0xe6, 0x87, 0x28, 0x04, 0x0d, 0x51, 0xf1,
-	0x2f, 0xb8, 0x65, 0x48, 0xfe, 0x83, 0x86, 0x88, 0xc3, 0x94, 0xca, 0x9c, 0xa3, 0xa2, 0x5c, 0x70,
-	0xaf, 0x12, 0xdd, 0x0f, 0x55, 0x80, 0x83, 0xdd, 0xed, 0x43, 0x17, 0x7d, 0xc6, 0x03, 0xf2, 0x0f,
-	0xd4, 0xfd, 0x88, 0xc6, 0xa9, 0x17, 0x07, 0x8a, 0xa7, 0xe1, 0xce, 0xab, 0x78, 0x2f, 0x20, 0x3d,
-	0x68, 0xf9, 0x2c, 0x4f, 0x25, 0xf2, 0x8c, 0x72, 0x79, 0xe2, 0x5d, 0xe2, 0x66, 0x14, 0x6e, 0xf9,
-	0xc7, 0xe2, 0x56, 0xd1, 0xf3, 0x1c, 0x1a, 0x92, 0x95, 0xe3, 0x54, 0xd7, 0x8c, 0x8d, 0x66, 0xef,
-	0x5f, 0x7b, 0x8a, 0xce, 0xb6, 0x9e, 0xcd, 0xad, 0x4b, 0x56, 0xe8, 0xf6, 0x12, 0x16, 0x2f, 0x3b,
-	0xbd, 0xb1, 0xbc, 0xe6, 0xac, 0x6a, 0x6f, 0xdb, 0x5a, 0x7b, 0xbb, 0xd4, 0xde, 0x7e, 0x5d, 0x6a,
-	0xbf, 0x59, 0x3f, 0xfb, 0xdc, 0xa9, 0x9c, 0x7e, 0xe9, 0x18, 0xee, 0x42, 0xc9, 0x33, 0x2e, 0x92,
-	0x2d, 0x80, 0x5c, 0x29, 0x16, 0x78, 0x54, 0x9a, 0x73, 0xbf, 0xc0, 0xd3, 0x28, 0xfa, 0x5e, 0x48,
-	0xf2, 0x06, 0x5a, 0x3a, 0xf0, 0x7c, 0xa5, 0xbb, 0xc7, 0x95, 0xf0, 0xc2, 0xac, 0xad, 0x55, 0x37,
-	0x9a, 0xbd, 0xf5, 0xa9, 0x63, 0xdd, 0x34, 0xca, 0x5d, 0xce, 0x6f, 0xe4, 0x04, 0x79, 0x0a, 0xab,
-	0x09, 0x95, 0x28, 0xa4, 0x37, 0x88, 0x53, 0x9a, 0xc4, 0xef, 0x30, 0xf0, 0x22, 0xa4, 0x01, 0x72,
-	0x73, 0x5e, 0x39, 0xd6, 0xd2, 0xe5, 0xed, 0xb2, 0xba, 0xab, 0x8a, 0xdd, 0xf7, 0x06, 0xac, 0xec,
-	0xa0, 0xdc, 0x57, 0x45, 0x6d, 0xe3, 0xdb, 0x1c, 0x85, 0xfc, 0xd3, 0x3e, 0xfe, 0x0f, 0xc0, 0x35,
-	0xf3, 0x18, 0x58, 0x55, 0xc0, 0x46, 0x91, 0xd9, 0x0b, 0xba, 0x03, 0x68, 0x5d, 0xbb, 0x85, 0xc8,
-	0x58, 0x2a, 0x90, 0x3c, 0x83, 0x1a, 0x57, 0x8b, 0xa5, 0x2e, 0xd1, 0xec, 0x75, 0xa6, 0xaa, 0x74,
-	0xb5, 0x7f, 0x6e, 0x01, 0x27, 0x2b, 0x30, 0x37, 0x60, 0x79, 0xaa, 0x2f, 0x55, 0x77, 0x75, 0xd0,
-	0xfd, 0x68, 0xc0, 0xdf, 0x3b, 0xa8, 0x8e, 0xd8, 0x3c, 0x29, 0x56, 0xe6, 0x6e, 0x06, 0xfe, 0xfd,
-	0xc5, 0x9d, 0x94, 0x6a, 0xf6, 0xba, 0x54, 0x11, 0xac, 0xde, 0x98, 0xe0, 0x4e, 0xc4, 0xea, 0x8d,
-	0x0c, 0x68, 0x8e, 0xc1, 0x07, 0xfa, 0x2f, 0x47, 0x06, 0xf0, 0xd7, 0x84, 0x49, 0xe4, 0xfe, 0x54,
-	0xfe, 0x69, 0xeb, 0xd4, 0x7e, 0x70, 0x1b, 0x68, 0x31, 0x46, 0x02, 0x4b, 0xd7, 0x26, 0x24, 0x0f,
-	0x7f, 0xd6, 0x3e, 0xc5, 0xc9, 0xf6, 0xa3, 0xdb, 0x81, 0xf5, 0x69, 0x9b, 0xfb, 0x67, 0xdf, 0xac,
-	0xca, 0xd9, 0x85, 0x65, 0x9c, 0x5f, 0x58, 0xc6, 0xd7, 0x0b, 0xcb, 0x38, 0x1d, 0x59, 0x95, 0xf3,
-	0x91, 0x55, 0xf9, 0x34, 0xb2, 0x2a, 0x47, 0x76, 0x18, 0xcb, 0x28, 0xef, 0xdb, 0x3e, 0x1b, 0x3a,
-	0x01, 0x95, 0x54, 0x59, 0x9f, 0xd0, 0xfe, 0xf8, 0x0d, 0x78, 0x1c, 0x32, 0x47, 0x9d, 0xa4, 0x1f,
-	0x83, 0x90, 0x67, 0x7e, 0xbf, 0xa6, 0xfe, 0x06, 0x4f, 0xbe, 0x07, 0x00, 0x00, 0xff, 0xff, 0x30,
-	0x20, 0x70, 0x40, 0x34, 0x06, 0x00, 0x00,
+	// 700 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x55, 0x4b, 0x6f, 0xd3, 0x4a,
+	0x14, 0x8e, 0x9b, 0xe6, 0x75, 0x92, 0xf6, 0x4a, 0xd3, 0x46, 0xd7, 0x37, 0x17, 0x92, 0x28, 0x48,
+	0xb4, 0x20, 0x61, 0x4b, 0xe1, 0x2d, 0xb1, 0xa1, 0x91, 0xfa, 0x40, 0x15, 0x0b, 0x97, 0x6e, 0xca,
+	0xc2, 0x9a, 0xd8, 0x63, 0xc7, 0x92, 0xe3, 0x31, 0x33, 0xe3, 0x4a, 0x65, 0x89, 0x90, 0xba, 0xed,
+	0xcf, 0xea, 0xb2, 0x4b, 0x56, 0x3c, 0xda, 0x5f, 0xc1, 0x0a, 0xe4, 0x19, 0xbb, 0x25, 0x6d, 0x4a,
+	0xa9, 0x04, 0x62, 0xe7, 0x73, 0xce, 0xf7, 0x9d, 0x99, 0xf3, 0x9d, 0x4f, 0x1e, 0xb8, 0xcd, 0x48,
+	0x88, 0xf7, 0x08, 0x33, 0x63, 0x46, 0x77, 0x09, 0xe3, 0x66, 0xe8, 0xc4, 0x26, 0x1f, 0x79, 0x89,
+	0xcd, 0x09, 0xdb, 0x0d, 0x1c, 0x62, 0xc4, 0x8c, 0x0a, 0x8a, 0x16, 0x32, 0x9c, 0x91, 0xe1, 0x8c,
+	0xd0, 0x89, 0x5b, 0x8b, 0x3e, 0xf5, 0xa9, 0xac, 0x9b, 0xe9, 0x97, 0x82, 0xb6, 0x3a, 0x3e, 0xa5,
+	0x7e, 0x48, 0x4c, 0x19, 0x0d, 0x13, 0xcf, 0x14, 0xc1, 0x98, 0x70, 0x81, 0xc7, 0xb1, 0x02, 0xf4,
+	0x76, 0xa0, 0xbc, 0x4e, 0x02, 0x7f, 0x24, 0xd0, 0x12, 0xfc, 0xc3, 0xc8, 0x6e, 0xc0, 0x03, 0x1a,
+	0xd9, 0x51, 0x32, 0x1e, 0x12, 0xa6, 0x6b, 0x5d, 0x6d, 0x79, 0xd6, 0x9a, 0xcf, 0xd3, 0x2f, 0x65,
+	0x76, 0x02, 0x38, 0x92, 0x5c, 0x7d, 0x66, 0x12, 0xa8, 0x3a, 0xf6, 0x36, 0x01, 0x6d, 0xc7, 0x2e,
+	0x16, 0x64, 0x10, 0x06, 0x24, 0x12, 0x16, 0xe1, 0x49, 0x28, 0x90, 0x0e, 0x95, 0x31, 0xe1, 0x1c,
+	0xfb, 0x44, 0xf6, 0x6f, 0x58, 0x79, 0x88, 0x6e, 0x40, 0x8d, 0x07, 0x7e, 0x84, 0x45, 0xc2, 0x88,
+	0x6c, 0xd9, 0xb0, 0xce, 0x12, 0xbd, 0xaf, 0x45, 0x80, 0xad, 0xf5, 0xd5, 0x6d, 0x8b, 0x38, 0x94,
+	0xb9, 0xe8, 0x3f, 0xa8, 0x3a, 0x23, 0x1c, 0x44, 0x76, 0xe0, 0xca, 0x3e, 0x35, 0xab, 0x22, 0xe3,
+	0x0d, 0x17, 0xf5, 0xa1, 0xe9, 0xd0, 0x24, 0x12, 0x84, 0xc5, 0x98, 0x89, 0x3d, 0xfb, 0x14, 0x37,
+	0x23, 0x71, 0x0b, 0x3f, 0x16, 0x07, 0x19, 0xe7, 0x19, 0xd4, 0x3d, 0x46, 0xc7, 0xf9, 0x40, 0xc5,
+	0xae, 0xb6, 0x5c, 0xef, 0xff, 0x6f, 0x4c, 0x51, 0xda, 0x50, 0xd3, 0x59, 0x90, 0xe2, 0x33, 0xed,
+	0x9e, 0x40, 0x4d, 0xd0, 0x9c, 0x3b, 0x7b, 0x35, 0xb7, 0x2a, 0x68, 0xc6, 0x7c, 0x01, 0xf3, 0xa7,
+	0x4c, 0x3b, 0x5d, 0x8e, 0x5e, 0x92, 0xf4, 0x96, 0xa1, 0x36, 0x67, 0xe4, 0x9b, 0x33, 0x5e, 0xe5,
+	0x9b, 0x5b, 0xa9, 0x1e, 0x7e, 0xec, 0x14, 0x0e, 0x3e, 0x75, 0x34, 0xab, 0x91, 0xf7, 0x49, 0x8b,
+	0x68, 0x00, 0x90, 0x48, 0xbd, 0x5d, 0x1b, 0x0b, 0xbd, 0x7c, 0x8d, 0x3e, 0xb5, 0x8c, 0xf7, 0x5c,
+	0xa0, 0xd7, 0xd0, 0x54, 0x81, 0xed, 0xc8, 0xad, 0xd9, 0x4c, 0xae, 0x8d, 0xeb, 0x95, 0x6e, 0x71,
+	0xb9, 0xde, 0x5f, 0x9a, 0x3a, 0xd6, 0xc5, 0x35, 0x5b, 0x0b, 0xc9, 0x85, 0x1c, 0x47, 0x8f, 0xe0,
+	0xdf, 0x10, 0x0b, 0xc2, 0x85, 0xed, 0x05, 0x11, 0x0e, 0x83, 0xb7, 0xc4, 0xb5, 0x47, 0x04, 0xbb,
+	0x84, 0xe9, 0x55, 0xb9, 0xef, 0xa6, 0x2a, 0xaf, 0xe6, 0xd5, 0x75, 0x59, 0xec, 0xbd, 0xd7, 0x60,
+	0x71, 0x8d, 0x88, 0x4d, 0x59, 0x54, 0x26, 0x78, 0x93, 0x10, 0x2e, 0x7e, 0xb7, 0x0b, 0x6e, 0x02,
+	0x30, 0xd5, 0x39, 0x05, 0x16, 0x25, 0xb0, 0x96, 0x65, 0x36, 0xdc, 0x9e, 0x07, 0xcd, 0x73, 0xb7,
+	0xe0, 0x31, 0x8d, 0x38, 0x41, 0x8f, 0xa1, 0xcc, 0xa4, 0x2d, 0xe5, 0x25, 0xea, 0xfd, 0xce, 0x54,
+	0x95, 0xce, 0xdc, 0x6b, 0x65, 0x70, 0xb4, 0x08, 0x25, 0x8f, 0x26, 0x91, 0xba, 0x54, 0xd5, 0x52,
+	0x41, 0x6f, 0x7f, 0x06, 0x3a, 0x6b, 0x44, 0x6c, 0xa5, 0x07, 0x47, 0x22, 0xc0, 0xe1, 0x19, 0x93,
+	0xff, 0xa1, 0xc9, 0xff, 0x96, 0xff, 0x27, 0x15, 0x2f, 0x9d, 0x57, 0xfc, 0x9d, 0x06, 0xdd, 0xcb,
+	0x95, 0xc8, 0xd4, 0x7f, 0x0a, 0x15, 0x25, 0x27, 0xd7, 0x35, 0x69, 0xd2, 0x2b, 0xe5, 0xcf, 0xf1,
+	0xe8, 0x16, 0xcc, 0x65, 0x9f, 0xb6, 0x54, 0x45, 0x4a, 0x54, 0xb2, 0x1a, 0x59, 0x72, 0x90, 0xe6,
+	0xfa, 0xdf, 0x34, 0xa8, 0xa7, 0xe4, 0x2d, 0xf5, 0x17, 0x46, 0x1e, 0xcc, 0x4d, 0xd8, 0x00, 0xdd,
+	0x99, 0x7a, 0xde, 0x34, 0xc3, 0xb6, 0xee, 0xfe, 0x0a, 0x34, 0x9b, 0x6b, 0x5f, 0x03, 0xfd, 0xb2,
+	0xe1, 0xd1, 0x83, 0xcb, 0x1a, 0xfd, 0xcc, 0x35, 0xad, 0x87, 0xd7, 0x64, 0xa9, 0x9b, 0xac, 0x6c,
+	0x1e, 0x7e, 0x69, 0x17, 0x0e, 0x8f, 0xdb, 0xda, 0xd1, 0x71, 0x5b, 0xfb, 0x7c, 0xdc, 0xd6, 0x0e,
+	0x4e, 0xda, 0x85, 0xa3, 0x93, 0x76, 0xe1, 0xc3, 0x49, 0xbb, 0xb0, 0x63, 0xf8, 0x81, 0x18, 0x25,
+	0x43, 0xc3, 0xa1, 0x63, 0xd3, 0xc5, 0x02, 0x4b, 0xbf, 0x85, 0x78, 0x98, 0xbe, 0x5f, 0xf7, 0x7c,
+	0x6a, 0xca, 0x23, 0xd5, 0x43, 0xe6, 0xb3, 0xd8, 0x19, 0x96, 0xe5, 0xbf, 0xe8, 0xfe, 0xf7, 0x00,
+	0x00, 0x00, 0xff, 0xff, 0x3e, 0x90, 0xe6, 0xc7, 0xf0, 0x06, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -385,10 +390,11 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type SHFUServiceClient interface {
-	// GetLatestSHFU retrieves the most recent SHFU record for a specific chain
+	// GetLatestSequentialSHFU retrieves the last SHFU record for a specific chain
 	GetLatestSHFU(ctx context.Context, in *GetLatestSHFURequest, opts ...grpc.CallOption) (*GetLatestSHFUResponse, error)
-	// GetSHFUByHeight retrieves SHFU record for specific from/to heights
-	GetSHFUByHeight(ctx context.Context, in *GetSHFUByHeightRequest, opts ...grpc.CallOption) (*GetSHFUByHeightResponse, error)
+	// GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
+	GetSequentialSHFURecords(ctx context.Context, in *GetSequentialSHFURecordsRequest, opts ...grpc.CallOption) (*GetSequentialSHFURecordsResponse, error)
 }
 
 type sHFUServiceClient struct {
@@ -408,9 +414,9 @@ func (c *sHFUServiceClient) GetLatestSHFU(ctx context.Context, in *GetLatestSHFU
 	return out, nil
 }
 
-func (c *sHFUServiceClient) GetSHFUByHeight(ctx context.Context, in *GetSHFUByHeightRequest, opts ...grpc.CallOption) (*GetSHFUByHeightResponse, error) {
-	out := new(GetSHFUByHeightResponse)
-	err := c.cc.Invoke(ctx, "/relayer.provers.lcp.SHFUService/GetSHFUByHeight", in, out, opts...)
+func (c *sHFUServiceClient) GetSequentialSHFURecords(ctx context.Context, in *GetSequentialSHFURecordsRequest, opts ...grpc.CallOption) (*GetSequentialSHFURecordsResponse, error) {
+	out := new(GetSequentialSHFURecordsResponse)
+	err := c.cc.Invoke(ctx, "/relayer.provers.lcp.SHFUService/GetSequentialSHFURecords", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -419,10 +425,11 @@ func (c *sHFUServiceClient) GetSHFUByHeight(ctx context.Context, in *GetSHFUByHe
 
 // SHFUServiceServer is the server API for SHFUService service.
 type SHFUServiceServer interface {
-	// GetLatestSHFU retrieves the most recent SHFU record for a specific chain
+	// GetLatestSequentialSHFU retrieves the last SHFU record for a specific chain
 	GetLatestSHFU(context.Context, *GetLatestSHFURequest) (*GetLatestSHFUResponse, error)
-	// GetSHFUByHeight retrieves SHFU record for specific from/to heights
-	GetSHFUByHeight(context.Context, *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error)
+	// GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
+	GetSequentialSHFURecords(context.Context, *GetSequentialSHFURecordsRequest) (*GetSequentialSHFURecordsResponse, error)
 }
 
 // UnimplementedSHFUServiceServer can be embedded to have forward compatible implementations.
@@ -432,8 +439,8 @@ type UnimplementedSHFUServiceServer struct {
 func (*UnimplementedSHFUServiceServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFURequest) (*GetLatestSHFUResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetLatestSHFU not implemented")
 }
-func (*UnimplementedSHFUServiceServer) GetSHFUByHeight(ctx context.Context, req *GetSHFUByHeightRequest) (*GetSHFUByHeightResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetSHFUByHeight not implemented")
+func (*UnimplementedSHFUServiceServer) GetSequentialSHFURecords(ctx context.Context, req *GetSequentialSHFURecordsRequest) (*GetSequentialSHFURecordsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSequentialSHFURecords not implemented")
 }
 
 func RegisterSHFUServiceServer(s grpc1.Server, srv SHFUServiceServer) {
@@ -458,20 +465,20 @@ func _SHFUService_GetLatestSHFU_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SHFUService_GetSHFUByHeight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetSHFUByHeightRequest)
+func _SHFUService_GetSequentialSHFURecords_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSequentialSHFURecordsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SHFUServiceServer).GetSHFUByHeight(ctx, in)
+		return srv.(SHFUServiceServer).GetSequentialSHFURecords(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/relayer.provers.lcp.SHFUService/GetSHFUByHeight",
+		FullMethod: "/relayer.provers.lcp.SHFUService/GetSequentialSHFURecords",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SHFUServiceServer).GetSHFUByHeight(ctx, req.(*GetSHFUByHeightRequest))
+		return srv.(SHFUServiceServer).GetSequentialSHFURecords(ctx, req.(*GetSequentialSHFURecordsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -485,8 +492,8 @@ var _SHFUService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _SHFUService_GetLatestSHFU_Handler,
 		},
 		{
-			MethodName: "GetSHFUByHeight",
-			Handler:    _SHFUService_GetSHFUByHeight_Handler,
+			MethodName: "GetSequentialSHFURecords",
+			Handler:    _SHFUService_GetSequentialSHFURecords_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -588,7 +595,7 @@ func (m *SHFURecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		copy(dAtA[i:], m.LatestFinalizedHeader)
 		i = encodeVarintShfuService(dAtA, i, uint64(len(m.LatestFinalizedHeader)))
 		i--
-		dAtA[i] = 0x3a
+		dAtA[i] = 0x42
 	}
 	if len(m.UpdateClientResults) > 0 {
 		for iNdEx := len(m.UpdateClientResults) - 1; iNdEx >= 0; iNdEx-- {
@@ -601,7 +608,7 @@ func (m *SHFURecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 				i = encodeVarintShfuService(dAtA, i, uint64(size))
 			}
 			i--
-			dAtA[i] = 0x32
+			dAtA[i] = 0x3a
 		}
 	}
 	n1, err1 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(m.UpdatedAt, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(m.UpdatedAt):])
@@ -611,7 +618,7 @@ func (m *SHFURecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i -= n1
 	i = encodeVarintShfuService(dAtA, i, uint64(n1))
 	i--
-	dAtA[i] = 0x2a
+	dAtA[i] = 0x32
 	n2, err2 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(m.ToHeightTime, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(m.ToHeightTime):])
 	if err2 != nil {
 		return 0, err2
@@ -619,10 +626,22 @@ func (m *SHFURecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i -= n2
 	i = encodeVarintShfuService(dAtA, i, uint64(n2))
 	i--
-	dAtA[i] = 0x22
+	dAtA[i] = 0x2a
 	if m.ToHeight != nil {
 		{
 			size, err := m.ToHeight.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintShfuService(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.FromHeight != nil {
+		{
+			size, err := m.FromHeight.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -738,7 +757,7 @@ func (m *GetLatestSHFUResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *GetSHFUByHeightRequest) Marshal() (dAtA []byte, err error) {
+func (m *GetSequentialSHFURecordsRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -748,12 +767,12 @@ func (m *GetSHFUByHeightRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *GetSHFUByHeightRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *GetSequentialSHFURecordsRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GetSHFUByHeightRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *GetSequentialSHFURecordsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -763,11 +782,23 @@ func (m *GetSHFUByHeightRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 		copy(dAtA[i:], m.RequestId)
 		i = encodeVarintShfuService(dAtA, i, uint64(len(m.RequestId)))
 		i--
-		dAtA[i] = 0x22
+		dAtA[i] = 0x2a
 	}
 	if m.ToHeight != nil {
 		{
 			size, err := m.ToHeight.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintShfuService(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.FromHeight != nil {
+		{
+			size, err := m.FromHeight.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -794,7 +825,7 @@ func (m *GetSHFUByHeightRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) 
 	return len(dAtA) - i, nil
 }
 
-func (m *GetSHFUByHeightResponse) Marshal() (dAtA []byte, err error) {
+func (m *GetSequentialSHFURecordsResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -804,37 +835,34 @@ func (m *GetSHFUByHeightResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *GetSHFUByHeightResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *GetSequentialSHFURecordsResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *GetSHFUByHeightResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *GetSequentialSHFURecordsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Found {
-		i--
-		if m.Found {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
+	if m.RecordsCount != 0 {
+		i = encodeVarintShfuService(dAtA, i, uint64(m.RecordsCount))
 		i--
 		dAtA[i] = 0x10
 	}
-	if m.Record != nil {
-		{
-			size, err := m.Record.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
+	if len(m.Records) > 0 {
+		for iNdEx := len(m.Records) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Records[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintShfuService(dAtA, i, uint64(size))
 			}
-			i -= size
-			i = encodeVarintShfuService(dAtA, i, uint64(size))
+			i--
+			dAtA[i] = 0xa
 		}
-		i--
-		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
 }
@@ -896,6 +924,10 @@ func (m *SHFURecord) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovShfuService(uint64(l))
 	}
+	if m.FromHeight != nil {
+		l = m.FromHeight.Size()
+		n += 1 + l + sovShfuService(uint64(l))
+	}
 	if m.ToHeight != nil {
 		l = m.ToHeight.Size()
 		n += 1 + l + sovShfuService(uint64(l))
@@ -954,7 +986,7 @@ func (m *GetLatestSHFUResponse) Size() (n int) {
 	return n
 }
 
-func (m *GetSHFUByHeightRequest) Size() (n int) {
+func (m *GetSequentialSHFURecordsRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -968,6 +1000,10 @@ func (m *GetSHFUByHeightRequest) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovShfuService(uint64(l))
 	}
+	if m.FromHeight != nil {
+		l = m.FromHeight.Size()
+		n += 1 + l + sovShfuService(uint64(l))
+	}
 	if m.ToHeight != nil {
 		l = m.ToHeight.Size()
 		n += 1 + l + sovShfuService(uint64(l))
@@ -979,18 +1015,20 @@ func (m *GetSHFUByHeightRequest) Size() (n int) {
 	return n
 }
 
-func (m *GetSHFUByHeightResponse) Size() (n int) {
+func (m *GetSequentialSHFURecordsResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Record != nil {
-		l = m.Record.Size()
-		n += 1 + l + sovShfuService(uint64(l))
+	if len(m.Records) > 0 {
+		for _, e := range m.Records {
+			l = e.Size()
+			n += 1 + l + sovShfuService(uint64(l))
+		}
 	}
-	if m.Found {
-		n += 2
+	if m.RecordsCount != 0 {
+		n += 1 + sovShfuService(uint64(m.RecordsCount))
 	}
 	return n
 }
@@ -1302,6 +1340,42 @@ func (m *SHFURecord) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromHeight", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FromHeight == nil {
+				m.FromHeight = &Height{}
+			}
+			if err := m.FromHeight.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ToHeight", wireType)
 			}
 			var msglen int
@@ -1336,7 +1410,7 @@ func (m *SHFURecord) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ToHeightTime", wireType)
 			}
@@ -1369,7 +1443,7 @@ func (m *SHFURecord) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 5:
+		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UpdatedAt", wireType)
 			}
@@ -1402,7 +1476,7 @@ func (m *SHFURecord) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
+		case 7:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field UpdateClientResults", wireType)
 			}
@@ -1436,7 +1510,7 @@ func (m *SHFURecord) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 7:
+		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field LatestFinalizedHeader", wireType)
 			}
@@ -1743,7 +1817,7 @@ func (m *GetLatestSHFUResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
+func (m *GetSequentialSHFURecordsRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1766,10 +1840,10 @@ func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: GetSHFUByHeightRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: GetSequentialSHFURecordsRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetSHFUByHeightRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: GetSequentialSHFURecordsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -1838,6 +1912,42 @@ func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FromHeight", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowShfuService
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthShfuService
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FromHeight == nil {
+				m.FromHeight = &Height{}
+			}
+			if err := m.FromHeight.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ToHeight", wireType)
 			}
 			var msglen int
@@ -1872,7 +1982,7 @@ func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field RequestId", wireType)
 			}
@@ -1925,7 +2035,7 @@ func (m *GetSHFUByHeightRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *GetSHFUByHeightResponse) Unmarshal(dAtA []byte) error {
+func (m *GetSequentialSHFURecordsResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -1948,15 +2058,15 @@ func (m *GetSHFUByHeightResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: GetSHFUByHeightResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: GetSequentialSHFURecordsResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: GetSHFUByHeightResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: GetSequentialSHFURecordsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Record", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Records", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1983,18 +2093,16 @@ func (m *GetSHFUByHeightResponse) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Record == nil {
-				m.Record = &SHFURecord{}
-			}
-			if err := m.Record.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			m.Records = append(m.Records, &SHFURecord{})
+			if err := m.Records[len(m.Records)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Found", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field RecordsCount", wireType)
 			}
-			var v int
+			m.RecordsCount = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowShfuService
@@ -2004,12 +2112,11 @@ func (m *GetSHFUByHeightResponse) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= int(b&0x7F) << shift
+				m.RecordsCount |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			m.Found = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipShfuService(dAtA[iNdEx:])

@@ -21,13 +21,15 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 		`CREATE TABLE IF NOT EXISTS shfu_records (
 			chain_id TEXT NOT NULL,
 			counterparty_chain_id TEXT NOT NULL,
+			from_height_revision_number INTEGER NOT NULL,
+			from_height_revision_height INTEGER NOT NULL,
 			to_height_revision_number INTEGER NOT NULL,
 			to_height_revision_height INTEGER NOT NULL,
 			to_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			updated_at TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			update_client_results BLOB,
 			latest_finalized_header BLOB, -- Serialized core.Header bytes
-			PRIMARY KEY (chain_id, counterparty_chain_id, to_height_revision_number, to_height_revision_height)
+			PRIMARY KEY (chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height)
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_chain 
 		 ON shfu_records(chain_id)`,

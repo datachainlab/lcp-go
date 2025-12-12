@@ -15,6 +15,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/gogo/protobuf v1.3.2
 	github.com/google/uuid v1.6.0
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.2.0
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/hyperledger-labs/yui-relayer v0.5.16
 	github.com/jmoiron/sqlx v1.4.0
