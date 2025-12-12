@@ -19,6 +19,7 @@ type UpdateClientResult struct {
 type SHFURecord struct {
 	ChainID               string                `json:"chain_id"`
 	CounterpartyChainID   string                `json:"counterparty_chain_id"`
+	FromHeight            clienttypes.Height    `json:"from_height"`
 	ToHeight              clienttypes.Height    `json:"to_height"`
 	ToHeightTime          time.Time             `json:"to_height_time"`
 	UpdatedAt             time.Time             `json:"updated_at"`
@@ -41,6 +42,7 @@ func (r *SHFURecord) FormatSummary() map[string]interface{} {
 
 	return map[string]interface{}{
 		"chain_id":               r.ChainID,
+		"from_height":            r.FromHeight,
 		"to_height":              r.ToHeight,
 		"to_height_time":         r.ToHeightTime.Format(time.RFC3339),
 		"results_received_count": len(r.UpdateClientResults),
@@ -56,11 +58,16 @@ type SHFUStorage interface {
 	SaveSHFUResult(ctx context.Context, record *SHFURecord) error
 
 	// FindSHFUByChainAndHeight finds SHFU records for a specific chain with exact height match
-	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, toHeight ibcexported.Height) ([]*SHFURecord, error)
+	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error)
 
 	// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
 	// If counterpartyChainID is empty, it will be ignored in the query
 	GetLatestSHFUForChain(ctx context.Context, chainID string, counterpartyChainID string) (*SHFURecord, error)
+
+	// GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
+	// If toHeight is not nil, stops when reaching a record with that ToHeight
+	GetSequentialSHFURecords(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error)
 
 	// ListAllSHFURecords lists all SHFU records in the database
 	ListAllSHFURecords(ctx context.Context) ([]*SHFURecord, error)

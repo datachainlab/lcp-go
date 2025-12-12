@@ -187,6 +187,7 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 
 		// Get chain ID from origin chain
 		chainID := pr.originChain.ChainID()
+
 		// Note: This is called from GetLatestFinalizedHeader, so we don't have dstChain info
 		// For now, we'll pass empty string as counterparty chain ID - this needs architectural change
 		header, err := shfu_grpc.GetLatestFinalizedHeader(ctx, grpcAddress, chainID, "", pr.codec)
@@ -218,7 +219,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 			return nil, err
 		}
-		results, err = getUpdateClientFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
+		results, err = getUpdateClientsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
 		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
@@ -267,34 +268,35 @@ func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.Fina
 	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
 		return nil, err
 	}
+
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
 	var results []*shfu_storage.UpdateClientResult
-	i := 0
+
 	for h := range headerStream {
 		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+			return nil, fmt.Errorf("failed to setup a header for update: %w", h.Error)
 		}
 		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
+			return nil, fmt.Errorf("failed to pack header: header=%v %w", h.Header, err)
 		}
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
 		}
 		// ensure the message is valid
 		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
-			return nil, fmt.Errorf("failed to decode headered proxy message: i=%v message=%x %w", i, res.Message, err)
+			return nil, fmt.Errorf("failed to decode headered proxy message: message=%x %w", res.Message, err)
 		}
 		results = append(results, &shfu_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
 		})
-		i++
 	}
+
 	if pr.gauge != nil {
 		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
 	}
@@ -467,41 +469,6 @@ func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
 
 	// Address configured and gRPC enabled, use gRPC
 	return true, pr.config.ShfuGrpcAddress
-}
-
-// getUpdateClientFromGRPC retrieves SHFU results from gRPC server using height range
-func getUpdateClientFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.Chain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
-	logger.InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
-
-	// Get chain ID from target chain and counterparty chain
-	chainID := targetChain.ChainID()
-	counterpartyChainID := counterparty.ChainID()
-
-	// Use a default toHeight (for now, use fromHeight + 1 as a simple default)
-	toHeight := clienttypes.Height{
-		RevisionNumber: latestFinalizedHeader.GetHeight().GetRevisionNumber(),
-		RevisionHeight: latestFinalizedHeader.GetHeight().GetRevisionHeight(),
-	}
-
-	// Get SHFU record by height range
-	record, err := shfu_grpc.GetSHFUByHeight(ctx, grpcAddress, chainID, counterpartyChainID, toHeight)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
-	}
-
-	if record == nil {
-		logger.InfoContext(ctx, "no SHFU record found from gRPC server",
-			"chain_id", chainID,
-			"to_height", fmt.Sprintf("%d-%d", toHeight.RevisionNumber, toHeight.RevisionHeight))
-		return []*shfu_storage.UpdateClientResult{}, nil
-	}
-
-	logger.InfoContext(ctx, "retrieved SHFU record from gRPC server",
-		"chain_id", chainID,
-		"to_height", fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight),
-		"num_results", len(record.UpdateClientResults))
-
-	return record.UpdateClientResults, nil
 }
 
 func (pr *Prover) getLogger() *log.RelayLogger {

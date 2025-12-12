@@ -12,6 +12,7 @@ import (
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -38,6 +39,7 @@ func shfuCmd(ctx *config.Context) *cobra.Command {
 		dbCleanupCmd(ctx),
 		updateCmd(ctx),
 		serverCmd(ctx),
+		queryChainCmd(ctx),
 	)
 	return cmd
 }
@@ -117,13 +119,14 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 
 			// Print header unless --no-header is specified
 			if !noHeader {
-				fmt.Printf("%-24s %-24s %-16s %-24s\n", "chain_id", "counterparty_chain_id", "to_height", "to_height_time")
+				fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "to_height_time")
 			}
 
 			for _, r := range filteredRecords {
-				fmt.Printf("%-24s %-24s %d-%d           %s\n",
+				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
 					r.ChainID,
 					r.CounterpartyChainID,
+					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
 					r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight,
 					r.ToHeightTime.Format(time.RFC3339),
 				)
@@ -151,7 +154,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Parse path:chain format and get chains
-			targetChain, counterpartyChain, err := parsePathChainArg(ctx, args[0])
+			chainPair, err := parsePathChainArg(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -168,7 +171,9 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 
 			defer storage.Close()
 
-			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), targetChain.ChainID(), counterpartyChain.ChainID(), toHeight)
+			// Use zero height for fromHeight when not specified
+			fromHeight := clienttypes.NewHeight(0, 0)
+			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query SHFU records: %w", err)
 			}
@@ -249,7 +254,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Parse path:chain format and get chains
-			targetChain, counterpartyChain, err := parsePathChainArg(ctx, args[0])
+			chainPair, err := parsePathChainArg(ctx, args[0])
 			if err != nil {
 				return err
 			}
@@ -268,16 +273,16 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			defer storage.Close()
 
 			// Execute SHFU for the target chain with counterparty chain
-			record, err := SHFUExecuteAndStore(cmd.Context(), targetChain, counterpartyChain, storage)
+			record, err := chainPair.TargetLCPProver.SHFUExecuteAndStore(cmd.Context(), chainPair.CounterpartyChain, storage)
 			if err != nil {
 				return fmt.Errorf("failed to execute and store SHFU for target chain: %w", err)
 			}
 
-			fmt.Printf("Successfully executed SHFU for chain %s:\n", targetChain.ChainID())
+			fmt.Printf("Successfully executed SHFU for chain %s:\n", chainPair.TargetChain.ChainID())
 
 			// Print detailed summary for target chain
 			if record == nil {
-				fmt.Printf("No new SHFU record created for %s\n", targetChain.ChainID())
+				fmt.Printf("No new SHFU record created for %s\n", chainPair.TargetChain.ChainID())
 			} else {
 				summary := record.FormatSummary()
 				resultBytes, err := json.MarshalIndent(summary, "", "  ")
@@ -355,20 +360,17 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			defer storage.Close()
 
 			// Parse path:chain arguments and create chain pairs
-			chainPairs := make([]*SHFUChainPair, len(args))
+			chainPairs := make([]SHFUChainPair, len(args))
 			targetChainIDs := make([]string, len(args))
 			for i, arg := range args {
 				// Parse path:chain format and get chains
-				targetChain, counterpartyChain, err := parsePathChainArg(ctx, arg)
+				chainPair, err := parsePathChainArg(ctx, arg)
 				if err != nil {
 					return err
 				}
 
-				chainPairs[i] = &SHFUChainPair{
-					TargetChain:       targetChain,
-					CounterpartyChain: counterpartyChain,
-				}
-				targetChainIDs[i] = targetChain.ChainID()
+				chainPairs[i] = *chainPair
+				targetChainIDs[i] = chainPair.TargetChain.ChainID()
 			}
 
 			// Create and start multi-chain SHFU service
@@ -384,6 +386,129 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd = grpcAddrFlag(cmd)
 	cmd = updateIntervalFlag(cmd)
 	cmd = cleanupAgeFlag(cmd)
+	return cmd
+}
+
+func queryChainCmd(ctx *config.Context) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "query-chain <path-name:chain-id> [height]",
+		Short: "Query chain information including latest consensus state",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			chainPair, err := parsePathChainArg(ctx, args[0])
+			if err != nil {
+				return err
+			}
+			target := chainPair.TargetChain
+			channelID := target.Path().ChannelID
+
+			// Try to get the finalized header
+			latestFinalizedHeader, err := target.GetLatestFinalizedHeader(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to get latest finalized header: %w", err)
+			}
+
+			// Parse optional height argument
+			var queryHeight ibcexported.Height
+			if len(args) > 1 {
+				// Height argument provided
+				height, err := parseHeightArg(args[1], "height")
+				if err != nil {
+					return err
+				}
+				queryHeight = height
+			} else {
+				// No height argument - use latest height
+				//latestHeight, err := target.LatestHeight(cmd.Context())
+				queryHeight = latestFinalizedHeader.GetHeight()
+			}
+
+			fmt.Printf("Latest finalized header height: %d\n", latestFinalizedHeader.GetHeight().GetRevisionHeight())
+			fmt.Printf("Query height: %s\n", queryHeight.String())
+
+			var clientStateInfo interface{}
+			var consensusStateInfo interface{}
+			// Try to query the client state using yui-relayer's QueryClientState
+			// This uses the target chain's own RPC client instead of cosmos-sdk's offline client
+			qctx := core.NewQueryContext(cmd.Context(), queryHeight)
+			if clientStateRes, err := target.QueryClientState(qctx); err != nil {
+				// If QueryClientState fails, just note the error but continue
+				clientStateInfo = map[string]interface{}{
+					"error": err.Error(),
+					"note":  "Failed to query client state from yui-relayer",
+				}
+			} else {
+				// Unpack the ClientState from Any using target chain's codec
+				var clientState ibcexported.ClientState
+				if err := target.Codec().UnpackAny(clientStateRes.ClientState, &clientState); err != nil {
+					clientStateInfo = map[string]interface{}{
+						"error": fmt.Sprintf("Failed to unpack client state: %v", err),
+						"note":  "Could not decode ClientState from Any",
+					}
+				} else {
+					// Extract information from the unpacked client state
+					latestHeight := clientState.GetLatestHeight()
+					clientStateInfo = map[string]interface{}{
+						"proof_height": clientStateRes.ProofHeight,
+						"client_state_info": map[string]interface{}{
+							"chain_id":          target.ChainID(),
+							"channel_id":        channelID,
+							"client_state_type": fmt.Sprintf("%T", clientState),
+							"latest_height": map[string]interface{}{
+								"revision_number": latestHeight.GetRevisionNumber(),
+								"revision_height": latestHeight.GetRevisionHeight(),
+							},
+							"proof_height": map[string]interface{}{
+								"revision_number": clientStateRes.ProofHeight.RevisionNumber,
+								"revision_height": clientStateRes.ProofHeight.RevisionHeight,
+							},
+						},
+					}
+					if consensusStateRes, err := target.QueryClientConsensusState(qctx, latestHeight); err != nil {
+						// If QueryClientConsensusState fails, just note the error but continue
+						consensusStateInfo = map[string]interface{}{
+							"error": err.Error(),
+							"note":  "Failed to query consensus state from yui-relayer",
+						}
+					} else {
+						// Unpack the ConsensusState from Any using target chain's codec
+						var consensusState ibcexported.ConsensusState
+						if err := target.Codec().UnpackAny(consensusStateRes.ConsensusState, &consensusState); err != nil {
+							consensusStateInfo = map[string]interface{}{
+								"error": fmt.Sprintf("Failed to unpack consensus state: %v", err),
+								"note":  "Could not decode ConsensusState from Any",
+							}
+						} else {
+							// Extract information from the unpacked consensus state
+							consensusStateInfo = map[string]interface{}{
+								"proof_height":         consensusStateRes.ProofHeight,
+								"consensus_state_type": fmt.Sprintf("%T", consensusState),
+							}
+						}
+					}
+				}
+			}
+
+			result := map[string]interface{}{
+				"chain_id":                       target.ChainID(),
+				"channel_id":                     channelID,
+				"query_height":                   fmt.Sprintf("%d-%d", queryHeight.GetRevisionNumber(), queryHeight.GetRevisionHeight()),
+				"latest_finalized_header_height": latestFinalizedHeader.GetHeight().GetRevisionHeight(),
+				"client_state":                   clientStateInfo,
+				"consensus_state":                consensusStateInfo,
+				"message":                        "Chain information displayed with LatestClientState and path info",
+				"success":                        true,
+				"timestamp":                      time.Now().Format(time.RFC3339),
+			}
+			// Convert result to JSON string and output
+			resultBytes, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal result to JSON: %w", err)
+			}
+			fmt.Printf("Chain information with LatestConsensusState:\n%s\n", string(resultBytes))
+			return nil
+		},
+	}
 	return cmd
 }
 
@@ -446,10 +571,10 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 }
 
 // parsePathChainArg parses "path:chain" format argument and returns the target chain and counterparty chain
-func parsePathChainArg(ctx *config.Context, arg string) (*core.ProvableChain, *core.ProvableChain, error) {
+func parsePathChainArg(ctx *config.Context, arg string) (*SHFUChainPair, error) {
 	parts := strings.Split(arg, ":")
 	if len(parts) != 2 {
-		return nil, nil, fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
+		return nil, fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
 	}
 	pathName := parts[0]
 	chainID := parts[1]
@@ -457,24 +582,40 @@ func parsePathChainArg(ctx *config.Context, arg string) (*core.ProvableChain, *c
 	// Use ChainsFromPath to get chains with path information properly configured
 	chains, srcChainID, dstChainID, err := ctx.Config.ChainsFromPath(pathName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get chains from path %s: %w", pathName, err)
+		return nil, fmt.Errorf("failed to get chains from path %s: %w", pathName, err)
 	}
 
 	srcChain, srcExists := chains[srcChainID]
 	if !srcExists {
-		return nil, nil, fmt.Errorf("source chain %s not found in chains from path %s", srcChainID, pathName)
+		return nil, fmt.Errorf("source chain %s not found in chains from path %s", srcChainID, pathName)
+	}
+	srcProver, err := coreutil.UnwrapProver[*Prover](srcChain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unwrap prover for source chain %s: %w", srcChainID, err)
 	}
 
 	dstChain, dstExists := chains[dstChainID]
 	if !dstExists {
-		return nil, nil, fmt.Errorf("destination chain %s not found in chains from path %s", dstChainID, pathName)
+		return nil, fmt.Errorf("destination chain %s not found in chains from path %s", dstChainID, pathName)
+	}
+	dstProver, err := coreutil.UnwrapProver[*Prover](dstChain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unwrap prover for destination chain %s: %w", dstChainID, err)
 	}
 
 	if chainID == srcChainID {
-		return srcChain, dstChain, nil
+		return &SHFUChainPair{
+			TargetChain:       srcChain,
+			TargetLCPProver:   srcProver,
+			CounterpartyChain: dstChain,
+		}, nil
 	} else if chainID == dstChainID {
-		return dstChain, srcChain, nil
+		return &SHFUChainPair{
+			TargetChain:       dstChain,
+			TargetLCPProver:   dstProver,
+			CounterpartyChain: srcChain,
+		}, nil
 	} else {
-		return nil, nil, fmt.Errorf("target chain ID %s is not part of path %s", chainID, pathName)
+		return nil, fmt.Errorf("target chain ID %s is not part of path %s", chainID, pathName)
 	}
 }
