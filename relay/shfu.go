@@ -28,14 +28,6 @@ func (pr *Prover) getSHFULogger(ctx context.Context) *log.RelayLogger {
 		return logger
 	}
 	return pr.getLogger()
-	/*
-			// If no logger in context, try to get from prover
-			if lcpProver, err := coreutil.UnwrapProver[*Prover](target.Prover); err == nil {
-				return lcpProver.getLogger()
-			}
-		// Fallback to default SHFU logger
-		return shfu_logger.GetSHFULogger(ctx)
-	*/
 }
 
 func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareChain, height ibcexported.Height) (ibcexported.Height, error) {
@@ -61,20 +53,13 @@ func getUpdateClientsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpc
 	// Get chain ID from target chain and counterparty chain
 	chainID := targetChain.ChainID()
 	counterpartyChainID := counterparty.ChainID()
-	/*
-		counterpartyProvableChain, err := coreutil.UnwrapChain[*core.ProvableChain](counterparty)
-		if err != nil {
-			return nil, fmt.Errorf("target chain %q is not a ProvableChain", targetChain.ChainID())
-		}
-	*/
-	counterpartyProvableChain := counterparty
 
 	// Get SHFU record by height range
-	counterpartyLatestFinalizedHeader, err := counterpartyProvableChain.GetLatestFinalizedHeader(ctx)
+	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
 	}
-	fromHeight, err := GetClientStateHeight(ctx, counterpartyProvableChain, counterpartyLatestFinalizedHeader.GetHeight())
+	fromHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client state height from counterparty chain: %w", err)
 	}
@@ -83,23 +68,6 @@ func getUpdateClientsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpc
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sequential SHFU records: %w", err)
 	}
-	/*
-			// Use a default toHeight (for now, use fromHeight + 1 as a simple default)
-			toHeight := clienttypes.Height{
-				RevisionNumber: latestFinalizedHeader.GetHeight().GetRevisionNumber(),
-				RevisionHeight: latestFinalizedHeader.GetHeight().GetRevisionHeight(),
-			}
-			record, err := shfu_grpc.GetSHFUByHeight(ctx, grpcAddress, chainID, counterpartyChainID, toHeight)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get SHFU by height: %w", err)
-			}
-		if record == nil {
-			logger.InfoContext(ctx, "no SHFU record found from gRPC server",
-				"chain_id", chainID,
-				"to_height", fmt.Sprintf("%d-%d", toHeight.RevisionNumber, toHeight.RevisionHeight))
-			return []*shfu_storage.UpdateClientResult{}, nil
-		}
-	*/
 
 	var results []*shfu_storage.UpdateClientResult
 	var heights []string
@@ -123,9 +91,6 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 	}
 
 	if len(records) == 0 {
-		//		return csHeight, nil
-		//h, _ := target.GetLatestFinalizedHeader(ctx)
-		//	return h.GetHeight(), nil
 		return nil, nil
 	}
 
@@ -192,22 +157,10 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 
 		if savedTipHeight != nil {
 			fromHeight = savedTipHeight
-
-			mockCounterparty := NewSHFUMockChain(counterparty.ChainID(), counterpartyLatestFinalizedHeader.GetHeight(), fromHeight)
-			/*
-				fmt.Printf("shfu0: chainId=%s, originHeight=%s, counterpartyChainId=%s, cp.latestHeight=%s, cs.height=%s\n",
-					pr.originChain.ChainID(),
-					originLatestFinalizedHeader.GetHeight().String(),
-					mockCounterparty.ChainID(),
-					mockCounterparty.latestHeight.String(),
-					mockCounterparty.mockClientState.latestHeight.String(),
-				)
-			*/
-			dstChain = mockCounterparty
-
+			dstChain = NewSHFUMockChain(counterparty.ChainID(), counterpartyLatestFinalizedHeader.GetHeight(), fromHeight)
 		} else {
 			fromHeight = csHeight
-			dstChain = counterparty // モック使うとエラーになる。csHeight で合っているはずだが。
+			dstChain = counterparty
 		}
 	}
 

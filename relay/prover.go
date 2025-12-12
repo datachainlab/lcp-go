@@ -222,11 +222,6 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		results, err = getUpdateClientsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
-		/*
-			if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-				return nil, err
-			}
-		*/
 		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
 	}
 
