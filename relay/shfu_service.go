@@ -183,9 +183,6 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SH
 	defer ticker.Stop()
 	logger := shfu_logger.GetSHFULogger(ctx)
 
-	consecutiveErrors := 0
-	const maxConsecutiveErrors = 10
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -199,24 +196,9 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SH
 			runtime.GC()
 			logMemoryUsage(ctx, logger, "after-SHFU-GC")
 			if err != nil {
-				consecutiveErrors++
 				logger.ErrorContext(ctx, "SHFU update failed", err,
 					"chain_id", chainPair.TargetChain.ChainID(),
-					"consecutive_errors", consecutiveErrors,
-					"max_errors", maxConsecutiveErrors)
-
-				if consecutiveErrors >= maxConsecutiveErrors {
-					return fmt.Errorf("failed to execute SHFU for chain %s after %d consecutive errors: %w",
-						chainPair.TargetChain.ChainID(), maxConsecutiveErrors, err)
-				}
-			} else {
-				// Reset consecutive error count on success
-				if consecutiveErrors > 0 {
-					logger.InfoContext(ctx, "SHFU update succeeded after recovery",
-						"chain_id", chainPair.TargetChain.ChainID(),
-						"recovered_after_errors", consecutiveErrors)
-				}
-				consecutiveErrors = 0
+				)
 			}
 		}
 	}
@@ -274,9 +256,6 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
-	consecutiveErrors := 0
-	const maxConsecutiveErrors = 10000
-
 	logger.InfoContext(ctx, "Started SHFU cleanup routine",
 		"cleanup_age", srv.CleanupAge.String(),
 		"cleanup_interval", cleanupInterval.String())
@@ -288,23 +267,8 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 		case <-ticker.C:
 			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupAge)
 			if err != nil {
-				consecutiveErrors++
-				logger.ErrorContext(ctx, "Cleanup failed", err,
-					"consecutive_errors", consecutiveErrors,
-					"max_errors", maxConsecutiveErrors)
-
-				if consecutiveErrors >= maxConsecutiveErrors {
-					return fmt.Errorf("cleanup failed after %d consecutive errors: %w",
-						maxConsecutiveErrors, err)
-				}
+				logger.ErrorContext(ctx, "Cleanup failed", err)
 			} else {
-				// Reset consecutive error count on success
-				if consecutiveErrors > 0 {
-					logger.InfoContext(ctx, "Cleanup recovered after errors",
-						"recovered_after_errors", consecutiveErrors)
-				}
-				consecutiveErrors = 0
-
 				if deletedCount > 0 {
 					logger.InfoContext(ctx, "Cleanup completed",
 						"deleted_count", deletedCount)

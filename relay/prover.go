@@ -195,6 +195,11 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 			return nil, err
 		}
 
+		// Check if header is nil
+		if header == nil {
+			return nil, fmt.Errorf("received nil header from SHFU gRPC server for chain %s", chainID)
+		}
+
 		pr.getLogger().InfoContext(ctx, "retrieved finalized header from gRPC server",
 			"chain_id", chainID,
 			"height", header.GetHeight().String())
