@@ -180,6 +180,9 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 		return nil, nil
 	}
 
+	if err := pr.UpdateEKIIfNeeded(ctx, counterparty); err != nil {
+		return nil, err
+	}
 	results, err := pr.setupHeadersForUpdate0(ctx, dstChain, originLatestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)

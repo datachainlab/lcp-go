@@ -218,12 +218,13 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	var results []*shfu_storage.UpdateClientResult
 	var err error
 
+	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+		return nil, err
+	}
+
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
-		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-			return nil, err
-		}
 		results, err = getUpdateClientsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
@@ -270,10 +271,6 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // setupHeadersForUpdate0 performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-		return nil, err
-	}
-
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
