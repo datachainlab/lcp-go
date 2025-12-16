@@ -7,6 +7,7 @@ import (
 
 	"github.com/datachainlab/lcp-go/relay/shfu_logger"
 	"github.com/datachainlab/lcp-go/relay/shfu_storage"
+	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 // SHFUGRPCServer implements the gRPC SHFUServiceServer interface
@@ -25,13 +26,15 @@ func NewSHFUGRPCServer(storage shfu_storage.SHFUStorage) *SHFUGRPCServer {
 
 // GetSequentialSHFURecords implements the gRPC service method to get sequential SHFU records
 func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *GetSequentialSHFURecordsRequest) (*GetSequentialSHFURecordsResponse, error) {
-	logger := shfu_logger.GetSHFULogger(ctx)
-
-	logger.InfoContext(ctx, "GetSequentialSHFURecords request started",
-		"request_id", req.RequestId,
-		"chain_id", req.ChainId,
-		"counterparty_chain_id", req.CounterpartyChainId,
-		"from_height", fmt.Sprintf("%d-%d", req.FromHeight.RevisionNumber, req.FromHeight.RevisionHeight))
+	logger := log.RelayLogger{
+		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+			"function", "GetSequentialSHFURecords",
+			"chain_id", req.ChainId,
+			"counterparty_chain_id", req.CounterpartyChainId,
+			"from_height", fmt.Sprintf("%d-%d", req.FromHeight.RevisionNumber, req.FromHeight.RevisionHeight),
+		),
+	}
+	logger.InfoContext(ctx, "GetSequentialSHFURecords request started")
 
 	// Convert protobuf Height to clienttypes.Height
 	fromHeight := ConvertHeightFromPbToDb(req.FromHeight)
@@ -40,11 +43,7 @@ func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *Ge
 	// Get sequential SHFU records from storage (no toHeight limit for gRPC calls)
 	records, err := srv.storage.GetSequentialSHFURecords(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed", err,
-			"request_id", req.RequestId,
-			"chain_id", req.ChainId,
-			"counterparty_chain_id", req.CounterpartyChainId,
-			"from_height", fmt.Sprintf("%d-%d", req.FromHeight.RevisionNumber, req.FromHeight.RevisionHeight))
+		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed", err)
 		return nil, fmt.Errorf("failed to get sequential SHFU records: %w", err)
 	}
 
@@ -59,10 +58,6 @@ func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *Ge
 		heights = append(heights, fmt.Sprintf("%d-%d..%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight, record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
 	}
 	logger.InfoContext(ctx, "GetSequentialSHFURecords request completed successfully",
-		"request_id", req.RequestId,
-		"chain_id", req.ChainId,
-		"counterparty_chain_id", req.CounterpartyChainId,
-		"from_height", fmt.Sprintf("%d-%d", req.FromHeight.RevisionNumber, req.FromHeight.RevisionHeight),
 		"records_count", len(records),
 		"heights", strings.Join(heights, ","),
 	)
@@ -75,11 +70,14 @@ func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *Ge
 
 // GetLatestSHFU implements the gRPC service method to get the latest SHFU record
 func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFURequest) (*GetLatestSHFUResponse, error) {
-	logger := shfu_logger.GetSHFULogger(ctx)
-	logger.InfoContext(ctx, "GetLatestSHFU request started",
-		"request_id", req.RequestId,
-		"chain_id", req.ChainId,
-		"counterparty_chain_id", req.CounterpartyChainId)
+	logger := log.RelayLogger{
+		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+			"function", "GetLatestSHFU",
+			"chain_id", req.ChainId,
+			"counterparty_chain_id", req.CounterpartyChainId,
+		),
+	}
+	logger.InfoContext(ctx, "GetLatestSHFU request started")
 
 	// Get latest SHFU record from storage
 	record, err := srv.storage.GetLatestSHFUForChain(ctx, req.ChainId, req.CounterpartyChainId)
@@ -93,9 +91,6 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 
 	if record == nil {
 		logger.InfoContext(ctx, "GetLatestSHFU request completed - no record found",
-			"request_id", req.RequestId,
-			"chain_id", req.ChainId,
-			"counterparty_chain_id", req.CounterpartyChainId,
 			"found", false)
 		return &GetLatestSHFUResponse{Found: false}, nil
 	}
@@ -104,9 +99,6 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	pbRecord := ConvertSHFURecordFromDbToPb(record)
 
 	logger.InfoContext(ctx, "GetLatestSHFU request completed successfully",
-		"request_id", req.RequestId,
-		"chain_id", req.ChainId,
-		"counterparty_chain_id", req.CounterpartyChainId,
 		"found", true,
 		"record_from_height", fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight),
 		"record_to_height", fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
