@@ -39,7 +39,7 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 	}
 
 	// Connect to SHFU gRPC server
-	conn, err := grpc.DialContext(ctx, grpcAddress,
+	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
@@ -54,6 +54,7 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
 	}
 	defer conn.Close()
+	conn.Connect()
 
 	client := NewSHFUServiceClient(conn)
 
@@ -114,7 +115,7 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 	}
 
 	// Connect to SHFU gRPC server
-	conn, err := grpc.DialContext(ctx, grpcAddress,
+	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
@@ -128,6 +129,7 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
 	}
 	defer conn.Close()
+	conn.Connect()
 
 	client := NewSHFUServiceClient(conn)
 
