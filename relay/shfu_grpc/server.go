@@ -82,10 +82,7 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	// Get latest SHFU record from storage
 	record, err := srv.storage.GetLatestSHFUForChain(ctx, req.ChainId, req.CounterpartyChainId)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetLatestSHFU request failed", err,
-			"request_id", req.RequestId,
-			"chain_id", req.ChainId,
-			"counterparty_chain_id", req.CounterpartyChainId)
+		logger.ErrorContext(ctx, "GetLatestSHFU request failed", err)
 		return nil, fmt.Errorf("failed to get latest SHFU: %w", err)
 	}
 
