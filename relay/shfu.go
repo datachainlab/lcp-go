@@ -46,8 +46,8 @@ func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareCh
 	return cs.GetLatestHeight(), nil
 }
 
-// getUpdateClientFromGRPC retrieves SHFU results from gRPC server using height range
-func getUpdateClientsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
+// getUpdateClientResultsFromGRPC retrieves SHFU results from gRPC server using height range
+func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
 	logger.InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
 
 	// Get chain ID from target chain and counterparty chain
