@@ -4,13 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
-	"os/signal"
 	"runtime"
 	"runtime/debug"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
@@ -18,6 +14,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -90,92 +87,55 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 		"poll_interval", srv.PollInterval)
 	logger.InfoContext(ctx, "Press Ctrl+C to stop the service")
 
-	ctx, cancel := context.WithCancel(ctx)
 	ctx = shfu_logger.SetSHFULogger(ctx, logger)
 	defer func() {
-		cancel()
 		logger.InfoContext(ctx, "SHFU Service stopped")
 	}()
 
-	// Channel for signal handling
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-
-	wg := &sync.WaitGroup{}
-	defer wg.Wait()
-
-	// Calculate fail channel buffer size: signal handling + updaters + grpc server
-	failBufferSize := 1 + len(srv.ChainPairs) + 1
-	fails := make(chan error, failBufferSize)
-	defer close(fails)
-
-	// Goroutine for signal handling
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer recoverFromPanic(ctx, logger, "signal-handler")
-		select {
-		case sig := <-sigCh:
-			logger.InfoContext(ctx, "SHFU Service received signal, shutting down gracefully", "signal", sig)
-			cancel()
-		case <-ctx.Done():
-			// Context was cancelled for other reasons
-		}
-	}()
+	// Create ErrGroup with context for concurrent goroutines
+	eg, ctx := errgroup.WithContext(ctx)
 
 	// Start updater goroutines for each chain pair
 	for _, chainPair := range srv.ChainPairs {
-		wg.Add(1)
-		go func(pair SHFUChainPair) {
-			defer wg.Done()
+		pair := chainPair // capture loop variable
+		eg.Go(func() error {
 			defer recoverFromPanic(ctx, logger, fmt.Sprintf("updater-%s", pair.TargetChain.ChainID()))
 			err := srv.runUpdaterForChainPair(ctx, pair)
 			if err != nil {
-				fails <- fmt.Errorf("updater for chain %s failed: %w", pair.TargetChain.ChainID(), err)
+				return fmt.Errorf("updater for chain %s failed: %w", pair.TargetChain.ChainID(), err)
 			}
-		}(chainPair)
+			return nil
+		})
 	}
 
 	// Start gRPC server if address is configured
 	if srv.GRPCAddr != "" {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		eg.Go(func() error {
 			defer recoverFromPanic(ctx, logger, "grpc-server")
 			err := srv.runGRPCServer(ctx)
 			if err != nil {
-				fails <- fmt.Errorf("gRPC server failed: %w", err)
+				return fmt.Errorf("gRPC server failed: %w", err)
 			}
-		}()
+			return nil
+		})
 	}
 
 	// Start cleanup goroutine if CleanupAge is configured with minimum interval
 	if srv.CleanupAge >= MinCleanupInterval {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		eg.Go(func() error {
 			defer recoverFromPanic(ctx, logger, "cleanup")
 			err := srv.runCleanup(ctx)
 			if err != nil {
-				fails <- fmt.Errorf("cleanup routine failed: %w", err)
+				return fmt.Errorf("cleanup routine failed: %w", err)
 			}
-		}()
+			return nil
+		})
 	}
 
-	// Error handling goroutine
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer recoverFromPanic(ctx, logger, "error-handler")
-		for e := range fails {
-			logger.ErrorContext(ctx, "error received, stopping service", e)
-			cancel()
-		}
-	}()
-
-	logger.InfoContext(ctx, "SHFU Service stopped")
-	<-ctx.Done()
+	// Wait for all goroutines to complete or first error
+	if err := eg.Wait(); err != nil {
+		logger.ErrorContext(ctx, "SHFU Service stopped with error", err)
+	}
 }
 
 func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SHFUChainPair) error {
@@ -196,6 +156,7 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SH
 			runtime.GC()
 			logMemoryUsage(ctx, logger, "after-SHFU-GC")
 			if err != nil {
+				// Log error but continue the loop
 				logger.ErrorContext(ctx, "SHFU update failed", err,
 					"chain_id", chainPair.TargetChain.ChainID(),
 				)
@@ -267,6 +228,7 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 		case <-ticker.C:
 			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupAge)
 			if err != nil {
+				// Log error but continue the loop
 				logger.ErrorContext(ctx, "Cleanup failed", err)
 			} else {
 				if deletedCount > 0 {
