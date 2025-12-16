@@ -37,6 +37,8 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 		 ON shfu_records(chain_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_height 
 		 ON shfu_records(to_height_revision_height)`,
+		`CREATE INDEX IF NOT EXISTS idx_shfu_records_to_height_time 
+		 ON shfu_records(to_height_time)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_updated_at 
 		 ON shfu_records(updated_at)`,
 	}

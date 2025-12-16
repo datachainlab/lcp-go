@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -464,8 +465,8 @@ func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
 
 	// Check if gRPC is enabled via environment variable
 	envEnable := os.Getenv("YRLY_LCP_SHFU_GRPC_ENABLE")
-	if envEnable != "yes" {
-		// Environment variable is not "yes", gRPC disabled by default
+	if b, err := strconv.ParseBool(envEnable); err != nil || !b {
+		// Environment variable is not true or is not set, gRPC disabled by default
 		return false, ""
 	}
 
