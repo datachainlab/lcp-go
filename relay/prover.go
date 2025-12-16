@@ -229,7 +229,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		results, err = getUpdateClientsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
-		results, err = pr.setupHeadersForUpdate0(ctx, dstChain, latestFinalizedHeader)
+		results, err = pr.updateELCForUpdateClient(ctx, dstChain, latestFinalizedHeader)
 	}
 
 	if err != nil {
@@ -269,9 +269,9 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	return core.MakeHeaderStream(updates...), nil
 }
 
-// setupHeadersForUpdate0 performs the initial setup and updateClient calls
+// updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
-func (pr *Prover) setupHeadersForUpdate0(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
+func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)

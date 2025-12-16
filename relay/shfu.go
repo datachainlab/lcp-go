@@ -114,7 +114,7 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 	return records[len(records)-1].ToHeight, nil
 }
 
-// ExecuteSetupHeadersForUpdate executes SetupHeadersForUpdate0 and returns UpdateClientResult array
+// ExecuteSetupHeadersForUpdate executes updateELCForUpdateClient and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations (nil for unspecified)
 // counterparty: the counterparty chain object
@@ -171,9 +171,9 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 	if err := pr.UpdateEKIIfNeeded(ctx, counterparty); err != nil {
 		return nil, err
 	}
-	results, err := pr.setupHeadersForUpdate0(ctx, dstChain, originLatestFinalizedHeader)
+	results, err := pr.updateELCForUpdateClient(ctx, dstChain, originLatestFinalizedHeader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call setupHeadersForUpdate0: %w", err)
+		return nil, fmt.Errorf("failed to call updateELCForUpdateClient: %w", err)
 	}
 
 	logger.InfoContext(ctx, "SHFU executed successfully",
