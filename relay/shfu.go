@@ -96,9 +96,6 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 
 	// Log the sequential records found
 	if logger != nil {
-		firstHeight := records[0].FromHeight
-		lastHeight := records[len(records)-1].ToHeight
-
 		// Create comma-separated height list for debugging
 		var heightList []string
 		for _, record := range records {
@@ -111,16 +108,7 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 			"counterparty_chain_id", counterpartyChainID,
 			"starting_height", fromHeight.String(),
 			"records_count", len(records),
-			"height_range", fmt.Sprintf("%s..%s", firstHeight.String(), lastHeight.String()),
-			"first_record_from", firstHeight.String(),
-			"last_record_to", lastHeight.String(),
 			"height_list", heightListStr)
-	} else {
-		logger.InfoContext(ctx, "No sequential SHFU records found, starting from client state height",
-			"chain_id", targetChainID,
-			"counterparty_chain_id", counterpartyChainID,
-			"starting_height", fromHeight.String(),
-		)
 	}
 
 	return records[len(records)-1].ToHeight, nil
@@ -220,7 +208,6 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 			CounterpartyChainID:   counterparty.ChainID(),
 			FromHeight:            h2h(fromHeight),
 			ToHeight:              h2h(toHeight),
-			ToHeightTime:          time.Now(), // Could be extracted from header if available
 			UpdatedAt:             time.Now(),
 			UpdateClientResults:   results,
 			LatestFinalizedHeader: latestFinalizedHeaderBytes,
@@ -243,7 +230,11 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 		retry.OnRetry(func(n uint, err error) {
 			logger.ErrorContext(ctx, "Retry attempt for SaveSHFUResult due to temporary error", err,
 				"attempt", n+1,
-				"chain_id", pr.originChain.ChainID())
+				"chain_id", pr.originChain.ChainID(),
+				"counterparty_chain_id", counterparty.ChainID(),
+				"from_height", record.FromHeight.String(),
+				"to_height", record.ToHeight.String(),
+			)
 		}),
 	)
 	if err != nil {

@@ -106,7 +106,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 
 			// Print header unless --no-header is specified
 			if !noHeader {
-				fmt.Printf("%-24s %-24s %-16s %-16s %s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "to_height_time")
+				fmt.Printf("%-24s %-24s %-16s %-16s %s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "updated_at")
 			}
 
 			for _, r := range records {
@@ -115,7 +115,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 					r.CounterpartyChainID,
 					fmt.Sprintf("%d-%d", r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight),
 					fmt.Sprintf("%d-%d", r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight),
-					r.ToHeightTime.Format(time.RFC3339),
+					r.UpdatedAt.Format(time.RFC3339),
 				)
 			}
 			return nil
