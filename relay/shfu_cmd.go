@@ -106,15 +106,15 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 
 			// Print header unless --no-header is specified
 			if !noHeader {
-				fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "to_height_time")
+				fmt.Printf("%-24s %-24s %-16s %-16s %s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "to_height_time")
 			}
 
 			for _, r := range records {
-				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
+				fmt.Printf("%-24s %-24s %-16s %-16s %s\n",
 					r.ChainID,
 					r.CounterpartyChainID,
-					r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight,
-					r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight,
+					fmt.Sprintf("%d-%d", r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight),
+					fmt.Sprintf("%d-%d", r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight),
 					r.ToHeightTime.Format(time.RFC3339),
 				)
 			}
@@ -582,19 +582,13 @@ func parsePathChainArg(ctx *config.Context, arg string) (*SHFUChainPair, error) 
 		return nil, fmt.Errorf("failed to get chains from path %s: %w", pathName, err)
 	}
 
-	srcChain, srcExists := chains[srcChainID]
-	if !srcExists {
-		return nil, fmt.Errorf("source chain %s not found in chains from path %s", srcChainID, pathName)
-	}
+	srcChain, _ := chains[srcChainID]
 	srcProver, err := coreutil.UnwrapProver[*Prover](srcChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap prover for source chain %s: %w", srcChainID, err)
 	}
 
-	dstChain, dstExists := chains[dstChainID]
-	if !dstExists {
-		return nil, fmt.Errorf("destination chain %s not found in chains from path %s", dstChainID, pathName)
-	}
+	dstChain, _ := chains[dstChainID]
 	dstProver, err := coreutil.UnwrapProver[*Prover](dstChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap prover for destination chain %s: %w", dstChainID, err)
