@@ -69,8 +69,8 @@ type SHFUStorage interface {
 	// If toHeight is not nil, stops when reaching a record with that ToHeight
 	GetSequentialSHFURecords(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error)
 
-	// ListAllSHFURecords lists all SHFU records in the database
-	ListAllSHFURecords(ctx context.Context) ([]*SHFURecord, error)
+	// ListShfuRecords lists SHFU records in the database with optional chain ID filters
+	ListShfuRecords(ctx context.Context, chainID, counterpartyChainID string) ([]*SHFURecord, error)
 
 	// CleanupOldSHFU removes SHFU records older than the specified duration
 	CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error)

@@ -143,12 +143,31 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 	return nil
 }
 
-// ListAllSHFURecords lists all SHFU records in the database
-func (s *SqlxSHFUStorage) ListAllSHFURecords(ctx context.Context) ([]*SHFURecord, error) {
-	query := shfuRecordSelectClause + `
-	       ORDER BY chain_id, to_height_revision_number, to_height_revision_height`
+// ListShfuRecords lists SHFU records in the database with optional chain ID filters
+func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterpartyChainID string) ([]*SHFURecord, error) {
+	var whereConditions []string
+	namedArgs := map[string]interface{}{}
 
-	rows, err := s.db.QueryxContext(ctx, query)
+	// Add WHERE conditions if filters are provided
+	if chainID != "" {
+		whereConditions = append(whereConditions, "chain_id = :chain_id")
+		namedArgs["chain_id"] = chainID
+	}
+	if counterpartyChainID != "" {
+		whereConditions = append(whereConditions, "counterparty_chain_id = :counterparty_chain_id")
+		namedArgs["counterparty_chain_id"] = counterpartyChainID
+	}
+
+	// Build the query
+	query := shfuRecordSelectClause
+	if len(whereConditions) > 0 {
+		query += " WHERE " + strings.Join(whereConditions, " AND ")
+	}
+	query += " ORDER BY chain_id, to_height_revision_number, to_height_revision_height"
+
+	// Execute query with named parameters
+	query = s.db.Rebind(query)
+	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
 		return nil, err
 	}

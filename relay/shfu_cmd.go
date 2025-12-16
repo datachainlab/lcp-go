@@ -99,23 +99,9 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			}
 			defer storage.Close()
 
-			records, err := storage.ListAllSHFURecords(cmd.Context())
+			records, err := storage.ListShfuRecords(cmd.Context(), chainID, counterpartyChainID)
 			if err != nil {
 				return fmt.Errorf("failed to list SHFU records: %w", err)
-			}
-
-			// Filter records based on provided options
-			var filteredRecords []*shfu_storage.SHFURecord
-			for _, r := range records {
-				// Apply chainID filter if specified
-				if chainID != "" && r.ChainID != chainID {
-					continue
-				}
-				// Apply counterpartyChainID filter if specified
-				if counterpartyChainID != "" && r.CounterpartyChainID != counterpartyChainID {
-					continue
-				}
-				filteredRecords = append(filteredRecords, r)
 			}
 
 			// Print header unless --no-header is specified
@@ -123,7 +109,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 				fmt.Printf("%-24s %-24s %-16s %-16s %-24s\n", "chain_id", "cp_chain_id", "from_height", "to_height", "to_height_time")
 			}
 
-			for _, r := range filteredRecords {
+			for _, r := range records {
 				fmt.Printf("%-24s %-24s %d-%d           %d-%d           %s\n",
 					r.ChainID,
 					r.CounterpartyChainID,
