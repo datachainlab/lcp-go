@@ -27,7 +27,6 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			from_height_revision_height INTEGER NOT NULL,
 			to_height_revision_number INTEGER NOT NULL,
 			to_height_revision_height INTEGER NOT NULL,
-			to_height_time TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			updated_at TEXT NOT NULL, -- SQLite has no native DATETIME type, uses TEXT for dates
 			update_client_results BLOB,
 			latest_finalized_header BLOB, -- Serialized core.Header bytes
@@ -37,8 +36,6 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 		 ON shfu_records(chain_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_height 
 		 ON shfu_records(to_height_revision_height)`,
-		`CREATE INDEX IF NOT EXISTS idx_shfu_records_to_height_time 
-		 ON shfu_records(to_height_time)`,
 		`CREATE INDEX IF NOT EXISTS idx_shfu_records_updated_at 
 		 ON shfu_records(updated_at)`,
 	}

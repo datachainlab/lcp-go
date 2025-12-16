@@ -21,7 +21,6 @@ type SHFURecord struct {
 	CounterpartyChainID   string                `json:"counterparty_chain_id"`
 	FromHeight            clienttypes.Height    `json:"from_height"`
 	ToHeight              clienttypes.Height    `json:"to_height"`
-	ToHeightTime          time.Time             `json:"to_height_time"`
 	UpdatedAt             time.Time             `json:"updated_at"`
 	UpdateClientResults   []*UpdateClientResult `json:"update_client_results"`
 	LatestFinalizedHeader []byte                `json:"latest_finalized_header"` // Serialized core.Header bytes
@@ -44,7 +43,6 @@ func (r *SHFURecord) FormatSummary() map[string]interface{} {
 		"chain_id":               r.ChainID,
 		"from_height":            r.FromHeight,
 		"to_height":              r.ToHeight,
-		"to_height_time":         r.ToHeightTime.Format(time.RFC3339),
 		"results_received_count": len(r.UpdateClientResults),
 		"update_client_results":  updateClientResults,
 		"timestamp":              time.Now().Format(time.RFC3339),

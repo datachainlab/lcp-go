@@ -32,8 +32,8 @@ func errWithStack(format string, args ...interface{}) error {
 const shfuRecordSelectClause = `
 	SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
 	       from_height_revision_height, to_height_revision_number, 
-	       to_height_revision_height, to_height_time, 
-	       updated_at, update_client_results, latest_finalized_header
+	       to_height_revision_height, updated_at, 
+	       update_client_results, latest_finalized_header
 	FROM shfu_records`
 
 /*
@@ -43,7 +43,7 @@ DB Schema Overview:
    - Stores chain information, height data, and execution metadata
    - Primary key: combination of chain_id, counterparty_chain_id, from_height fields, and to_height fields
    - Key fields: chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height
-   - Includes timestamps (to_height_time, updated_at), serialized update_client_results, and latest_finalized_header
+   - Includes timestamp (updated_at), serialized update_client_results, and latest_finalized_header
 
 Indexes:
    - Chain ID for efficient filtering by chain
@@ -383,12 +383,12 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 	return result, nil
 }
 
-// CleanupOldSHFU removes SHFU records older than the specified duration based on ToHeightTime
+// CleanupOldSHFU removes SHFU records older than the specified duration based on UpdatedAt
 func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 
-	// Delete records based on to_height_time
-	recordQuery := `DELETE FROM shfu_records WHERE to_height_time < :cutoff_time`
+	// Delete records based on updated_at
+	recordQuery := `DELETE FROM shfu_records WHERE updated_at < :cutoff_time`
 	namedArgs := map[string]interface{}{
 		"cutoff_time": s.dialect.ConvertTimeToDB(cutoffTime),
 	}
@@ -419,12 +419,12 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 		chain_id, counterparty_chain_id,
 		from_height_revision_number, from_height_revision_height,
 		to_height_revision_number, to_height_revision_height,
-		to_height_time, updated_at, update_client_results, latest_finalized_header
+		updated_at, update_client_results, latest_finalized_header
 	) VALUES (
 		:chain_id, :counterparty_chain_id,
 		:from_height_revision_number, :from_height_revision_height,
 		:to_height_revision_number, :to_height_revision_height,
-		:to_height_time, :updated_at, :update_client_results, :latest_finalized_header
+		:updated_at, :update_client_results, :latest_finalized_header
 	)`
 
 	// Serialize UpdateClientResults to JSON
@@ -440,7 +440,6 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 		"from_height_revision_height": record.FromHeight.RevisionHeight,
 		"to_height_revision_number":   record.ToHeight.RevisionNumber,
 		"to_height_revision_height":   record.ToHeight.RevisionHeight,
-		"to_height_time":              s.dialect.ConvertTimeToDB(record.ToHeightTime),
 		"updated_at":                  s.dialect.ConvertTimeToDB(record.UpdatedAt),
 		"update_client_results":       updateClientResultsJSON,
 		"latest_finalized_header":     record.LatestFinalizedHeader,
@@ -455,7 +454,6 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, error) {
 	var record SHFURecord
 	var updateClientResultsJSON []byte
-	var toHeightTimeStr string
 	var updatedAtStr string
 
 	err := scanner.Scan(
@@ -465,7 +463,6 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 		&record.FromHeight.RevisionHeight,
 		&record.ToHeight.RevisionNumber,
 		&record.ToHeight.RevisionHeight,
-		&toHeightTimeStr,
 		&updatedAtStr,
 		&updateClientResultsJSON,
 		&record.LatestFinalizedHeader,
@@ -474,12 +471,7 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 		return nil, err
 	}
 
-	// Convert string timestamps to time.Time using the dialect converter
-	record.ToHeightTime, err = s.dialect.ConvertTimeFromDB(toHeightTimeStr)
-	if err != nil {
-		return nil, errWithStack("failed to convert ToHeightTime: %w", err)
-	}
-
+	// Convert string timestamp to time.Time using the dialect converter
 	record.UpdatedAt, err = s.dialect.ConvertTimeFromDB(updatedAtStr)
 	if err != nil {
 		return nil, errWithStack("failed to convert UpdatedAt: %w", err)

@@ -15,8 +15,8 @@ func ConvertSHFURecordFromDbToPb(record *shfu_storage.SHFURecord) *SHFURecord {
 	return &SHFURecord{
 		ChainId:               record.ChainID,
 		CounterpartyChainId:   record.CounterpartyChainID,
+		FromHeight:            ConvertHeightFromDbToPb(record.FromHeight),
 		ToHeight:              ConvertHeightFromDbToPb(record.ToHeight),
-		ToHeightTime:          record.ToHeightTime,
 		UpdatedAt:             record.UpdatedAt,
 		UpdateClientResults:   ConvertUpdateClientResultsFromDbToPb(record.UpdateClientResults),
 		LatestFinalizedHeader: record.LatestFinalizedHeader,
@@ -32,8 +32,8 @@ func ConvertSHFURecordFromPbToDb(pbRecord *SHFURecord) *shfu_storage.SHFURecord 
 	return &shfu_storage.SHFURecord{
 		ChainID:               pbRecord.ChainId,
 		CounterpartyChainID:   pbRecord.CounterpartyChainId,
+		FromHeight:            ConvertHeightFromPbToDb(pbRecord.FromHeight),
 		ToHeight:              ConvertHeightFromPbToDb(pbRecord.ToHeight),
-		ToHeightTime:          pbRecord.ToHeightTime,
 		UpdatedAt:             pbRecord.UpdatedAt,
 		UpdateClientResults:   ConvertUpdateClientResultsFromPbToDb(pbRecord.UpdateClientResults),
 		LatestFinalizedHeader: pbRecord.LatestFinalizedHeader,

@@ -22,7 +22,7 @@ import (
 func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*shfu_storage.SHFURecord, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetSequentialSHFURecords",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,
@@ -42,8 +42,7 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 	// Connect to SHFU gRPC server
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed - connection error", err)
@@ -85,7 +84,7 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) (*shfu_storage.SHFURecord, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetLatestSHFU",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,

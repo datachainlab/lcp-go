@@ -41,7 +41,6 @@ func TestStorageBasicOperations(t *testing.T) {
 			RevisionNumber: 1,
 			RevisionHeight: 103,
 		},
-		ToHeightTime:        time.Now(),
 		UpdatedAt:           time.Now(),
 		UpdateClientResults: sampleResults,
 	}
@@ -66,7 +65,6 @@ func TestStorageBasicOperations(t *testing.T) {
 
 	t.Logf("Retrieved latest record for %s, updated at: %s",
 		latest.ChainID, latest.UpdatedAt.Format(time.RFC3339))
-	t.Logf("To height time: %s", latest.ToHeightTime.Format(time.RFC3339))
 }
 
 // TestStorageFileExistsError tests that InitSQLiteStorage fails when file already exists

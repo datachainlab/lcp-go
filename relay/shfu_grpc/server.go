@@ -27,7 +27,7 @@ func NewSHFUGRPCServer(storage shfu_storage.SHFUStorage) *SHFUGRPCServer {
 // GetSequentialSHFURecords implements the gRPC service method to get sequential SHFU records
 func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *GetSequentialSHFURecordsRequest) (*GetSequentialSHFURecordsResponse, error) {
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetSequentialSHFURecords",
 			"chain_id", req.ChainId,
 			"counterparty_chain_id", req.CounterpartyChainId,
@@ -71,7 +71,7 @@ func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *Ge
 // GetLatestSHFU implements the gRPC service method to get the latest SHFU record
 func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFURequest) (*GetLatestSHFUResponse, error) {
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).Logger.With(
+		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetLatestSHFU",
 			"chain_id", req.ChainId,
 			"counterparty_chain_id", req.CounterpartyChainId,

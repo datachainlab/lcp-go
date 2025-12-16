@@ -25,11 +25,10 @@ message SHFURecord {
   string counterparty_chain_id = 2;
   Height from_height = 3;
   Height to_height = 4;
-  google.protobuf.Timestamp to_height_time = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  google.protobuf.Timestamp updated_at = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  repeated UpdateClientResult update_client_results = 7;  // Serialized core.Header bytes (latestFinalizedHeader)
+  google.protobuf.Timestamp updated_at = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  repeated UpdateClientResult update_client_results = 6;
   // This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
-  bytes latest_finalized_header = 8;
+  bytes latest_finalized_header = 7;
 }
 
 // GetLatestSHFURequest represents a request to get the latest SHFU record for a chain
