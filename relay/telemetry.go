@@ -11,8 +11,9 @@ import (
 )
 
 type Int64Gauge struct {
-	gauge metric.Int64Gauge
-	mutex sync.Mutex
+	gauge   metric.Int64Gauge
+	options []metric.RecordOption
+	mutex   sync.Mutex
 }
 
 var (
@@ -24,8 +25,8 @@ const (
 	namespaceRoot = "lcp-go"
 )
 
-func NewInt64Gauge(name string, desc string) (*Int64Gauge, error) {
-	fullname := fmt.Sprintf("%s.%s", namespaceRoot, name) //TODO: sanitize name
+func NewInt64Gauge(name string, desc string, options ...metric.RecordOption) (*Int64Gauge, error) {
+	fullname := fmt.Sprintf("%s.%s", namespaceRoot, name)
 
 	gauge, err := meter.Int64Gauge(
 		fullname,
@@ -36,8 +37,9 @@ func NewInt64Gauge(name string, desc string) (*Int64Gauge, error) {
 		return nil, err
 	}
 	return &Int64Gauge{
-		gauge: gauge,
-		mutex: sync.Mutex{},
+		gauge:   gauge,
+		options: options,
+		mutex:   sync.Mutex{},
 	}, nil
 }
 
@@ -50,6 +52,6 @@ func (g *Int64Gauge) Set(ctx context.Context, value int64) {
 	defer g.mutex.Unlock()
 
 	if g.gauge != nil {
-		g.gauge.Record(ctx, value)
+		g.gauge.Record(ctx, value, g.options...)
 	}
 }

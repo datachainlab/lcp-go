@@ -21,6 +21,8 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/log"
 	"github.com/hyperledger-labs/yui-relayer/signer"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -114,8 +116,12 @@ func (pr *Prover) SetRelayInfo(path *core.PathEnd, counterparty *core.ProvableCh
 	pr.counterpartyPath = counterpartyPath
 
 	if gauge, err := NewInt64Gauge(
-		fmt.Sprintf("lcp_updater_client_height.%s.%s", pr.originChain.ChainID(), counterparty.ChainID()),
-		fmt.Sprintf("LCP updater client height for chain %s against counterparty %s", pr.originChain.ChainID(), counterparty.ChainID()),
+		"update_client_height",
+		fmt.Sprintf("LCP update client height for chain %s against counterparty %s", pr.originChain.ChainID(), counterparty.ChainID()),
+		metric.WithAttributes(
+			attribute.String("chain_id", pr.originChain.ChainID()),
+			attribute.String("counterparty_chain_id", counterparty.ChainID()),
+		),
 	); err != nil {
 		return err
 	} else {
@@ -198,7 +204,8 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 
 		// Check if header is nil
 		if header == nil {
-			return nil, fmt.Errorf("received nil header from SHFU gRPC server for chain %s", chainID)
+			err := fmt.Errorf("received nil header from SHFU gRPC server for chain %s", chainID)
+			return nil, err
 		}
 
 		pr.getLogger().InfoContext(ctx, "retrieved finalized header from gRPC server",
