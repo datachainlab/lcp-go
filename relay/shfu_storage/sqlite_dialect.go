@@ -7,6 +7,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+const sqliteTimeFormat = "2006-01-02 15:04:05"
+
 // SQLiteDialect implements DBDialect for SQLite databases
 type SQLiteDialect struct{}
 
@@ -55,25 +57,11 @@ func (d *SQLiteDialect) ConvertTimeFromDB(dbTime interface{}) (time.Time, error)
 		// Already converted by sqlx
 		return v.UTC(), nil
 	case string:
-		// Parse ISO 8601 format string manually
 		if v == "" {
 			return time.Time{}, nil
 		}
-		// Try parsing with different layouts
-		layouts := []string{
-			"2006-01-02 15:04:05",      // SQLite default format
-			"2006-01-02T15:04:05Z",     // ISO 8601 with Z
-			"2006-01-02T15:04:05",      // ISO 8601 without timezone
-			"2006-01-02T15:04:05.000Z", // ISO 8601 with milliseconds
-			time.RFC3339,               // Full RFC3339
-		}
+		return time.Parse(sqliteTimeFormat, v)
 
-		for _, layout := range layouts {
-			if t, err := time.Parse(layout, v); err == nil {
-				return t.UTC(), nil
-			}
-		}
-		return time.Time{}, fmt.Errorf("cannot parse time string: %s", v)
 	case []byte:
 		// Handle byte slice (some drivers might return this)
 		return d.ConvertTimeFromDB(string(v))

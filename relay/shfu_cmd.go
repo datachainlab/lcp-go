@@ -19,10 +19,13 @@ import (
 
 const (
 	// SHFU flags
-	flagSQLitePath     = "sqlite-path"
-	flagGRPCAddr       = "grpc-addr"
-	flagUpdateInterval = "update-interval"
-	flagCleanupAge     = "cleanup-age"
+	flagSQLitePath          = "sqlite-path"
+	flagGRPCAddr            = "grpc-addr"
+	flagUpdateInterval      = "update-interval"
+	flagCleanupAge          = "cleanup-age"
+	flagChainID             = "chain-id"
+	flagCounterpartyChainID = "counterparty-chain-id"
+	flagNoHeader            = "no-header"
 )
 
 // shfuCmd creates the shfu subcommand
@@ -70,9 +73,7 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 
-	// Add database path flag
-	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
-
+	bindPFlagDbPath(cmd)
 	return cmd
 }
 
@@ -88,9 +89,9 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Get filter options
-			chainID := cmd.Flag("chain-id").Value.String()
-			counterpartyChainID := cmd.Flag("counterparty-chain-id").Value.String()
-			noHeader, _ := cmd.Flags().GetBool("no-header")
+			chainID := cmd.Flag(flagChainID).Value.String()
+			counterpartyChainID := cmd.Flag(flagCounterpartyChainID).Value.String()
+			noHeader, _ := cmd.Flags().GetBool(flagNoHeader)
 
 			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
@@ -134,10 +135,9 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
-	cmd.Flags().String("chain-id", "", "Filter by chain ID")
-	cmd.Flags().String("counterparty-chain-id", "", "Filter by counterparty chain ID")
-	cmd.Flags().Bool("no-header", false, "Omit table header in output")
+	bindPFlagDbPath(cmd)
+	bindPFlagChainFilter(cmd)
+	bindPFlagNoHeader(cmd)
 	return cmd
 }
 
@@ -195,7 +195,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	bindPFlagDbPath(cmd)
 	return cmd
 }
 
@@ -239,7 +239,7 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	bindPFlagDbPath(cmd)
 	return cmd
 }
 
@@ -297,8 +297,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 		},
 	}
 
-	// Add database path flag
-	cmd.Flags().String(flagSQLitePath, "", "Path to SQLite database file")
+	bindPFlagDbPath(cmd)
 
 	return cmd
 }
@@ -382,10 +381,11 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			return nil
 		},
 	}
-	cmd = dbPathFlag(cmd)
-	cmd = grpcAddrFlag(cmd)
-	cmd = updateIntervalFlag(cmd)
-	cmd = cleanupAgeFlag(cmd)
+
+	bindPFlagDbPath(cmd)
+	bindPFlagGRPCAddr(cmd)
+	bindPFlagUpdateInterval(cmd)
+	bindPFlagCleanupAge(cmd)
 	return cmd
 }
 
@@ -513,7 +513,7 @@ func queryChainCmd(ctx *config.Context) *cobra.Command {
 }
 
 // Flag functions
-func dbPathFlag(cmd *cobra.Command) *cobra.Command {
+func bindPFlagDbPath(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().String(flagSQLitePath, "", "path to SQLite database file")
 	if err := viper.BindPFlag(flagSQLitePath, cmd.Flags().Lookup(flagSQLitePath)); err != nil {
 		panic(err)
@@ -521,7 +521,7 @@ func dbPathFlag(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-func grpcAddrFlag(cmd *cobra.Command) *cobra.Command {
+func bindPFlagGRPCAddr(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().String(flagGRPCAddr, "", "gRPC server address (optional, if not specified gRPC server will not start)")
 	if err := viper.BindPFlag(flagGRPCAddr, cmd.Flags().Lookup(flagGRPCAddr)); err != nil {
 		panic(err)
@@ -529,7 +529,7 @@ func grpcAddrFlag(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-func updateIntervalFlag(cmd *cobra.Command) *cobra.Command {
+func bindPFlagUpdateInterval(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().String(flagUpdateInterval, "10s", "polling interval for SHFU updates (examples: '10s', '1m', '5m')")
 	if err := viper.BindPFlag(flagUpdateInterval, cmd.Flags().Lookup(flagUpdateInterval)); err != nil {
 		panic(err)
@@ -537,11 +537,22 @@ func updateIntervalFlag(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-func cleanupAgeFlag(cmd *cobra.Command) *cobra.Command {
+func bindPFlagCleanupAge(cmd *cobra.Command) *cobra.Command {
 	cmd.Flags().String(flagCleanupAge, "7d", "cleanup records older than this age (examples: '7d', '24h', '30m', '600s', empty or '0' to disable)")
 	if err := viper.BindPFlag(flagCleanupAge, cmd.Flags().Lookup(flagCleanupAge)); err != nil {
 		panic(err)
 	}
+	return cmd
+}
+
+func bindPFlagChainFilter(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().String(flagChainID, "", "Filter by chain ID")
+	cmd.Flags().String(flagCounterpartyChainID, "", "Filter by counterparty chain ID")
+	return cmd
+}
+
+func bindPFlagNoHeader(cmd *cobra.Command) *cobra.Command {
+	cmd.Flags().Bool(flagNoHeader, false, "Omit table header in output")
 	return cmd
 }
 
