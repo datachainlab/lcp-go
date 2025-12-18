@@ -69,11 +69,6 @@ func (d *SQLiteDialect) ConvertTimeFromDB(dbTime interface{}) (time.Time, error)
 	}
 }
 
-// GetPlaceholder returns SQLite placeholder syntax (always "?")
-func (d *SQLiteDialect) GetPlaceholder(index int) string {
-	return "?"
-}
-
 // ConfigureDatabase applies SQLite-specific configuration settings
 func (d *SQLiteDialect) ConfigureDatabase(db *sqlx.DB) error {
 	// Set SQLite busy timeout for lock handling (30 seconds)
