@@ -103,8 +103,7 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 	// Connect to SHFU gRPC server
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
-		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "GetLatestSHFU request failed - connection error", err)

@@ -7,7 +7,6 @@ package shfu_storage
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -62,9 +61,6 @@ type DBDialect interface {
 	// ConvertTimeFromDB converts database time format to Go time
 	ConvertTimeFromDB(dbTime interface{}) (time.Time, error)
 
-	// GetPlaceholder returns the placeholder syntax for parameter binding (e.g., "?" for SQLite, "$1" for PostgreSQL)
-	GetPlaceholder(index int) string
-
 	// ConfigureDatabase applies database-specific configuration settings
 	ConfigureDatabase(db *sqlx.DB) error
 }
@@ -118,21 +114,9 @@ func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord
 		"chain_id", record.ChainID,
 		"counterparty_chain_id", record.CounterpartyChainID)
 
-	// Start transaction for consistency
-	tx, err := s.db.BeginTxx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return errWithStack("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Insert the main SHFU record
-	if err := s.insertSHFURecord(ctx, tx, record); err != nil {
+	// Insert the main SHFU record(autocommit mode)
+	if err := s.insertSHFURecord(ctx, record); err != nil {
 		return errWithStack("failed to insert SHFU record: %w", err)
-	}
-
-	// Commit transaction
-	if err := tx.Commit(); err != nil {
-		return errWithStack("failed to commit transaction: %w", err)
 	}
 
 	// Log transaction completion
@@ -414,7 +398,7 @@ func (s *SqlxSHFUStorage) Close() error {
 
 // Helper methods (implemented below)
 
-func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, record *SHFURecord) error {
+func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, record *SHFURecord) error {
 	query := `INSERT INTO shfu_records (
 		chain_id, counterparty_chain_id,
 		from_height_revision_number, from_height_revision_height,
@@ -445,8 +429,8 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, tx *sqlx.Tx, rec
 		"latest_finalized_header":     record.LatestFinalizedHeader,
 	}
 
-	query = tx.Rebind(query)
-	_, err = tx.NamedExecContext(ctx, query, namedArgs)
+	query = s.db.Rebind(query)
+	_, err = s.db.NamedExecContext(ctx, query, namedArgs)
 
 	return err
 }
