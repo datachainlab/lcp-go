@@ -1,4 +1,4 @@
-package shfu_storage
+package storage
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
-// InitSQLiteStorage creates a new SQLite database file and initializes the SHFU storage
+// InitSQLiteStorage creates a new SQLite database file and initializes the ELCUpdate storage
 // Returns error if the database file already exists
-func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, error) {
+func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorage, error) {
 	// Check if file already exists
 	if _, err := os.Stat(dbPath); err == nil {
 		return nil, fmt.Errorf("database file already exists: %s", dbPath)
@@ -26,7 +26,7 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, er
 
 	dialect := NewSQLiteDialect()
 
-	storage, err := NewSqlxSHFUStorage(db, dialect, dbPath)
+	storage, err := NewSqlxELCUpdateStorage(db, dialect, dbPath)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -34,9 +34,9 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, er
 	return storage, nil
 }
 
-// OpenSQLiteStorage opens an existing SQLite database file for SHFU storage
+// OpenSQLiteStorage opens an existing SQLite database file for ELCUpdate storage
 // Returns error if the database file does not exist
-func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, error) {
+func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorage, error) {
 	// Check if file exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("database file does not exist: %s", dbPath)
@@ -50,7 +50,7 @@ func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxSHFUStorage, er
 	}
 
 	dialect := NewSQLiteDialect()
-	storage, err := NewSqlxSHFUStorage(db, dialect, dbPath)
+	storage, err := NewSqlxELCUpdateStorage(db, dialect, dbPath)
 	if err != nil {
 		db.Close()
 		return nil, err

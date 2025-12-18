@@ -4,7 +4,7 @@ package relayer.provers.lcp;
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/datachainlab/lcp-go/elcupdater/grpc";
+option go_package = "github.com/datachainlab/lcp-go/relay/elcupdater/grpc";
 option (gogoproto.goproto_getters_all) = false;
 
 // Height represents IBC height with revision number and revision height
@@ -19,8 +19,8 @@ message UpdateClientResult {
   bytes signature = 2;
 }
 
-// UpdateELCRecord represents a updateClient record
-message UpdateELCRecord {
+// ELCUPdateRecord represents a updateClient record
+message ELCUpdateRecord {
   string chain_id = 1;
   string counterparty_chain_id = 2;
   Height from_height = 3;
@@ -31,21 +31,21 @@ message UpdateELCRecord {
   bytes latest_finalized_header = 7;
 }
 
-// GetLatestRequest represents a request to get the latest UpdateELCRecord for a chain
-message GetLatestRequest {
+// GetLatestRecordRequest represents a request to get the latest ELCUpdateRecord for a chain
+message GetLatestRecordRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2; // empty string ok
   string request_id = 3; // Optional request ID for tracing
 }
 
-// GetLatestSHFUResponse represents a response containing the latest SHFU record
-message GetLatestResponse {
-  UpdateELCRecord record = 1; // nil if no record found
+// GetLatestRecordResponse represents a response containing the latest ELCUpdateRecord
+message GetLatestRecordResponse {
+  ELCUpdateRecord record = 1; // nil if no record found
   bool found = 2;        // true if record was found
 }
 
-// GetSequenceRequest represents a request to get sequential UpdateELCRecord from a starting height
-message GetSequenceRequest {
+// GetSequentialRecordRequest represents a request to get sequential ELCUPdateRecords from a starting height
+message GetSequentialRecordsRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2;
   Height from_height = 3;
@@ -53,19 +53,19 @@ message GetSequenceRequest {
   string request_id = 5; // Optional request ID for tracing
 }
 
-// GetSequenceResponse represents a response containing sequential UpdateELCRecord
-message GetSequenceResponse {
-  repeated UpdateELCRecord records = 1; // Sequential records in chronological order
+// GetSequenceResponse represents a response containing sequential ELCUPdateRecords
+message GetSequentialRecordsResponse {
+  repeated ELCUpdateRecord records = 1; // Sequential records in chronological order
   int32 records_count = 2;         // Number of records found
 }
 
-// ELCUpdaterService provides operations for updateELC records
+// ELCUpdaterService provides operations for ELCUpdateRecords
 service ELCUpdaterService {
-  // GetLatest retrieves the last SHFU record for a specific chain
-  rpc GetLatest(GetLatestRequest) returns (GetLatestResponse);
-
-  // GetSequence retrieves sequential UpdateELCRecords starting from the specified height
+  // GetLatestRecord retrieves the last ELCUPdateRecord for a specific chain
+  rpc GetLatestRecord(GetLatestRecordRequest) returns (GetLatestRecordResponse);
+  
+  // GetSequentialRecords retrieves sequential ELCUpdateRecords starting from the specified height
   // Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
-  rpc GetSequence(GetSequenceRequest) returns (GetSequenceResponse);
+  rpc GetSequentialRecords(GetSequentialRecordsRequest) returns (GetSequentialRecordsResponse);
 }
 

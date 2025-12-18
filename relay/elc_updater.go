@@ -10,21 +10,21 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
-	"github.com/datachainlab/lcp-go/relay/shfu_logger"
-	"github.com/datachainlab/lcp-go/relay/shfu_storage"
+	elc_updater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
+	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
+	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
 // Re-export types from storage package for backward compatibility
-type SHFURecord = shfu_storage.SHFURecord
-type SHFUStorage = shfu_storage.SHFUStorage
+type ELCUpdateRecord = elc_updater_storage.ELCUpdateRecord
+type ELCUpdateStorage = elc_updater_storage.ELCUpdateStorage
 
-// getSHFULogger gets logger for SHFU operations, first from context, then from prover
-func (pr *Prover) getSHFULogger(ctx context.Context) *log.RelayLogger {
+// getELCUpdateLogger gets logger for ELC update operations, first from context, then from prover
+func getELCUpdateLogger(ctx context.Context, pr *Prover) *log.RelayLogger {
 	// First try to get logger from context
-	if logger := shfu_logger.GetSHFULoggerOrNil(ctx); logger != nil {
+	if logger := elc_updater_logger.GetELCUpdaterLoggerOrNil(ctx); logger != nil {
 		return logger
 	}
 	return pr.getLogger()
@@ -46,15 +46,15 @@ func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareCh
 	return cs.GetLatestHeight(), nil
 }
 
-// getUpdateClientResultsFromGRPC retrieves SHFU results from gRPC server using height range
-func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
-	logger.InfoContext(ctx, "using SHFU gRPC server", "address", grpcAddress)
+// getUpdateClientResultsFromGRPC retrieves ELCUpdateResults from gRPC server using height range and returns its updateClientResults property
+func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elc_updater_storage.UpdateClientResult, error) {
+	logger.InfoContext(ctx, "using getUpdateClientResults gRPC server", "address", grpcAddress)
 
 	// Get chain ID from target chain and counterparty chain
 	chainID := targetChain.ChainID()
 	counterpartyChainID := counterparty.ChainID()
 
-	// Get SHFU record by height range
+	// Get sequential ELCUpdateRecords by height range
 	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
@@ -64,18 +64,18 @@ func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger
 		return nil, fmt.Errorf("failed to get client state height from counterparty chain: %w", err)
 	}
 
-	records, err := shfu_grpc.GetSequentialSHFURecords(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, latestFinalizedHeader.GetHeight())
+	records, err := elc_updater_grpc.GetSequentialRecords(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, latestFinalizedHeader.GetHeight())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sequential SHFU records: %w", err)
+		return nil, fmt.Errorf("failed to GetSequentialRecords: %w", err)
 	}
 
-	var results []*shfu_storage.UpdateClientResult
+	var results []*elc_updater_storage.UpdateClientResult
 	var heights []string
 	for _, record := range records {
 		heights = append(heights, fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
 		results = append(results, record.UpdateClientResults...)
 	}
-	logger.InfoContext(ctx, "retrieved SHFU records from gRPC server",
+	logger.InfoContext(ctx, "retrieved ELCUpdate records from gRPC server",
 		"chain_id", chainID,
 		"counterparty_chain_id", counterpartyChainID,
 		"heights", strings.Join(heights, ", "),
@@ -84,16 +84,46 @@ func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger
 	return results, nil
 }
 
+func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpartyChainID string, fromHeight ibcexported.Height, storage elc_updater_storage.ELCUpdateStorage, logger *log.RelayLogger) (ibcexported.Height, error) {
+	records, err := storage.GetSequence(ctx, targetChainID, counterpartyChainID, fromHeight, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sequential ELCUpdate records: %w", err)
+	}
+
+	if len(records) == 0 {
+		return nil, nil
+	}
+
+	// Log the sequential records found
+	if logger != nil {
+		// Create comma-separated height list for debugging
+		var heightList []string
+		for _, record := range records {
+			heightList = append(heightList, fmt.Sprintf("%s..%s", record.FromHeight.String(), record.ToHeight.String()))
+		}
+		heightListStr := strings.Join(heightList, ",")
+
+		logger.InfoContext(ctx, "Found sequential ELCUpdateRecords",
+			"chain_id", targetChainID,
+			"counterparty_chain_id", counterpartyChainID,
+			"starting_height", fromHeight.String(),
+			"records_count", len(records),
+			"height_list", heightListStr)
+	}
+
+	return records[len(records)-1].ToHeight, nil
+}
+
 // SHFUExecuteAndStore executes updateELCForUpdateClient and returns UpdateClientResult array
 // This function can be used by various commands and services
-// fromHeight: the starting height for SHFU operations (nil for unspecified)
+// fromHeight: the starting height for updateClient operations (nil for unspecified)
 // counterparty: the counterparty chain object
-func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.FinalityAwareChain, storage SHFUStorage) (*SHFURecord, error) {
-	// Get SHFU logger once and reuse throughout the function
-	logger := pr.getSHFULogger(ctx)
+func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.FinalityAwareChain, storage elc_updater_storage.ELCUpdateStorage) (*elc_updater_storage.ELCUpdateRecord, error) {
+	// Get ELC update logger once and reuse throughout the function
+	logger := getELCUpdateLogger(ctx, pr)
 
 	if counterparty == nil {
-		return nil, fmt.Errorf("counterparty chain is required for SHFU operations")
+		return nil, fmt.Errorf("counterparty chain is required for ELC update operations")
 	}
 	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
 	if err != nil {
@@ -102,7 +132,7 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 
 	csHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ClientState height for SHFUExecuteAndStore: %w", err)
+		return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
 	}
 
 	var fromHeight ibcexported.Height
@@ -110,12 +140,11 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 	{
 		latestRecord, err := storage.GetLatestSHFUForChain(ctx, pr.originChain.ChainID(), counterparty.ChainID())
 		if err != nil {
-			return nil, fmt.Errorf("failed to get latest height for SHFUExecuteAndStore: %w", err)
+			return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
 		}
 
-		if latestRecord != nil {
-			fromHeight = latestRecord.ToHeight
-			dstChain = NewSHFUMockChain(counterparty.ChainID(), counterpartyLatestFinalizedHeader.GetHeight(), fromHeight)
+		if savedTipHeight != nil {
+			fromHeight = savedTipHeight
 		} else {
 			fromHeight = csHeight
 			dstChain = counterparty
@@ -129,7 +158,7 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 	toHeight := originLatestFinalizedHeader.GetHeight()
 
 	if fromHeight.EQ(toHeight) {
-		logger.InfoContext(ctx, "Skipping SHFU execution: already have record with sufficient height",
+		logger.InfoContext(ctx, "Skipping ELC update execution: already have record with sufficient height",
 			"chain_id", pr.originChain.ChainID(),
 			"counterparty_chain_id", counterparty.ChainID(),
 			"from_height", fromHeight.String(),
@@ -146,13 +175,13 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 		return nil, fmt.Errorf("failed to call updateELCForUpdateClient: %w", err)
 	}
 
-	logger.InfoContext(ctx, "SHFU executed successfully",
+	logger.InfoContext(ctx, "ELC update executed successfully",
 		"target_chain_id", pr.originChain.ChainID(),
 		"counterparty_chain_id", counterparty.ChainID(),
 		"latest_finalized_height", originLatestFinalizedHeader.GetHeight().String(),
 	)
 
-	var record *SHFURecord
+	var record *elc_updater_storage.ELCUpdateRecord
 	{
 		h2h := func(h ibcexported.Height) clienttypes.Height {
 			return clienttypes.Height{
@@ -172,8 +201,8 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 			return nil, fmt.Errorf("failed to marshal originLatestFinalizedHeader: %w", err)
 		}
 
-		// Create SHFU record for database storage
-		record = &SHFURecord{
+		// Create ELC update record for database storage
+		record = &elc_updater_storage.ELCUpdateRecord{
 			ChainID:               pr.originChain.ChainID(),
 			CounterpartyChainID:   counterparty.ChainID(),
 			FromHeight:            h2h(fromHeight),
@@ -187,7 +216,7 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 	// Save the record to database with retry logic for temporary errors
 	err = retry.Do(
 		func() error {
-			return storage.SaveSHFUResult(ctx, record)
+			return storage.Save(ctx, record)
 		},
 		retry.Context(ctx),
 		retry.Attempts(3),
@@ -198,7 +227,7 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 			return storage.IsTemporaryError(err)
 		}),
 		retry.OnRetry(func(n uint, err error) {
-			logger.ErrorContext(ctx, "Retry attempt for SaveSHFUResult due to temporary error", err,
+			logger.ErrorContext(ctx, "Retry attempt for SaveELCUpdateResult due to temporary error", err,
 				"attempt", n+1,
 				"chain_id", pr.originChain.ChainID(),
 				"counterparty_chain_id", counterparty.ChainID(),
@@ -208,10 +237,10 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to save SHFU result to database after retries: %w", err)
+		return nil, fmt.Errorf("failed to save ELC update result to database after retries: %w", err)
 	}
 
-	logger.InfoContext(ctx, "Successfully saved SHFU result to database",
+	logger.InfoContext(ctx, "Successfully saved ELC update result to database",
 		"chain_id", pr.originChain.ChainID(),
 		"counterparty_chain_id", counterparty.ChainID(),
 		"from_height", record.FromHeight.String(),
@@ -222,52 +251,52 @@ func (pr *Prover) SHFUExecuteAndStore(ctx context.Context, counterparty core.Fin
 	return record, nil
 }
 
-// SHFUMockChain is a dummy implementation of core.FinalityAwareChain
+// ELCUpdateMockChain is a dummy implementation of core.FinalityAwareChain
 // that returns a specific height for testing SetupHeadersForUpdate calls.
 // It embeds the interface so unimplemented methods will panic at runtime.
-type SHFUMockChain struct {
+type ELCUpdateMockChain struct {
 	core.FinalityAwareChain // Embedded interface - unimplemented methods will panic
 	chainID                 string
 	latestHeight            ibcexported.Height
-	mockClientState         *SHFUMockClientState
+	mockClientState         *ELCUpdateMockClientState
 }
 
 var (
-	_ core.FinalityAwareChain = (*SHFUMockChain)(nil)
+	_ core.FinalityAwareChain = (*ELCUpdateMockChain)(nil)
 )
 
-// SHFUMockClientState is a dummy implementation that embeds ibcexported.ClientState
+// ELCUpdateMockClientState is a dummy implementation that embeds ibcexported.ClientState
 // All methods will panic at runtime unless specifically implemented
-type SHFUMockClientState struct {
+type ELCUpdateMockClientState struct {
 	ibcexported.ClientState // Embedded interface - unimplemented methods will panic
 	latestHeight            ibcexported.Height
 }
 
 var (
-	_ ibcexported.ClientState = (*SHFUMockClientState)(nil)
+	_ ibcexported.ClientState = (*ELCUpdateMockClientState)(nil)
 )
 
-// NewSHFUMockChain creates a new SHFUMockChain instance
-func NewSHFUMockChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *SHFUMockChain {
-	return &SHFUMockChain{
+// NewELCUpdateMockChain creates a new ELCUpdateMockChain instance
+func NewELCUpdateMockChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *ELCUpdateMockChain {
+	return &ELCUpdateMockChain{
 		chainID:         chainID,
 		latestHeight:    latestHeight,
-		mockClientState: NewSHFUMockClientState(clientStateHeight),
+		mockClientState: NewELCUpdateMockClientState(clientStateHeight),
 	}
 }
 
 // ChainID returns the chain ID
-func (c *SHFUMockChain) ChainID() string {
+func (c *ELCUpdateMockChain) ChainID() string {
 	return c.chainID
 }
 
 // LatestHeight returns the latest height with context (allowed method)
-func (c *SHFUMockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
+func (c *ELCUpdateMockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 	return c.latestHeight, nil
 }
 
 // QueryClientState returns a QueryClientStateResponse with mock client state
-func (c *SHFUMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+func (c *ELCUpdateMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
 	// Use the existing mock client state
 	mockClientState := c.mockClientState
 
@@ -282,14 +311,14 @@ func (c *SHFUMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.Q
 	}, nil
 }
 
-// NewSHFUMockClientState creates a new SHFUMockClientState instance
-func NewSHFUMockClientState(latestHeight ibcexported.Height) *SHFUMockClientState {
-	return &SHFUMockClientState{
+// NewELCUpdateMockClientState creates a new ELCUpdateMockClientState instance
+func NewELCUpdateMockClientState(latestHeight ibcexported.Height) *ELCUpdateMockClientState {
+	return &ELCUpdateMockClientState{
 		latestHeight: latestHeight,
 	}
 }
 
 // GetLatestHeight returns the configured latest height
-func (s *SHFUMockClientState) GetLatestHeight() ibcexported.Height {
+func (s *ELCUpdateMockClientState) GetLatestHeight() ibcexported.Height {
 	return s.latestHeight
 }

@@ -1,4 +1,4 @@
-package shfu_storage
+package storage
 
 import (
 	"context"
@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStorageBasicOperations demonstrates and tests basic SHFU storage operations
+// TestStorageBasicOperations demonstrates and tests basic ELCUpdate storage operations
 func TestStorageBasicOperations(t *testing.T) {
 	// Create temporary database file for testing
-	dbPath := "./test_shfu_cache.db"
+	dbPath := "./test_elc_update_storage.db"
 	defer os.Remove(dbPath) // Clean up after test
 	// Create SQLite storage (use InitSQLiteStorage for new database)
 	ctx := context.Background()
@@ -22,7 +22,7 @@ func TestStorageBasicOperations(t *testing.T) {
 	require.NoError(t, err, "failed to create storage")
 	defer storage.Close()
 
-	// Create a sample SHFU record with UpdateClientResults
+	// Create a sample ELCUpdateRecord with UpdateClientResults
 	sampleResults := []*UpdateClientResult{
 		{
 			Message:   []byte("sample_message_1"),
@@ -34,7 +34,7 @@ func TestStorageBasicOperations(t *testing.T) {
 		},
 	}
 
-	record := &SHFURecord{
+	record := &ELCUpdateRecord{
 		ChainID:             "chain-a",
 		CounterpartyChainID: "chain-b",
 		ToHeight: clienttypes.Height{
@@ -46,13 +46,13 @@ func TestStorageBasicOperations(t *testing.T) {
 	}
 
 	// Test saving the record
-	err = storage.SaveSHFUResult(ctx, record)
+	err = storage.SaveELCUpdateResult(ctx, record)
 	require.NoError(t, err, "failed to save record")
 
-	t.Logf("Successfully saved SHFU record for chain %s", record.ChainID)
+	t.Logf("Successfully saved ELCUpdate record for chain %s", record.ChainID)
 
 	// Test retrieving the latest record for the chain (without counterparty filter)
-	latest, err := storage.GetLatestSHFUForChain(ctx, "chain-a", "")
+	latest, err := storage.GetLatestELCUpdateForChain(ctx, "chain-a", "")
 	require.NoError(t, err, "failed to get latest record")
 
 	// Verify the retrieved record

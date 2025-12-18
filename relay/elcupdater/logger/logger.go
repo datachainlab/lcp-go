@@ -1,4 +1,4 @@
-package shfu_logger
+package logger
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-const SHFULoggerKey = "SHFULogger"
+const LoggerKey = "ELCUpdaterLogger"
 
 // NOTE that go 1.24 has slog.DiscardHandler, but for compatibility with go 1.23, we define our own discardHandler here.
 type discardHandler struct{}
@@ -30,14 +30,14 @@ func (h *discardHandler) WithGroup(name string) slog.Handler {
 	return h
 }
 
-// GetSHFULogger returns a logger for SHFU operations, always returns a logger (using DiscardHandler as fallback)
-func GetSHFULogger(ctx context.Context) *log.RelayLogger {
-	if logger := GetSHFULoggerOrNil(ctx); logger != nil {
+// GetELCUpdaterLogger returns a logger for ELCUpdater operations, always returns a logger (using DiscardHandler as fallback)
+func GetELCUpdaterLogger(ctx context.Context) *log.RelayLogger {
+	if logger := GetELCUpdaterLoggerOrNil(ctx); logger != nil {
 		return logger
 	}
 
 	if logger := log.GetLogger(); logger != nil {
-		return logger.WithModule("shfu")
+		return logger.WithModule("elc-updater")
 	}
 
 	// Fallback to a null logger if GetLogger returns nil
@@ -47,14 +47,14 @@ func GetSHFULogger(ctx context.Context) *log.RelayLogger {
 	}
 }
 
-// GetSHFULoggerOrNil returns a logger for SHFU operations from context, or nil if not found
-func GetSHFULoggerOrNil(ctx context.Context) *log.RelayLogger {
-	if v := ctx.Value(SHFULoggerKey); v != nil {
+// GetELCUpdaterLoggerOrNil returns a logger for ELC updater operations from context, or nil if not found
+func GetELCUpdaterLoggerOrNil(ctx context.Context) *log.RelayLogger {
+	if v := ctx.Value(LoggerKey); v != nil {
 		return v.(*log.RelayLogger)
 	}
 	return nil
 }
 
-func SetSHFULogger(ctx context.Context, logger *log.RelayLogger) context.Context {
-	return context.WithValue(ctx, SHFULoggerKey, logger)
+func SetELCUpdaterLogger(ctx context.Context, logger *log.RelayLogger) context.Context {
+	return context.WithValue(ctx, LoggerKey, logger)
 }

@@ -1,4 +1,4 @@
-package shfu_storage
+package storage
 
 import (
 	"context"
@@ -15,8 +15,8 @@ type UpdateClientResult struct {
 	Signature []byte
 }
 
-// SHFURecord represents a SetupHeadersForUpdate record for persistence
-type SHFURecord struct {
+// ELCUpdateRecord represents a updateClient record for persistence
+type ELCUpdateRecord struct {
 	ChainID               string                `json:"chain_id"`
 	CounterpartyChainID   string                `json:"counterparty_chain_id"`
 	FromHeight            clienttypes.Height    `json:"from_height"`
@@ -26,8 +26,8 @@ type SHFURecord struct {
 	LatestFinalizedHeader []byte                `json:"latest_finalized_header"` // Serialized core.Header bytes
 }
 
-// FormatSummary formats the SHFU record as a map for JSON output
-func (r *SHFURecord) FormatSummary() map[string]interface{} {
+// FormatSummary formats the ELCUpdateRecord as a map for JSON output
+func (r *ELCUpdateRecord) FormatSummary() map[string]interface{} {
 	// Prepare update client results for JSON output
 	updateClientResults := make([]map[string]interface{}, len(r.UpdateClientResults))
 	for i, result := range r.UpdateClientResults {
@@ -49,29 +49,29 @@ func (r *SHFURecord) FormatSummary() map[string]interface{} {
 	}
 }
 
-// SHFUStorage defines the storage interface for SetupHeadersForUpdate operations
+// ELCUpdateStorage defines the storage interface for updateClient operations
 // This interface focuses on use cases rather than CRUD operations
-type SHFUStorage interface {
-	// SaveSHFUResult saves a SetupHeadersForUpdate execution result
-	SaveSHFUResult(ctx context.Context, record *SHFURecord) error
+type ELCUpdateStorage interface {
+	// Save saves a updateClient execution result
+	Save(ctx context.Context, record *ELCUpdateRecord) error
 
-	// FindSHFUByChainAndHeight finds SHFU records for a specific chain with exact height match
-	FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error)
+	// FindByChainAndHeight finds ELCUpdate records for a specific chain with exact height match
+	FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error)
 
-	// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
+	// GetLatestForChain retrieves the most recent ELCUpdate record for a chain
 	// If counterpartyChainID is empty, it will be ignored in the query
-	GetLatestSHFUForChain(ctx context.Context, chainID string, counterpartyChainID string) (*SHFURecord, error)
+	GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*ELCUpdateRecord, error)
 
-	// GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+	// GetSequence retrieves sequential ELCUpdate records starting from the specified height
 	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
 	// If toHeight is not nil, stops when reaching a record with that ToHeight
-	GetSequentialSHFURecords(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error)
+	GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error)
 
-	// ListShfuRecords lists SHFU records in the database with optional chain ID filters
-	ListShfuRecords(ctx context.Context, chainID, counterpartyChainID string) ([]*SHFURecord, error)
+	// List lists ELCUpdate records in the database with optional chain ID filters
+	List(ctx context.Context, chainID, counterpartyChainID string) ([]*ELCUpdateRecord, error)
 
-	// CleanupOldSHFU removes SHFU records older than the specified duration
-	CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error)
+	// Cleanup removes ELCUpdate records older than the specified duration
+	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 
 	// IsTemporaryError determines if an error is temporary and the operation can be retried
 	// Returns true for errors like database locks, connection timeouts, etc.

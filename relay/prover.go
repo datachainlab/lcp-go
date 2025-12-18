@@ -13,9 +13,9 @@ import (
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	elc_updater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
+	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
-	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
-	"github.com/datachainlab/lcp-go/relay/shfu_storage"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -187,24 +187,24 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 // GetLatestFinalizedHeader returns the latest finalized header on this chain
 // The returned header is expected to be the latest one of headers that can be verified by the light client
 func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, error) {
-	// Use SHFU gRPC server if configured (environment variable or config), otherwise use origin prover
-	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
+	// Use ELC updater gRPC server if configured (environment variable or config), otherwise use origin prover
+	useGRPC, grpcAddress := pr.shouldUseELCUpdaterGRPC()
 	if useGRPC {
-		pr.getLogger().InfoContext(ctx, "using SHFU gRPC server for latest finalized header", "address", grpcAddress)
+		pr.getLogger().InfoContext(ctx, "using ELC updater gRPC server for latest finalized header", "address", grpcAddress)
 
 		// Get chain ID from origin chain
 		chainID := pr.originChain.ChainID()
 
 		// Note: This is called from GetLatestFinalizedHeader, so we don't have dstChain info
 		// For now, we'll pass empty string as counterparty chain ID - this needs architectural change
-		header, err := shfu_grpc.GetLatestFinalizedHeader(ctx, grpcAddress, chainID, "", pr.codec)
+		header, err := elc_updater_grpc.GetLatestFinalizedHeader(ctx, grpcAddress, chainID, "", pr.codec)
 		if err != nil {
 			return nil, err
 		}
 
 		// Check if header is nil
 		if header == nil {
-			err := fmt.Errorf("received nil header from SHFU gRPC server for chain %s", chainID)
+			err := fmt.Errorf("received nil header from ELC updater gRPC server for chain %s", chainID)
 			return nil, err
 		}
 
@@ -223,7 +223,7 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
-	var results []*shfu_storage.UpdateClientResult
+	var results []*elc_updater_storage.UpdateClientResult
 	var err error
 
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
@@ -277,12 +277,12 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
-func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*shfu_storage.UpdateClientResult, error) {
+func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elc_updater_storage.UpdateClientResult, error) {
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
-	var results []*shfu_storage.UpdateClientResult
+	var results []*elc_updater_storage.UpdateClientResult
 
 	for h := range headerStream {
 		if h.Error != nil {
@@ -300,7 +300,7 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
 			return nil, fmt.Errorf("failed to decode headered proxy message: message=%x %w", res.Message, err)
 		}
-		results = append(results, &shfu_storage.UpdateClientResult{
+		results = append(results, &elc_updater_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
 		})
@@ -460,24 +460,24 @@ func (pr *Prover) ProveHostConsensusState(ctx core.QueryContext, height exported
 	return pr.originProver.ProveHostConsensusState(ctx, height, consensusState)
 }
 
-// shouldUseSHFUGRPC determines whether to use SHFU gRPC server based on config and environment variable
-// Environment variable YRLY_LCP_SHFU_GRPC_ENABLE=yes enables gRPC, disabled by default
-func (pr *Prover) shouldUseSHFUGRPC() (bool, string) {
+// shouldUseELCUpdaterGRPC determines whether to use ELC updater gRPC server based on config and environment variable
+// Environment variable YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=yes enables gRPC, disabled by default
+func (pr *Prover) shouldUseELCUpdaterGRPC() (bool, string) {
 	// First check if address is configured
-	if pr.config.ShfuGrpcAddress == "" {
+	if pr.config.ElcUpdaterGrpcAddress == "" {
 		// No address configured, cannot use gRPC
 		return false, ""
 	}
 
 	// Check if gRPC is enabled via environment variable
-	envEnable := os.Getenv("YRLY_LCP_SHFU_GRPC_ENABLE")
+	envEnable := os.Getenv("YRLY_LCP_ELC_UPDATER_GRPC_ENABLE")
 	if b, err := strconv.ParseBool(envEnable); err != nil || !b {
 		// Environment variable is not true or is not set, gRPC disabled by default
 		return false, ""
 	}
 
 	// Address configured and gRPC enabled, use gRPC
-	return true, pr.config.ShfuGrpcAddress
+	return true, pr.config.ElcUpdaterGrpcAddress
 }
 
 func (pr *Prover) getLogger() *log.RelayLogger {

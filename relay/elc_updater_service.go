@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datachainlab/lcp-go/relay/shfu_grpc"
-	"github.com/datachainlab/lcp-go/relay/shfu_logger"
+	elc_updater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
+	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
+	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -49,28 +50,28 @@ func panicToError(ctx context.Context, logger *log.RelayLogger, routineName stri
 
 const MinCleanupInterval = 10 * time.Minute
 
-// SHFUChainPair represents a target chain and its counterparty chain pair
-type SHFUChainPair struct {
+// ELCUpdaterChainPair represents a target chain and its counterparty chain pair
+type ELCUpdaterChainPair struct {
 	TargetChain       *core.ProvableChain
 	TargetLCPProver   *Prover
 	CounterpartyChain *core.ProvableChain
 }
 
-type SHFUService struct {
-	Storage        SHFUStorage
-	ChainPairs     []SHFUChainPair // Changed from TargetChains to ChainPairs
+type ELCUpdaterService struct {
+	Storage        elc_updater_storage.ELCUpdateStorage
+	ChainPairs     []ELCUpdaterChainPair // Changed from TargetChains to ChainPairs
 	PollInterval   time.Duration
 	GRPCAddr       string        // gRPC server address (e.g., ":8080")
 	CleanupAge     time.Duration // Cleanup age threshold for old records, must be >= MinCleanupInterval to enable
 	TargetChainIDs []string      // Target chain IDs for logging
 }
 
-// NewSHFUService creates a new SHFUService
-func NewSHFUService(storage SHFUStorage, chainPairs []SHFUChainPair, grpcAddr string, pollInterval time.Duration, cleanupAge time.Duration, targetChainIDs []string) *SHFUService {
+// NewELCUpdaterService creates a new ELCUpdaterService
+func NewELCUpdaterService(storage elc_updater_storage.ELCUpdateStorage, chainPairs []ELCUpdaterChainPair, grpcAddr string, pollInterval time.Duration, cleanupAge time.Duration, targetChainIDs []string) *ELCUpdaterService {
 	if pollInterval <= 0 {
 		pollInterval = DefaultPollInterval
 	}
-	return &SHFUService{
+	return &ELCUpdaterService{
 		Storage:        storage,
 		ChainPairs:     chainPairs,
 		PollInterval:   pollInterval,
@@ -80,19 +81,19 @@ func NewSHFUService(storage SHFUStorage, chainPairs []SHFUChainPair, grpcAddr st
 	}
 }
 
-func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
+func (srv *ELCUpdaterService) ELCUpdaterServiceRun(ctx context.Context) {
 	logger := srv.getLogger()
 	// Log service startup information
-	logger.InfoContext(ctx, "Starting SHFU Service",
+	logger.InfoContext(ctx, "Starting ELCUpdater Service",
 		"chains", srv.TargetChainIDs,
 		"database", srv.Storage.Description(),
 		"grpc_address", srv.GRPCAddr,
 		"poll_interval", srv.PollInterval)
 	logger.InfoContext(ctx, "Press Ctrl+C to stop the service")
 
-	ctx = shfu_logger.SetSHFULogger(ctx, logger)
+	ctx = elc_updater_logger.SetELCUpdaterLogger(ctx, logger)
 	defer func() {
-		logger.InfoContext(ctx, "SHFU Service stopped")
+		logger.InfoContext(ctx, "ELCUpdater Service stopped")
 	}()
 
 	// Create ErrGroup with context for concurrent goroutines
@@ -149,30 +150,30 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 
 	// Wait for all goroutines to complete or first error
 	if err := eg.Wait(); err != nil {
-		logger.ErrorContext(ctx, "SHFU Service stopped with error", err)
+		logger.ErrorContext(ctx, "ELCUpdater Service stopped with error", err)
 	}
 }
 
-func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SHFUChainPair) error {
+func (srv *ELCUpdaterService) runUpdaterForChainPair(ctx context.Context, chainPair ELCUpdaterChainPair) error {
 	ticker := time.NewTicker(srv.PollInterval)
 	defer ticker.Stop()
-	logger := shfu_logger.GetSHFULogger(ctx)
+	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			logMemoryUsage(ctx, logger, "before-SHFU")
+			logMemoryUsage(ctx, logger, "before-ELCUpdater")
 
-			// Execute SHFU and store the result with both target and counterparty chains
-			_, err := chainPair.TargetLCPProver.SHFUExecuteAndStore(ctx, chainPair.CounterpartyChain, srv.Storage)
-			logMemoryUsage(ctx, logger, "after-SHFU")
+			// Execute ELCUpdater and store the result with both target and counterparty chains
+			_, err := chainPair.TargetLCPProver.UpdateELCAndStore(ctx, chainPair.CounterpartyChain, srv.Storage)
+			logMemoryUsage(ctx, logger, "after-ELCUpdater")
 			runtime.GC()
-			logMemoryUsage(ctx, logger, "after-SHFU-GC")
+			logMemoryUsage(ctx, logger, "after-ELCUpdater-GC")
 			if err != nil {
 				// Log error but continue the loop
-				logger.ErrorContext(ctx, "SHFU update failed", err,
+				logger.ErrorContext(ctx, "ELCUpdater update failed", err,
 					"chain_id", chainPair.TargetChain.ChainID(),
 				)
 			}
@@ -180,8 +181,8 @@ func (srv *SHFUService) runUpdaterForChainPair(ctx context.Context, chainPair SH
 	}
 }
 
-func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
-	logger := shfu_logger.GetSHFULogger(ctx)
+func (srv *ELCUpdaterService) runGRPCServer(ctx context.Context) error {
+	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
 
 	// Create custom recovery handler with logging
 	recoveryHandler := func(p interface{}) error {
@@ -194,19 +195,18 @@ func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 		grpc.UnaryInterceptor(recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(recoveryHandler))),
 	)
 
-	// Create SHFU gRPC service implementation
-	grpcService := shfu_grpc.NewSHFUGRPCServer(srv.Storage)
+	// Create ELCUpdater gRPC service implementation
+	grpcService := elc_updater_grpc.NewELCUpdaterServiceGRPCServer(srv.Storage)
 
-	// Register SHFU service
-	shfu_grpc.RegisterSHFUServiceServer(grpcServer, grpcService)
-
+	// Register ELCUpdater service
+	elc_updater_grpc.RegisterELCUpdaterServiceServer(grpcServer, grpcService)
 	// Create listener
 	lis, err := net.Listen("tcp", srv.GRPCAddr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", srv.GRPCAddr, err)
 	}
 
-	logger.InfoContext(ctx, "Starting SHFU gRPC server", "address", srv.GRPCAddr)
+	logger.InfoContext(ctx, "Starting ELCUpdater gRPC server", "address", srv.GRPCAddr)
 
 	// Start server in a goroutine
 	go func() {
@@ -218,21 +218,21 @@ func (srv *SHFUService) runGRPCServer(ctx context.Context) error {
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	logger.InfoContext(ctx, "Stopping SHFU gRPC server")
+	logger.InfoContext(ctx, "Stopping ELCUpdater gRPC server")
 	grpcServer.GracefulStop()
 
 	return nil
 }
 
-// runCleanup periodically runs the CleanupOldSHFU operation
-func (srv *SHFUService) runCleanup(ctx context.Context) error {
-	logger := shfu_logger.GetSHFULogger(ctx)
+// runCleanup periodically runs the CleanupOldELCUpdater operation
+func (srv *ELCUpdaterService) runCleanup(ctx context.Context) error {
+	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
 	// Run cleanup every 5 minutes
 	cleanupInterval := 5 * time.Minute
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
-	logger.InfoContext(ctx, "Started SHFU cleanup routine",
+	logger.InfoContext(ctx, "Started ELCUpdater cleanup routine",
 		"cleanup_age", srv.CleanupAge.String(),
 		"cleanup_interval", cleanupInterval.String())
 
@@ -241,7 +241,7 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			deletedCount, err := srv.Storage.CleanupOldSHFU(ctx, srv.CleanupAge)
+			deletedCount, err := srv.Storage.Cleanup(ctx, srv.CleanupAge)
 			if err != nil {
 				// Log error but continue the loop
 				logger.ErrorContext(ctx, "Cleanup failed", err)
@@ -255,8 +255,8 @@ func (srv *SHFUService) runCleanup(ctx context.Context) error {
 	}
 }
 
-// getLogger returns a logger for SHFU service with appropriate module name
-func (srv *SHFUService) getLogger() *log.RelayLogger {
+// getLogger returns a logger for ELCUpdater service with appropriate module name
+func (srv *ELCUpdaterService) getLogger() *log.RelayLogger {
 	// strings.Join to create a single string of chain IDs
 	chainIDs := make([]string, 0, len(srv.ChainPairs))
 	for _, cp := range srv.ChainPairs {
@@ -264,6 +264,6 @@ func (srv *SHFUService) getLogger() *log.RelayLogger {
 	}
 
 	return &log.RelayLogger{
-		Logger: log.GetLogger().WithModule("shfu-service").With("chain_ids", strings.Join(chainIDs, ",")),
+		Logger: log.GetLogger().WithModule("elc-updater").With("chain_ids", strings.Join(chainIDs, ",")),
 	}
 }

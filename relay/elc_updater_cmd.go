@@ -9,7 +9,8 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/shfu_storage"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
@@ -18,7 +19,7 @@ import (
 )
 
 const (
-	// SHFU flags
+	// flags
 	flagSQLitePath          = "sqlite-path"
 	flagGRPCAddr            = "grpc-addr"
 	flagUpdateInterval      = "update-interval"
@@ -28,11 +29,11 @@ const (
 	flagNoHeader            = "no-header"
 )
 
-// shfuCmd creates the shfu subcommand
-func shfuCmd(ctx *config.Context) *cobra.Command {
+// elcUpdaterCmd creates the elc-updater subcommand
+func elcUpdaterCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "shfu",
-		Short: "SHFU management commands",
+		Use:   "elc-updater",
+		Short: "ELC updater management commands",
 	}
 
 	cmd.AddCommand(
@@ -50,7 +51,7 @@ func shfuCmd(ctx *config.Context) *cobra.Command {
 func dbInitCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dbinit",
-		Short: "Initialize SHFU database",
+		Short: "Initialize ELC updater database",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get database path from flag
 			dbPath := viper.GetString(flagSQLitePath)
@@ -61,7 +62,7 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 			fmt.Printf("Initializing database at: %s\n", dbPath)
 
 			// Create storage factory and initialize database
-			storage, err := shfu_storage.InitSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := elc_updater_storage.InitSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to create storage: %w", err)
 			}
@@ -77,11 +78,11 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 	return cmd
 }
 
-// dbListCmd lists all SHFU records in the database
+// dbListCmd lists all ELC updater records in the database
 func dbListCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dblist",
-		Short: "List all SHFU records in the database",
+		Short: "List all ELC updater records in the database",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
@@ -93,15 +94,15 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			counterpartyChainID := cmd.Flag(flagCounterpartyChainID).Value.String()
 			noHeader, _ := cmd.Flags().GetBool(flagNoHeader)
 
-			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
 			defer storage.Close()
 
-			records, err := storage.ListShfuRecords(cmd.Context(), chainID, counterpartyChainID)
+			records, err := storage.List(cmd.Context(), chainID, counterpartyChainID)
 			if err != nil {
-				return fmt.Errorf("failed to list SHFU records: %w", err)
+				return fmt.Errorf("failed to list ELC updater records: %w", err)
 			}
 
 			// Print header unless --no-header is specified
@@ -126,12 +127,11 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 	return cmd
 }
 
-// dbGetCmd gets SHFU records by chainId, counterpartyChainId, toHeight
+// dbGetCmd gets ELCUpdateRecords by chainId, counterpartyChainId, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget <path-name:chain-id> <from-height> <to-height>",
-		Short: "Get records by path:chain, height (heights in <revision>-<height> format)",
-		Args:  cobra.ExactArgs(3),
+		Use:  "dbget <path-name:chain-id> <from-height> <to-height>",
+		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
@@ -154,7 +154,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
-			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -162,13 +162,13 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			defer storage.Close()
 
 			// Use zero height for fromHeight when not specified
-			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
+			records, err := storage.FindByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
 			if err != nil {
-				return fmt.Errorf("failed to query SHFU records: %w", err)
+				return fmt.Errorf("failed to query FindByChainAndHeight records: %w", err)
 			}
 
 			if len(records) == 0 {
-				fmt.Println("No SHFU records found.")
+				fmt.Println("No ELCUpdateRecords found.")
 				return nil
 			}
 
@@ -178,7 +178,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				if err != nil {
 					fmt.Printf("failed to marshal result to JSON: %v\n", err)
 				} else {
-					fmt.Printf("SetupHeadersForUpdate result:\n%s\n", string(resultBytes))
+					fmt.Printf("ELCUpdateRecords result:\n%s\n", string(resultBytes))
 				}
 			}
 			return nil
@@ -191,7 +191,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dbcleanup <duration>",
-		Short: "Clean up old SHFU records from the database (duration: e.g. '7d', '24h', '30m', '600s')",
+		Short: "Clean up old ELC updater records from the database (duration: e.g. '7d', '24h', '30m', '600s')",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
@@ -210,7 +210,7 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			fmt.Printf("Opening database: %s\n", dbPath)
-			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
@@ -218,12 +218,12 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 
 			fmt.Printf("Cleaning up records older than: %v\n", cleanupDuration)
 
-			deletedCount, err := storage.CleanupOldSHFU(cmd.Context(), cleanupDuration)
+			deletedCount, err := storage.Cleanup(cmd.Context(), cleanupDuration)
 			if err != nil {
-				return fmt.Errorf("failed to cleanup old SHFU records: %w", err)
+				return fmt.Errorf("failed to cleanup old ELC updater records: %w", err)
 			}
 
-			fmt.Printf("Successfully cleaned up %d old SHFU records\n", deletedCount)
+			fmt.Printf("Successfully cleaned up %d old ELC updater records\n", deletedCount)
 			return nil
 		},
 	}
@@ -235,7 +235,7 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 func updateCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update --sqlite-path <sqlite file path> <path-name:chain-id>",
-		Short: "Execute SHFU (SetupHeadersForUpdate) for specified chain and save results to database",
+		Short: "Execute updateClient for specified chain and save results to database",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
@@ -255,23 +255,23 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Open existing database connection
-			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
 			defer storage.Close()
 
-			// Execute SHFU for the target chain with counterparty chain
-			record, err := chainPair.TargetLCPProver.SHFUExecuteAndStore(cmd.Context(), chainPair.CounterpartyChain, storage)
+			// Execute updateClient for the target chain with counterparty chain
+			record, err := chainPair.TargetLCPProver.UpdateELCAndStore(cmd.Context(), chainPair.CounterpartyChain, storage)
 			if err != nil {
-				return fmt.Errorf("failed to execute and store SHFU for target chain: %w", err)
+				return fmt.Errorf("failed to execute UpdateELCAndStore for target chain: %w", err)
 			}
 
-			fmt.Printf("Successfully executed SHFU for chain %s:\n", chainPair.TargetChain.ChainID())
+			fmt.Printf("Successfully executed UpdateELCAndStore for chain %s:\n", chainPair.TargetChain.ChainID())
 
 			// Print detailed summary for target chain
 			if record == nil {
-				fmt.Printf("No new SHFU record created for %s\n", chainPair.TargetChain.ChainID())
+				fmt.Printf("No new ELCUpdate record created for %s\n", chainPair.TargetChain.ChainID())
 			} else {
 				summary := record.FormatSummary()
 				resultBytes, err := json.MarshalIndent(summary, "", "  ")
@@ -294,7 +294,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 func serverCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "server <path-name:chain-id> [path-name:chain-id]...",
-		Short: "Start SetupHeadersForUpdate SHFU server for one or more path:chain combinations",
+		Short: "Start elc-updater server for one or more path:chain combinations",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get SQLite database path
@@ -341,14 +341,14 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Open storage
-			storage, err := shfu_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
 			defer storage.Close()
 
 			// Parse path:chain arguments and create chain pairs
-			chainPairs := make([]SHFUChainPair, len(args))
+			chainPairs := make([]ELCUpdaterChainPair, len(args))
 			targetChainIDs := make([]string, len(args))
 			for i, arg := range args {
 				// Parse path:chain format and get chains
@@ -361,11 +361,11 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 				targetChainIDs[i] = chainPair.TargetChain.ChainID()
 			}
 
-			// Create and start multi-chain SHFU service
-			service := NewSHFUService(storage, chainPairs, grpcAddr, updateInterval, cleanupAge, targetChainIDs)
+			// Create and start multi-chain ELC update service
+			service := NewELCUpdaterService(storage, chainPairs, grpcAddr, updateInterval, cleanupAge, targetChainIDs)
 
 			// Start the service (this will block until stopped)
-			service.SHFUServiceRun(cmd.Context())
+			service.ELCUpdaterServiceRun(cmd.Context())
 
 			return nil
 		},
@@ -519,7 +519,7 @@ func bindPFlagGRPCAddr(cmd *cobra.Command) *cobra.Command {
 }
 
 func bindPFlagUpdateInterval(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagUpdateInterval, "10s", "polling interval for SHFU updates (examples: '10s', '1m', '5m')")
+	cmd.Flags().String(flagUpdateInterval, "10s", "polling interval for updateELCAndStore (examples: '10s', '1m', '5m')")
 	if err := viper.BindPFlag(flagUpdateInterval, cmd.Flags().Lookup(flagUpdateInterval)); err != nil {
 		panic(err)
 	}
@@ -571,7 +571,7 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 }
 
 // parsePathChainArg parses "path:chain" format argument and returns the target chain and counterparty chain
-func parsePathChainArg(ctx *config.Context, arg string) (*SHFUChainPair, error) {
+func parsePathChainArg(ctx *config.Context, arg string) (*ELCUpdaterChainPair, error) {
 	parts := strings.Split(arg, ":")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
@@ -598,13 +598,13 @@ func parsePathChainArg(ctx *config.Context, arg string) (*SHFUChainPair, error) 
 	}
 
 	if chainID == srcChainID {
-		return &SHFUChainPair{
+		return &ELCUpdaterChainPair{
 			TargetChain:       srcChain,
 			TargetLCPProver:   srcProver,
 			CounterpartyChain: dstChain,
 		}, nil
 	} else if chainID == dstChainID {
-		return &SHFUChainPair{
+		return &ELCUpdaterChainPair{
 			TargetChain:       dstChain,
 			TargetLCPProver:   dstProver,
 			CounterpartyChain: srcChain,
