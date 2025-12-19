@@ -114,8 +114,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 					r.ChainID,
 					r.CounterpartyChainID,
 					fmt.Sprintf("%d-%d", r.FromHeight.RevisionNumber, r.FromHeight.RevisionHeight),
-					fmt.Sprintf("%d-%d", r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight),
-					r.UpdatedAt.Format(time.RFC3339),
+					fmt.Sprintf("%d-%d", r.ToHeight.RevisionNumber, r.ToHeight.RevisionHeight), r.UpdatedAt.Format(time.RFC3339),
 				)
 			}
 			return nil
@@ -130,8 +129,8 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 // dbGetCmd gets SHFU records by chainId, counterpartyChainId, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dbget <path-name:chain-id> <to-height>",
-		Short: "Get SHFU records by path:chain, toHeight (heights in <revision>-<height> format)",
+		Use:   "dbget <path-name:chain-id> <from-height> <to-height>",
+		Short: "Get records by path:chain, height (heights in <revision>-<height> format)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
@@ -145,7 +144,12 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
-			toHeight, err := parseHeightArg(args[1], "to-height")
+			fromHeight, err := parseHeightArg(args[1], "from-height")
+			if err != nil {
+				return err
+			}
+
+			toHeight, err := parseHeightArg(args[2], "to-height")
 			if err != nil {
 				return err
 			}
@@ -158,7 +162,6 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			defer storage.Close()
 
 			// Use zero height for fromHeight when not specified
-			fromHeight := clienttypes.NewHeight(0, 0)
 			records, err := storage.FindSHFUByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query SHFU records: %w", err)
