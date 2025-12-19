@@ -131,7 +131,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dbget <path-name:chain-id> <from-height> <to-height>",
 		Short: "Get records by path:chain, height (heights in <revision>-<height> format)",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
 			if dbPath == "" {
