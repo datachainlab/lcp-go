@@ -29,6 +29,7 @@ func (srv *SHFUGRPCServer) GetSequentialSHFURecords(ctx context.Context, req *Ge
 	logger := log.RelayLogger{
 		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetSequentialSHFURecords",
+			"request_id", req.RequestId,
 			"chain_id", req.ChainId,
 			"counterparty_chain_id", req.CounterpartyChainId,
 			"from_height", fmt.Sprintf("%d-%d", req.FromHeight.RevisionNumber, req.FromHeight.RevisionHeight),
@@ -73,6 +74,7 @@ func (srv *SHFUGRPCServer) GetLatestSHFU(ctx context.Context, req *GetLatestSHFU
 	logger := log.RelayLogger{
 		Logger: shfu_logger.GetSHFULogger(ctx).With(
 			"function", "GetLatestSHFU",
+			"request_id", req.RequestId,
 			"chain_id", req.ChainId,
 			"counterparty_chain_id", req.CounterpartyChainId,
 		),

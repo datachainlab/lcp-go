@@ -22,7 +22,7 @@ var (
 )
 
 const (
-	namespaceRoot = "lcp-go"
+	namespaceRoot = "relayer.lcp_go"
 )
 
 func NewInt64Gauge(name string, desc string, options ...metric.RecordOption) (*Int64Gauge, error) {

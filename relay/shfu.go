@@ -114,7 +114,7 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 	return records[len(records)-1].ToHeight, nil
 }
 
-// ExecuteSetupHeadersForUpdate executes updateELCForUpdateClient and returns UpdateClientResult array
+// SHFUExecuteAndStore executes updateELCForUpdateClient and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for SHFU operations (nil for unspecified)
 // counterparty: the counterparty chain object

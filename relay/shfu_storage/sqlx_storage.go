@@ -150,7 +150,6 @@ func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterp
 	query += " ORDER BY chain_id, to_height_revision_number, to_height_revision_height"
 
 	// Execute query with named parameters
-	query = s.db.Rebind(query)
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
 		return nil, err
@@ -191,7 +190,6 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 		"to_rev_height":         toHeight.GetRevisionHeight(),
 	}
 
-	query = s.db.Rebind(query)
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
 		counterpartyStr := counterpartyChainID
@@ -241,7 +239,6 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 		"counterparty_chain_id": counterpartyChainID,
 	}
 
-	query = s.db.Rebind(query)
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
 		return nil, errWithStack("failed to query latest SHFU record: %w", err)
@@ -291,7 +288,6 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 
 	query += ` ORDER BY from_height_revision_number, from_height_revision_height`
 
-	query = s.db.Rebind(query)
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
 		counterpartyStr := counterpartyChainID
@@ -377,7 +373,6 @@ func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Dur
 		"cutoff_time": s.dialect.ConvertTimeToDB(cutoffTime),
 	}
 
-	recordQuery = s.db.Rebind(recordQuery)
 	result, err := s.db.NamedExecContext(ctx, recordQuery, namedArgs)
 	if err != nil {
 		return 0, errWithStack("failed to delete old SHFU records: %w", err)
@@ -429,7 +424,6 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, record *SHFUReco
 		"latest_finalized_header":     record.LatestFinalizedHeader,
 	}
 
-	query = s.db.Rebind(query)
 	_, err = s.db.NamedExecContext(ctx, query, namedArgs)
 
 	return err

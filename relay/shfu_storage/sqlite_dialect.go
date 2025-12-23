@@ -45,7 +45,7 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 func (d *SQLiteDialect) ConvertTimeToDB(t time.Time) interface{} {
 	// Use SQLite's preferred ISO 8601 format for DATETIME columns
 	// This enables proper date/time comparisons and functions
-	return t.UTC().Format("2006-01-02 15:04:05")
+	return t.UTC().Format(sqliteTimeFormat)
 }
 
 // ConvertTimeFromDB converts SQLite time to Go time
