@@ -1,4 +1,4 @@
-package relay
+package module
 
 import (
 	"encoding/json"
@@ -9,13 +9,14 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
-	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	lcp "github.com/datachainlab/lcp-go/relay"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
 const (
@@ -29,8 +30,8 @@ const (
 	flagNoHeader            = "no-header"
 )
 
-// elcUpdaterCmd creates the elc-updater subcommand
-func elcUpdaterCmd(ctx *config.Context) *cobra.Command {
+// ElcUpdaterCmd creates the elc-updater subcommand
+func ElcUpdaterCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "elc-updater",
 		Short: "ELC updater management commands",
@@ -62,12 +63,11 @@ func dbInitCmd(ctx *config.Context) *cobra.Command {
 			fmt.Printf("Initializing database at: %s\n", dbPath)
 
 			// Create storage factory and initialize database
-			storage, err := elc_updater_storage.InitSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.InitSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to create storage: %w", err)
 			}
-			defer storage.Close()
-
+			defer sto.Close()
 			fmt.Printf("Database initialized successfully at: %s\n", dbPath)
 
 			return nil
@@ -94,13 +94,13 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 			counterpartyChainID := cmd.Flag(flagCounterpartyChainID).Value.String()
 			noHeader, _ := cmd.Flags().GetBool(flagNoHeader)
 
-			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
-			defer storage.Close()
+			defer sto.Close()
 
-			records, err := storage.List(cmd.Context(), chainID, counterpartyChainID)
+			records, err := sto.List(cmd.Context(), chainID, counterpartyChainID)
 			if err != nil {
 				return fmt.Errorf("failed to list ELC updater records: %w", err)
 			}
@@ -154,15 +154,15 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				return err
 			}
 
-			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
 
-			defer storage.Close()
+			defer sto.Close()
 
 			// Use zero height for fromHeight when not specified
-			records, err := storage.FindByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
+			records, err := sto.FindByChainAndHeight(cmd.Context(), chainPair.TargetChain.ChainID(), chainPair.CounterpartyChain.ChainID(), fromHeight, toHeight)
 			if err != nil {
 				return fmt.Errorf("failed to query FindByChainAndHeight records: %w", err)
 			}
@@ -210,15 +210,15 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			fmt.Printf("Opening database: %s\n", dbPath)
-			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
-			defer storage.Close()
+			defer sto.Close()
 
 			fmt.Printf("Cleaning up records older than: %v\n", cleanupDuration)
 
-			deletedCount, err := storage.Cleanup(cmd.Context(), cleanupDuration)
+			deletedCount, err := sto.Cleanup(cmd.Context(), cleanupDuration)
 			if err != nil {
 				return fmt.Errorf("failed to cleanup old ELC updater records: %w", err)
 			}
@@ -255,14 +255,14 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Open existing database connection
-			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
-			defer storage.Close()
+			defer sto.Close()
 
 			// Execute updateClient for the target chain with counterparty chain
-			record, err := chainPair.TargetLCPProver.UpdateELCAndStore(cmd.Context(), chainPair.CounterpartyChain, storage)
+			record, err := chainPair.TargetLCPProver.UpdateELCAndStore(cmd.Context(), chainPair.CounterpartyChain, sto)
 			if err != nil {
 				return fmt.Errorf("failed to execute UpdateELCAndStore for target chain: %w", err)
 			}
@@ -341,14 +341,14 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Open storage
-			storage, err := storage.OpenSQLiteStorage(cmd.Context(), dbPath)
+			sto, err := elcupdater_storage.OpenSQLiteStorage(cmd.Context(), dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open storage: %w", err)
 			}
-			defer storage.Close()
+			defer sto.Close()
 
 			// Parse path:chain arguments and create chain pairs
-			chainPairs := make([]ELCUpdaterChainPair, len(args))
+			chainPairs := make([]ChainPair, len(args))
 			targetChainIDs := make([]string, len(args))
 			for i, arg := range args {
 				// Parse path:chain format and get chains
@@ -362,10 +362,10 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			// Create and start multi-chain ELC update service
-			service := NewELCUpdaterService(storage, chainPairs, grpcAddr, updateInterval, cleanupAge, targetChainIDs)
+			service := NewService(sto, chainPairs, grpcAddr, updateInterval, cleanupAge, targetChainIDs)
 
 			// Start the service (this will block until stopped)
-			service.ELCUpdaterServiceRun(cmd.Context())
+			service.Run(cmd.Context())
 
 			return nil
 		},
@@ -571,7 +571,7 @@ func parseHeightArg(s string, name string) (ibcexported.Height, error) {
 }
 
 // parsePathChainArg parses "path:chain" format argument and returns the target chain and counterparty chain
-func parsePathChainArg(ctx *config.Context, arg string) (*ELCUpdaterChainPair, error) {
+func parsePathChainArg(ctx *config.Context, arg string) (*ChainPair, error) {
 	parts := strings.Split(arg, ":")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid argument format '%s': expected 'path-name:chain-id'", arg)
@@ -586,25 +586,25 @@ func parsePathChainArg(ctx *config.Context, arg string) (*ELCUpdaterChainPair, e
 	}
 
 	srcChain, _ := chains[srcChainID]
-	srcProver, err := coreutil.UnwrapProver[*Prover](srcChain)
+	srcProver, err := coreutil.UnwrapProver[*lcp.Prover](srcChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap prover for source chain %s: %w", srcChainID, err)
 	}
 
 	dstChain, _ := chains[dstChainID]
-	dstProver, err := coreutil.UnwrapProver[*Prover](dstChain)
+	dstProver, err := coreutil.UnwrapProver[*lcp.Prover](dstChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unwrap prover for destination chain %s: %w", dstChainID, err)
 	}
 
 	if chainID == srcChainID {
-		return &ELCUpdaterChainPair{
+		return &ChainPair{
 			TargetChain:       srcChain,
 			TargetLCPProver:   srcProver,
 			CounterpartyChain: dstChain,
 		}, nil
 	} else if chainID == dstChainID {
-		return &ELCUpdaterChainPair{
+		return &ChainPair{
 			TargetChain:       dstChain,
 			TargetLCPProver:   dstProver,
 			CounterpartyChain: srcChain,

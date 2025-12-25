@@ -1,8 +1,9 @@
-package relay
+package cmd
 
 import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
+	"github.com/datachainlab/lcp-go/relay"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
@@ -11,6 +12,6 @@ func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
 	lcptypes.RegisterInterfaces(registry)
 	registry.RegisterImplementations(
 		(*core.ProverConfig)(nil),
-		&ProverConfig{},
+		&relay.ProverConfig{},
 	)
 }

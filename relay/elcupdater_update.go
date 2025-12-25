@@ -10,80 +10,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	elc_updater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
-	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
 	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-// Re-export types from storage package for backward compatibility
-type ELCUpdateRecord = elc_updater_storage.ELCUpdateRecord
-type ELCUpdateStorage = elc_updater_storage.ELCUpdateStorage
-
-// getELCUpdateLogger gets logger for ELC update operations, first from context, then from prover
-func getELCUpdateLogger(ctx context.Context, pr *Prover) *log.RelayLogger {
-	// First try to get logger from context
-	if logger := elc_updater_logger.GetELCUpdaterLoggerOrNil(ctx); logger != nil {
-		return logger
-	}
-	return pr.getLogger()
-}
-
-func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareChain, height ibcexported.Height) (ibcexported.Height, error) {
-	qCtx := core.NewQueryContext(ctx, height)
-
-	csRes, err := counterparty.QueryClientState(qCtx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get client state: %w", err)
-	}
-
-	var cs ibcexported.ClientState
-	if err := counterparty.Codec().UnpackAny(csRes.ClientState, &cs); err != nil {
-		return nil, fmt.Errorf("failed to unpack client state: %w", err)
-	}
-
-	return cs.GetLatestHeight(), nil
-}
-
-// getUpdateClientResultsFromGRPC retrieves ELCUpdateResults from gRPC server using height range and returns its updateClientResults property
-func getUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elc_updater_storage.UpdateClientResult, error) {
-	logger.InfoContext(ctx, "using getUpdateClientResults gRPC server", "address", grpcAddress)
-
-	// Get chain ID from target chain and counterparty chain
-	chainID := targetChain.ChainID()
-	counterpartyChainID := counterparty.ChainID()
-
-	// Get sequential ELCUpdateRecords by height range
-	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
-	}
-	fromHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get client state height from counterparty chain: %w", err)
-	}
-
-	records, err := elc_updater_grpc.GetSequentialRecords(ctx, grpcAddress, chainID, counterpartyChainID, fromHeight, latestFinalizedHeader.GetHeight())
-	if err != nil {
-		return nil, fmt.Errorf("failed to GetSequentialRecords: %w", err)
-	}
-
-	var results []*elc_updater_storage.UpdateClientResult
-	var heights []string
-	for _, record := range records {
-		heights = append(heights, fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
-		results = append(results, record.UpdateClientResults...)
-	}
-	logger.InfoContext(ctx, "retrieved ELCUpdate records from gRPC server",
-		"chain_id", chainID,
-		"counterparty_chain_id", counterpartyChainID,
-		"heights", strings.Join(heights, ", "),
-	)
-
-	return results, nil
-}
-
+// getTipHeightInStorage retrieves the highest ToHeight from sequential ELCUpdateRecords
+// stored in the given storage, starting from fromHeight.
+// If no records are found, returns nil height.
 func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpartyChainID string, fromHeight ibcexported.Height, storage elc_updater_storage.ELCUpdateStorage, logger *log.RelayLogger) (ibcexported.Height, error) {
 	records, err := storage.GetSequence(ctx, targetChainID, counterpartyChainID, fromHeight, nil)
 	if err != nil {
@@ -114,13 +48,13 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 	return records[len(records)-1].ToHeight, nil
 }
 
-// SHFUExecuteAndStore executes updateELCForUpdateClient and returns UpdateClientResult array
+// UpdateELCAndStore executes updateELCForUpdateClient and returns UpdateClientResult array
 // This function can be used by various commands and services
 // fromHeight: the starting height for updateClient operations (nil for unspecified)
 // counterparty: the counterparty chain object
 func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.FinalityAwareChain, storage elc_updater_storage.ELCUpdateStorage) (*elc_updater_storage.ELCUpdateRecord, error) {
 	// Get ELC update logger once and reuse throughout the function
-	logger := getELCUpdateLogger(ctx, pr)
+	logger := pr.getLogger()
 
 	if counterparty == nil {
 		return nil, fmt.Errorf("counterparty chain is required for ELC update operations")
@@ -138,7 +72,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 	var fromHeight ibcexported.Height
 	var dstChain core.FinalityAwareChain
 	{
-		latestRecord, err := storage.GetLatestSHFUForChain(ctx, pr.originChain.ChainID(), counterparty.ChainID())
+		savedTipHeight, err := getTipHeightInStorage(ctx, pr.GetOriginChain().ChainID(), counterparty.ChainID(), csHeight, storage, logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
 		}

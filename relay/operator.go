@@ -39,7 +39,7 @@ func (pr *Prover) GetOperatorsThreshold() Fraction {
 	return pr.config.OperatorsThreshold
 }
 
-func (pr *Prover) updateOperators(ctx context.Context, counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
+func (pr *Prover) UpdateOperators(ctx context.Context, counterparty core.Chain, nonce uint64, newOperators []common.Address, threshold Fraction) error {
 	if !pr.IsOperatorEnabled() {
 		return fmt.Errorf("operator is not enabled")
 	} else if pr.config.OperatorsEip712Params == nil {
