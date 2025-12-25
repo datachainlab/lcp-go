@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
-	_ "modernc.org/sqlite" // Pure Go SQLite driver
+	_ "github.com/mattn/go-sqlite3" // CGO SQLite driver
 )
 
 // InitSQLiteStorage creates a new SQLite database file and initializes the ELCUpdate storage
@@ -19,7 +19,7 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxStorage, error)
 		return nil, fmt.Errorf("failed to check database file: %w", err)
 	}
 
-	db, err := sqlx.Connect("sqlite", dbPath)
+	db, err := sqlx.Connect("sqlite3", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxStorage, error)
 		return nil, fmt.Errorf("failed to check database file: %w", err)
 	}
 
-	db, err := sqlx.Connect("sqlite", dbPath)
+	db, err := sqlx.Connect("sqlite3", dbPath)
 	if err != nil {
 		return nil, err
 	}
