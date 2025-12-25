@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
+	"github.com/datachainlab/lcp-go/relay/elcupdater"
 	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -64,7 +65,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
 	}
 
-	csHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
+	csHeight, err := elcupdater.GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
 	}

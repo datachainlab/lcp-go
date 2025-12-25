@@ -235,7 +235,6 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 		return nil, err
 	}
 
-	// Use ELC updater gRPC server if configured (environment variable or config), otherwise use local implementation
 	results, err := pr.updateClient(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, err
