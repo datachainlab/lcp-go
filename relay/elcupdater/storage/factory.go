@@ -11,7 +11,7 @@ import (
 
 // InitSQLiteStorage creates a new SQLite database file and initializes the ELCUpdate storage
 // Returns error if the database file already exists
-func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorage, error) {
+func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxStorage, error) {
 	// Check if file already exists
 	if _, err := os.Stat(dbPath); err == nil {
 		return nil, fmt.Errorf("database file already exists: %s", dbPath)
@@ -26,7 +26,7 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorag
 
 	dialect := NewSQLiteDialect()
 
-	storage, err := NewSqlxELCUpdateStorage(db, dialect, dbPath)
+	storage, err := NewSqlxStorage(db, dialect, dbPath)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -36,7 +36,7 @@ func InitSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorag
 
 // OpenSQLiteStorage opens an existing SQLite database file for ELCUpdate storage
 // Returns error if the database file does not exist
-func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorage, error) {
+func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxStorage, error) {
 	// Check if file exists
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("database file does not exist: %s", dbPath)
@@ -50,7 +50,7 @@ func OpenSQLiteStorage(ctx context.Context, dbPath string) (*SqlxELCUpdateStorag
 	}
 
 	dialect := NewSQLiteDialect()
-	storage, err := NewSqlxELCUpdateStorage(db, dialect, dbPath)
+	storage, err := NewSqlxStorage(db, dialect, dbPath)
 	if err != nil {
 		db.Close()
 		return nil, err

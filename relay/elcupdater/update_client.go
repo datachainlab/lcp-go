@@ -28,7 +28,7 @@ func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareCh
 	return cs.GetLatestHeight(), nil
 }
 
-// GetUpdateClientResultsFromGRPC retrieves ELCUpdateResults from gRPC server using height range and returns its updateClientResults property
+// GetUpdateClientResultsFromGRPC retrieves UpdateClientResults from gRPC server using height range and returns its updateClientResults property
 func GetUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger, grpcAddress string, targetChain core.Chain, counterparty core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
 	logger.InfoContext(ctx, "using getUpdateClientResults gRPC server", "address", grpcAddress)
 
@@ -36,7 +36,7 @@ func GetUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger
 	chainID := targetChain.ChainID()
 	counterpartyChainID := counterparty.ChainID()
 
-	// Get sequential ELCUpdateRecords by height range
+	// Get sequentialRecords by height range
 	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
@@ -57,7 +57,7 @@ func GetUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger
 		heights = append(heights, fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
 		results = append(results, record.UpdateClientResults...)
 	}
-	logger.InfoContext(ctx, "retrieved ELCUpdate records from gRPC server",
+	logger.InfoContext(ctx, "retrieved records from gRPC server",
 		"chain_id", chainID,
 		"counterparty_chain_id", counterpartyChainID,
 		"heights", strings.Join(heights, ", "),

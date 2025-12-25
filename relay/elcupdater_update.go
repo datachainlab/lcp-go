@@ -11,18 +11,18 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/elcupdater"
-	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-// getTipHeightInStorage retrieves the highest ToHeight from sequential ELCUpdateRecords
+// getTipHeightInStorage retrieves the highest ToHeight from sequential records
 // stored in the given storage, starting from fromHeight.
 // If no records are found, returns nil height.
-func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpartyChainID string, fromHeight ibcexported.Height, storage elc_updater_storage.ELCUpdateStorage, logger *log.RelayLogger) (ibcexported.Height, error) {
+func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpartyChainID string, fromHeight ibcexported.Height, storage elcupdater_storage.Storage, logger *log.RelayLogger) (ibcexported.Height, error) {
 	records, err := storage.GetSequence(ctx, targetChainID, counterpartyChainID, fromHeight, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get sequential ELCUpdate records: %w", err)
+		return nil, fmt.Errorf("failed to get sequential records: %w", err)
 	}
 
 	if len(records) == 0 {
@@ -38,7 +38,7 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 		}
 		heightListStr := strings.Join(heightList, ",")
 
-		logger.InfoContext(ctx, "Found sequential ELCUpdateRecords",
+		logger.InfoContext(ctx, "Found sequential records",
 			"chain_id", targetChainID,
 			"counterparty_chain_id", counterpartyChainID,
 			"starting_height", fromHeight.String(),
@@ -53,7 +53,7 @@ func getTipHeightInStorage(ctx context.Context, targetChainID string, counterpar
 // This function can be used by various commands and services
 // fromHeight: the starting height for updateClient operations (nil for unspecified)
 // counterparty: the counterparty chain object
-func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.FinalityAwareChain, storage elc_updater_storage.ELCUpdateStorage) (*elc_updater_storage.ELCUpdateRecord, error) {
+func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.FinalityAwareChain, storage elcupdater_storage.Storage) (*elcupdater_storage.Record, error) {
 	// Get ELC update logger once and reuse throughout the function
 	logger := pr.getLogger()
 
@@ -67,7 +67,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 
 	csHeight, err := elcupdater.GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
+		return nil, fmt.Errorf("failed to get ClientState height for UpdateELCAndStore: %w", err)
 	}
 
 	var fromHeight ibcexported.Height
@@ -75,11 +75,12 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 	{
 		savedTipHeight, err := getTipHeightInStorage(ctx, pr.GetOriginChain().ChainID(), counterparty.ChainID(), csHeight, storage, logger)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get ClientState height for ELCUpdateAndStore: %w", err)
+			return nil, fmt.Errorf("failed to get ClientState height for UpdateELCAndStore: %w", err)
 		}
 
 		if savedTipHeight != nil {
 			fromHeight = savedTipHeight
+			dstChain = elcupdater.NewChain(counterparty.ChainID(), counterpartyLatestFinalizedHeader.GetHeight(), fromHeight)
 		} else {
 			fromHeight = csHeight
 			dstChain = counterparty
@@ -116,7 +117,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 		"latest_finalized_height", originLatestFinalizedHeader.GetHeight().String(),
 	)
 
-	var record *elc_updater_storage.ELCUpdateRecord
+	var record *elcupdater_storage.Record
 	{
 		h2h := func(h ibcexported.Height) clienttypes.Height {
 			return clienttypes.Height{
@@ -137,7 +138,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 		}
 
 		// Create ELC update record for database storage
-		record = &elc_updater_storage.ELCUpdateRecord{
+		record = &elcupdater_storage.Record{
 			ChainID:               pr.originChain.ChainID(),
 			CounterpartyChainID:   counterparty.ChainID(),
 			FromHeight:            h2h(fromHeight),
@@ -162,7 +163,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 			return storage.IsTemporaryError(err)
 		}),
 		retry.OnRetry(func(n uint, err error) {
-			logger.ErrorContext(ctx, "Retry attempt for SaveELCUpdateResult due to temporary error", err,
+			logger.ErrorContext(ctx, "Retry attempt for Save due to temporary error", err,
 				"attempt", n+1,
 				"chain_id", pr.originChain.ChainID(),
 				"counterparty_chain_id", counterparty.ChainID(),
@@ -184,76 +185,4 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 
 	// Return the saved record
 	return record, nil
-}
-
-// ELCUpdateMockChain is a dummy implementation of core.FinalityAwareChain
-// that returns a specific height for testing SetupHeadersForUpdate calls.
-// It embeds the interface so unimplemented methods will panic at runtime.
-type ELCUpdateMockChain struct {
-	core.FinalityAwareChain // Embedded interface - unimplemented methods will panic
-	chainID                 string
-	latestHeight            ibcexported.Height
-	mockClientState         *ELCUpdateMockClientState
-}
-
-var (
-	_ core.FinalityAwareChain = (*ELCUpdateMockChain)(nil)
-)
-
-// ELCUpdateMockClientState is a dummy implementation that embeds ibcexported.ClientState
-// All methods will panic at runtime unless specifically implemented
-type ELCUpdateMockClientState struct {
-	ibcexported.ClientState // Embedded interface - unimplemented methods will panic
-	latestHeight            ibcexported.Height
-}
-
-var (
-	_ ibcexported.ClientState = (*ELCUpdateMockClientState)(nil)
-)
-
-// NewELCUpdateMockChain creates a new ELCUpdateMockChain instance
-func NewELCUpdateMockChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *ELCUpdateMockChain {
-	return &ELCUpdateMockChain{
-		chainID:         chainID,
-		latestHeight:    latestHeight,
-		mockClientState: NewELCUpdateMockClientState(clientStateHeight),
-	}
-}
-
-// ChainID returns the chain ID
-func (c *ELCUpdateMockChain) ChainID() string {
-	return c.chainID
-}
-
-// LatestHeight returns the latest height with context (allowed method)
-func (c *ELCUpdateMockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
-	return c.latestHeight, nil
-}
-
-// QueryClientState returns a QueryClientStateResponse with mock client state
-func (c *ELCUpdateMockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
-	// Use the existing mock client state
-	mockClientState := c.mockClientState
-
-	// Pack the client state into Any type
-	clientStateAny, err := types.NewAnyWithValue(mockClientState)
-	if err != nil {
-		return nil, err
-	}
-
-	return &clienttypes.QueryClientStateResponse{
-		ClientState: clientStateAny,
-	}, nil
-}
-
-// NewELCUpdateMockClientState creates a new ELCUpdateMockClientState instance
-func NewELCUpdateMockClientState(latestHeight ibcexported.Height) *ELCUpdateMockClientState {
-	return &ELCUpdateMockClientState{
-		latestHeight: latestHeight,
-	}
-}
-
-// GetLatestHeight returns the configured latest height
-func (s *ELCUpdateMockClientState) GetLatestHeight() ibcexported.Height {
-	return s.latestHeight
 }

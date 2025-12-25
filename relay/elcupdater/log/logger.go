@@ -1,4 +1,4 @@
-package logger
+package log
 
 import (
 	"context"
@@ -30,9 +30,9 @@ func (h *discardHandler) WithGroup(name string) slog.Handler {
 	return h
 }
 
-// GetELCUpdaterLogger returns a logger for ELCUpdater operations, always returns a logger (using DiscardHandler as fallback)
-func GetELCUpdaterLogger(ctx context.Context) *log.RelayLogger {
-	if logger := GetELCUpdaterLoggerOrNil(ctx); logger != nil {
+// GetLogger returns a logger for ELCUpdater operations, always returns a logger (using DiscardHandler as fallback)
+func GetLogger(ctx context.Context) *log.RelayLogger {
+	if logger := GetLoggerOrNil(ctx); logger != nil {
 		return logger
 	}
 
@@ -47,14 +47,14 @@ func GetELCUpdaterLogger(ctx context.Context) *log.RelayLogger {
 	}
 }
 
-// GetELCUpdaterLoggerOrNil returns a logger for ELC updater operations from context, or nil if not found
-func GetELCUpdaterLoggerOrNil(ctx context.Context) *log.RelayLogger {
+// GetLoggerOrNil returns a logger for ELC updater operations from context, or nil if not found
+func GetLoggerOrNil(ctx context.Context) *log.RelayLogger {
 	if v := ctx.Value(LoggerKey); v != nil {
 		return v.(*log.RelayLogger)
 	}
 	return nil
 }
 
-func SetELCUpdaterLogger(ctx context.Context, logger *log.RelayLogger) context.Context {
+func SetLogger(ctx context.Context, logger *log.RelayLogger) context.Context {
 	return context.WithValue(ctx, LoggerKey, logger)
 }

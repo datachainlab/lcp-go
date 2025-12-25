@@ -15,8 +15,8 @@ type UpdateClientResult struct {
 	Signature []byte
 }
 
-// ELCUpdateRecord represents a updateClient record for persistence
-type ELCUpdateRecord struct {
+// Record represents a updateClient record for persistence
+type Record struct {
 	ChainID               string                `json:"chain_id"`
 	CounterpartyChainID   string                `json:"counterparty_chain_id"`
 	FromHeight            clienttypes.Height    `json:"from_height"`
@@ -26,8 +26,8 @@ type ELCUpdateRecord struct {
 	LatestFinalizedHeader []byte                `json:"latest_finalized_header"` // Serialized core.Header bytes
 }
 
-// FormatSummary formats the ELCUpdateRecord as a map for JSON output
-func (r *ELCUpdateRecord) FormatSummary() map[string]interface{} {
+// FormatSummary formats the Record as a map for JSON output
+func (r *Record) FormatSummary() map[string]interface{} {
 	// Prepare update client results for JSON output
 	updateClientResults := make([]map[string]interface{}, len(r.UpdateClientResults))
 	for i, result := range r.UpdateClientResults {
@@ -49,28 +49,28 @@ func (r *ELCUpdateRecord) FormatSummary() map[string]interface{} {
 	}
 }
 
-// ELCUpdateStorage defines the storage interface for updateClient operations
+// Storage defines the storage interface for updateClient operations
 // This interface focuses on use cases rather than CRUD operations
-type ELCUpdateStorage interface {
+type Storage interface {
 	// Save saves a updateClient execution result
-	Save(ctx context.Context, record *ELCUpdateRecord) error
+	Save(ctx context.Context, record *Record) error
 
-	// FindByChainAndHeight finds ELCUpdate records for a specific chain with exact height match
-	FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error)
+	// FindByChainAndHeight finds records for a specific chain with exact height match
+	FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error)
 
-	// GetLatestForChain retrieves the most recent ELCUpdate record for a chain
+	// GetLatestForChain retrieves the most recent record for a chain
 	// If counterpartyChainID is empty, it will be ignored in the query
-	GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*ELCUpdateRecord, error)
+	GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*Record, error)
 
-	// GetSequence retrieves sequential ELCUpdate records starting from the specified height
+	// GetSequence retrieves sequential records starting from the specified height
 	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
 	// If toHeight is not nil, stops when reaching a record with that ToHeight
-	GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error)
+	GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error)
 
-	// List lists ELCUpdate records in the database with optional chain ID filters
-	List(ctx context.Context, chainID, counterpartyChainID string) ([]*ELCUpdateRecord, error)
+	// List lists records in the database with optional chain ID filters
+	List(ctx context.Context, chainID, counterpartyChainID string) ([]*Record, error)
 
-	// Cleanup removes ELCUpdate records older than the specified duration
+	// Cleanup removes records older than the specified duration
 	Cleanup(ctx context.Context, olderThan time.Duration) (int64, error)
 
 	// IsTemporaryError determines if an error is temporary and the operation can be retried

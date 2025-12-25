@@ -7,8 +7,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
-	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
-	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	elcupdater_log "github.com/datachainlab/lcp-go/relay/elcupdater/log"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/google/uuid"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -19,10 +19,10 @@ import (
 
 // GetSequentialRecords retrieves sequential ELCUpdateRecords from gRPC server
 // If toHeight is not nil, stops when reaching a record with that ToHeight
-func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*elc_updater_storage.ELCUpdateRecord, error) {
+func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*storage.Record, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: elc_updater_logger.GetELCUpdaterLogger(ctx).With(
+		Logger: elcupdater_log.GetLogger(ctx).With(
 			"function", "GetSequentialRecords",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,
@@ -50,7 +50,7 @@ func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID strin
 	}
 	defer conn.Close()
 
-	client := NewELCUpdaterServiceClient(conn)
+	client := NewServiceClient(conn)
 
 	// Request sequential ELCUpdate records
 	req := &GetSequentialRecordsRequest{
@@ -67,10 +67,10 @@ func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID strin
 		return nil, fmt.Errorf("failed to GetSequentialRecords from gRPC server: %w", err)
 	}
 
-	// Convert gRPC response to storage ELCUpdateRecord slice
-	var records []*elc_updater_storage.ELCUpdateRecord
+	// Convert gRPC response to storage Record slice
+	var records []*storage.Record
 	for _, pbRecord := range resp.Records {
-		records = append(records, ConvertELCUpdateRecordFromPbToDb(pbRecord))
+		records = append(records, ConvertRecordFromPbToDb(pbRecord))
 	}
 
 	logger.InfoContext(ctx, "GetSequentialRecords request completed successfully",
@@ -80,10 +80,10 @@ func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID strin
 }
 
 // GetLatestRecord retrieves the latest ELCUpdate record from gRPC server
-func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) (*elc_updater_storage.ELCUpdateRecord, error) {
+func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) (*storage.Record, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: elc_updater_logger.GetELCUpdaterLogger(ctx).With(
+		Logger: elcupdater_log.GetLogger(ctx).With(
 			"function", "GetLatestRecord",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,
@@ -109,7 +109,7 @@ func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, co
 	}
 	defer conn.Close()
 
-	client := NewELCUpdaterServiceClient(conn)
+	client := NewServiceClient(conn)
 
 	// Request latest ELCUpdate record
 	req := &GetLatestRecordRequest{
@@ -130,8 +130,8 @@ func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, co
 		return nil, nil // No record found
 	}
 
-	// Convert gRPC response to storage ELCUpdateRecord
-	record := ConvertELCUpdateRecordFromPbToDb(resp.Record)
+	// Convert gRPC response to storage Record
+	record := ConvertRecordFromPbToDb(resp.Record)
 
 	logger.InfoContext(ctx, "GetLatestRecord request completed successfully",
 		"found", true,

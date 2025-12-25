@@ -5,29 +5,29 @@ import (
 	"fmt"
 	"strings"
 
-	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
-	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	elcupdater_log "github.com/datachainlab/lcp-go/relay/elcupdater/log"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-// ELCUpdaterGRPCServer implements the gRPC ELCUpdaterServer interface
-type ELCUpdaterServiceGRPCServer struct {
-	storage elc_updater_storage.ELCUpdateStorage
-	UnimplementedELCUpdaterServiceServer
+// Server implements the gRPC Server interface
+type Server struct {
+	storage storage.Storage
+	UnimplementedServiceServer
 }
 
-// NewELCUpdaterServiceGRPCServer creates a new ELCUpdaterServiceGRPCServer
-func NewELCUpdaterServiceGRPCServer(storage elc_updater_storage.ELCUpdateStorage) *ELCUpdaterServiceGRPCServer {
-	return &ELCUpdaterServiceGRPCServer{
-		UnimplementedELCUpdaterServiceServer: UnimplementedELCUpdaterServiceServer{},
-		storage:                              storage,
+// NewServer creates a new Server
+func NewServer(sto storage.Storage) *Server {
+	return &Server{
+		UnimplementedServiceServer: UnimplementedServiceServer{},
+		storage:                    sto,
 	}
 }
 
-// GetSequentialELCUpdateRecords implements the gRPC service method to get sequential ELC update records
-func (srv *ELCUpdaterServiceGRPCServer) GetSequentialRecords(ctx context.Context, req *GetSequentialRecordsRequest) (*GetSequentialRecordsResponse, error) {
+// GetSequentialRecords implements the gRPC service method to get sequential ELC update records
+func (srv *Server) GetSequentialRecords(ctx context.Context, req *GetSequentialRecordsRequest) (*GetSequentialRecordsResponse, error) {
 	logger := log.RelayLogger{
-		Logger: elc_updater_logger.GetELCUpdaterLogger(ctx).With(
+		Logger: elcupdater_log.GetLogger(ctx).With(
 			"function", "GetSequentialRecords",
 			"request_id", req.RequestId,
 			"chain_id", req.ChainId,
@@ -41,7 +41,7 @@ func (srv *ELCUpdaterServiceGRPCServer) GetSequentialRecords(ctx context.Context
 	fromHeight := ConvertHeightFromPbToDb(req.FromHeight)
 	toHeight := ConvertHeightFromPbToDb(req.ToHeight)
 
-	// Get sequential ELCUpdateRecords from storage (no toHeight limit for gRPC calls)
+	// Get sequential records from storage (no toHeight limit for gRPC calls)
 	records, err := srv.storage.GetSequence(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
 	if err != nil {
 		logger.ErrorContext(ctx, "GetSequence request failed", err)
@@ -49,9 +49,9 @@ func (srv *ELCUpdaterServiceGRPCServer) GetSequentialRecords(ctx context.Context
 	}
 
 	// Convert records to protobuf messages
-	var pbRecords []*ELCUpdateRecord
+	var pbRecords []*Record
 	for _, record := range records {
-		pbRecords = append(pbRecords, ConvertELCUpdateRecordFromDbToPb(record))
+		pbRecords = append(pbRecords, ConvertRecordFromDbToPb(record))
 	}
 
 	var heights []string
@@ -69,10 +69,10 @@ func (srv *ELCUpdaterServiceGRPCServer) GetSequentialRecords(ctx context.Context
 	}, nil
 }
 
-// GetLatestELCUpdateRecord implements the gRPC service method to get the latest ELC update record
-func (srv *ELCUpdaterServiceGRPCServer) GetLatestRecord(ctx context.Context, req *GetLatestRecordRequest) (*GetLatestRecordResponse, error) {
+// GetLatestRecord implements the gRPC service method to get the latest record
+func (srv *Server) GetLatestRecord(ctx context.Context, req *GetLatestRecordRequest) (*GetLatestRecordResponse, error) {
 	logger := log.RelayLogger{
-		Logger: elc_updater_logger.GetELCUpdaterLogger(ctx).With(
+		Logger: elcupdater_log.GetLogger(ctx).With(
 			"function", "GetLatestRecord",
 			"request_id", req.RequestId,
 			"chain_id", req.ChainId,
@@ -95,7 +95,7 @@ func (srv *ELCUpdaterServiceGRPCServer) GetLatestRecord(ctx context.Context, req
 	}
 
 	// Convert to protobuf message
-	pbRecord := ConvertELCUpdateRecordFromDbToPb(record)
+	pbRecord := ConvertRecordFromDbToPb(record)
 	logger.InfoContext(ctx, "GetLatestForChain request completed successfully",
 		"found", true,
 		"record_from_height", fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight),

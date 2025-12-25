@@ -12,9 +12,9 @@ import (
 	"time"
 
 	lcp "github.com/datachainlab/lcp-go/relay"
-	elc_updater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
-	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
-	elc_updater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	elcupdater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
+	elcupdater_log "github.com/datachainlab/lcp-go/relay/elcupdater/log"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -61,7 +61,7 @@ type ChainPair struct {
 }
 
 type Service struct {
-	Storage        elc_updater_storage.ELCUpdateStorage
+	Storage        storage.Storage
 	ChainPairs     []ChainPair // Changed from TargetChains to ChainPairs
 	PollInterval   time.Duration
 	GRPCAddr       string        // gRPC server address (e.g., ":8080")
@@ -70,12 +70,12 @@ type Service struct {
 }
 
 // NewService creates a new Service
-func NewService(storage elc_updater_storage.ELCUpdateStorage, chainPairs []ChainPair, grpcAddr string, pollInterval time.Duration, cleanupAge time.Duration, targetChainIDs []string) *Service {
+func NewService(sto storage.Storage, chainPairs []ChainPair, grpcAddr string, pollInterval time.Duration, cleanupAge time.Duration, targetChainIDs []string) *Service {
 	if pollInterval <= 0 {
 		pollInterval = DefaultPollInterval
 	}
 	return &Service{
-		Storage:        storage,
+		Storage:        sto,
 		ChainPairs:     chainPairs,
 		PollInterval:   pollInterval,
 		GRPCAddr:       grpcAddr,
@@ -85,7 +85,7 @@ func NewService(storage elc_updater_storage.ELCUpdateStorage, chainPairs []Chain
 }
 
 func (srv *Service) Run(ctx context.Context) {
-	logger := srv.getLogger()
+	logger := srv.newLogger()
 	// Log service startup information
 	logger.InfoContext(ctx, "Starting ELCUpdater Service",
 		"chains", srv.TargetChainIDs,
@@ -94,7 +94,7 @@ func (srv *Service) Run(ctx context.Context) {
 		"poll_interval", srv.PollInterval)
 	logger.InfoContext(ctx, "Press Ctrl+C to stop the service")
 
-	ctx = elc_updater_logger.SetELCUpdaterLogger(ctx, logger)
+	ctx = elcupdater_log.SetLogger(ctx, logger)
 	defer func() {
 		logger.InfoContext(ctx, "ELCUpdater Service stopped")
 	}()
@@ -160,7 +160,7 @@ func (srv *Service) Run(ctx context.Context) {
 func (srv *Service) runUpdaterForChainPair(ctx context.Context, chainPair ChainPair) error {
 	ticker := time.NewTicker(srv.PollInterval)
 	defer ticker.Stop()
-	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
+	logger := elcupdater_log.GetLogger(ctx)
 
 	for {
 		select {
@@ -185,7 +185,7 @@ func (srv *Service) runUpdaterForChainPair(ctx context.Context, chainPair ChainP
 }
 
 func (srv *Service) runGRPCServer(ctx context.Context) error {
-	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
+	logger := elcupdater_log.GetLogger(ctx)
 
 	// Create custom recovery handler with logging
 	recoveryHandler := func(p interface{}) error {
@@ -199,10 +199,10 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 	)
 
 	// Create ELCUpdater gRPC service implementation
-	grpcService := elc_updater_grpc.NewELCUpdaterServiceGRPCServer(srv.Storage)
+	grpcService := elcupdater_grpc.NewServer(srv.Storage)
 
 	// Register ELCUpdater service
-	elc_updater_grpc.RegisterELCUpdaterServiceServer(grpcServer, grpcService)
+	elcupdater_grpc.RegisterServiceServer(grpcServer, grpcService)
 	// Create listener
 	lis, err := net.Listen("tcp", srv.GRPCAddr)
 	if err != nil {
@@ -229,7 +229,7 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 
 // runCleanup periodically runs the CleanupOldELCUpdater operation
 func (srv *Service) runCleanup(ctx context.Context) error {
-	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
+	logger := elcupdater_log.GetLogger(ctx)
 	// Run cleanup every 5 minutes
 	cleanupInterval := 5 * time.Minute
 	ticker := time.NewTicker(cleanupInterval)
@@ -259,7 +259,7 @@ func (srv *Service) runCleanup(ctx context.Context) error {
 }
 
 // getLogger returns a logger for ELCUpdater service with appropriate module name
-func (srv *Service) getLogger() *log.RelayLogger {
+func (srv *Service) newLogger() *log.RelayLogger {
 	// strings.Join to create a single string of chain IDs
 	chainIDs := make([]string, 0, len(srv.ChainPairs))
 	for _, cp := range srv.ChainPairs {

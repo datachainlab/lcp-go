@@ -16,7 +16,7 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	elc_updater_logger "github.com/datachainlab/lcp-go/relay/elcupdater/logger"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/log"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -27,18 +27,18 @@ func errWithStack(format string, args ...interface{}) error {
 	return fmt.Errorf("%w\nStack trace:\n%s", baseErr, string(stack))
 }
 
-// SELECT clause for ELCUpdateRecords - must match the order in scanELCUpdateRecord
-const elcUpdateRecordSelectClause = `
+// SELECT clause for records - must match the order in scan
+const selectClause = `
 	SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
 	       from_height_revision_height, to_height_revision_number, 
 	       to_height_revision_height, updated_at, 
 	       update_client_results, latest_finalized_header
-	FROM elc_update_records`
+	FROM records`
 
 /*
 DB Schema Overview:
 
-1. elc_update_records - Main records table for ELCUpdate (updateClient) operations
+1. records - Main records table for ELCUpdate (updateClient) operations
    - Stores chain information, height data, and execution metadata
    - Primary key: combination of chain_id, counterparty_chain_id, from_height fields, and to_height fields
    - Key fields: chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height
@@ -65,16 +65,16 @@ type DBDialect interface {
 	ConfigureDatabase(db *sqlx.DB) error
 }
 
-// SqlxELCUpdateStorage implements ELCUpdaterStorage using sqlx with database abstraction
-type SqlxELCUpdateStorage struct {
+// SqlxStorage implements Storage using sqlx with database abstraction
+type SqlxStorage struct {
 	db       *sqlx.DB
 	dialect  DBDialect
 	filePath string // SQLite database file path
 }
 
-// NewSqlxELCUpdateStorage creates a new sqlx-based ELCUpdate storage
-func NewSqlxELCUpdateStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxELCUpdateStorage, error) {
-	storage := &SqlxELCUpdateStorage{
+// NewSqlxStorage creates a new sqlx-based storage
+func NewSqlxStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxStorage, error) {
+	storage := &SqlxStorage{
 		db:       db,
 		dialect:  dialect,
 		filePath: filePath,
@@ -94,7 +94,7 @@ func NewSqlxELCUpdateStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*
 }
 
 // initSchema creates the required tables
-func (s *SqlxELCUpdateStorage) initSchema() error {
+func (s *SqlxStorage) initSchema() error {
 	statements := s.dialect.GetCreateTableSQL()
 	for _, stmt := range statements {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -104,31 +104,30 @@ func (s *SqlxELCUpdateStorage) initSchema() error {
 	return nil
 }
 
-// SaveELCUpdateResult saves a updateClient execution result
-func (s *SqlxELCUpdateStorage) Save(ctx context.Context, record *ELCUpdateRecord) error {
+// Save saves a updateClient execution result
+func (s *SqlxStorage) Save(ctx context.Context, record *Record) error {
 	// Get logger from context
-	logger := elc_updater_logger.GetELCUpdaterLogger(ctx)
+	logger := log.GetLogger(ctx)
 
 	// Log transaction start
 	logger.InfoContext(ctx, "Starting Save transaction",
 		"chain_id", record.ChainID,
 		"counterparty_chain_id", record.CounterpartyChainID)
 
-	// Insert the main ELCUpdate record
-	if err := s.insertELCUpdateRecord(ctx, record); err != nil {
-		return errWithStack("failed to insert ELCUpdate record: %w", err)
+	if err := s.insert(ctx, record); err != nil {
+		return errWithStack("failed to insert record: %w", err)
 	}
 
 	// Log transaction completion
-	logger.InfoContext(ctx, "Completed SaveELCUpdate transaction",
+	logger.InfoContext(ctx, "Completed Save transaction",
 		"chain_id", record.ChainID,
 		"counterparty_chain_id", record.CounterpartyChainID)
 
 	return nil
 }
 
-// List lists ELCUpdateRecords in the database with optional chain ID filters
-func (s *SqlxELCUpdateStorage) List(ctx context.Context, chainID, counterpartyChainID string) ([]*ELCUpdateRecord, error) {
+// List lists Records in the database with optional chain ID filters
+func (s *SqlxStorage) List(ctx context.Context, chainID, counterpartyChainID string) ([]*Record, error) {
 	var whereConditions []string
 	namedArgs := map[string]interface{}{}
 
@@ -143,7 +142,7 @@ func (s *SqlxELCUpdateStorage) List(ctx context.Context, chainID, counterpartyCh
 	}
 
 	// Build the query
-	query := elcUpdateRecordSelectClause
+	query := selectClause
 	if len(whereConditions) > 0 {
 		query += " WHERE " + strings.Join(whereConditions, " AND ")
 	}
@@ -156,9 +155,9 @@ func (s *SqlxELCUpdateStorage) List(ctx context.Context, chainID, counterpartyCh
 	}
 	defer rows.Close()
 
-	var records []*ELCUpdateRecord
+	var records []*Record
 	for rows.Next() {
-		record, err := s.scanELCUpdateRecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -167,9 +166,9 @@ func (s *SqlxELCUpdateStorage) List(ctx context.Context, chainID, counterpartyCh
 	return records, nil
 }
 
-// FindByChainAndHeight finds ELCUpdateRecords for a specific chain and exact height match
-func (s *SqlxELCUpdateStorage) FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error) {
-	query := elcUpdateRecordSelectClause + `
+// FindByChainAndHeight finds records for a specific chain and exact height match
+func (s *SqlxStorage) FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 		  AND from_height_revision_number = :from_rev_num
 		  AND from_height_revision_height = :from_rev_height
@@ -196,18 +195,18 @@ func (s *SqlxELCUpdateStorage) FindByChainAndHeight(ctx context.Context, chainID
 		if counterpartyStr == "" {
 			counterpartyStr = "any"
 		}
-		return nil, errWithStack("failed to query ELCUpdateRecords (chain=%s, counterparty=%s, fromHeight=%d-%d, toHeight=%d-%d): %w",
+		return nil, errWithStack("failed to query records (chain=%s, counterparty=%s, fromHeight=%d-%d, toHeight=%d-%d): %w",
 			chainID, counterpartyStr,
 			fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(),
 			toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight(), err)
 	}
 	defer rows.Close()
 
-	var records []*ELCUpdateRecord
+	var records []*Record
 	for rows.Next() {
-		record, err := s.scanELCUpdateRecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
-			return nil, errWithStack("failed to scan ELCUpdateRecord: %w", err)
+			return nil, errWithStack("failed to scan record: %w", err)
 		}
 
 		records = append(records, record)
@@ -220,10 +219,10 @@ func (s *SqlxELCUpdateStorage) FindByChainAndHeight(ctx context.Context, chainID
 	return records, nil
 }
 
-// GetLatestForChain retrieves the most recent ELCUpdateRecord for a chain
+// GetLatestForChain retrieves the most recent Record for a chain
 // If counterpartyChainID is empty, it will be ignored in the query
-func (s *SqlxELCUpdateStorage) GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*ELCUpdateRecord, error) {
-	query := elcUpdateRecordSelectClause + `
+func (s *SqlxStorage) GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*Record, error) {
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 	`
 	if counterpartyChainID != "" {
@@ -241,7 +240,7 @@ func (s *SqlxELCUpdateStorage) GetLatestForChain(ctx context.Context, chainID st
 
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
-		return nil, errWithStack("failed to query latest ELCUpdateRecord: %w", err)
+		return nil, errWithStack("failed to query latest Record: %w", err)
 	}
 	defer rows.Close()
 
@@ -249,19 +248,19 @@ func (s *SqlxELCUpdateStorage) GetLatestForChain(ctx context.Context, chainID st
 		return nil, nil
 	}
 
-	record, err := s.scanELCUpdateRecord(rows)
+	record, err := s.scan(rows)
 	if err != nil {
-		return nil, errWithStack("failed to scan latest ELCUpdateRecord: %w", err)
+		return nil, errWithStack("failed to scan latest Record: %w", err)
 	}
 
 	return record, nil
 }
 
-// GetSequence retrieves sequential ELCUpdateRecords starting from the specified height
+// GetSequence retrieves sequential records starting from the specified height
 // If toHeight is not nil, stops when reaching a record with that ToHeight
-func (s *SqlxELCUpdateStorage) GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*ELCUpdateRecord, error) {
+func (s *SqlxStorage) GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
 	// Step 1: Get all records with fromHeight >= specified fromHeight
-	query := elcUpdateRecordSelectClause + `
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 	`
 	if counterpartyChainID != "" {
@@ -294,18 +293,18 @@ func (s *SqlxELCUpdateStorage) GetSequence(ctx context.Context, chainID string, 
 		if counterpartyStr == "" {
 			counterpartyStr = "any"
 		}
-		return nil, errWithStack("failed to query sequential ELCUpdateRecords (chain=%s, counterparty=%s, fromHeight=%d-%d): %w",
+		return nil, errWithStack("failed to query sequential records (chain=%s, counterparty=%s, fromHeight=%d-%d): %w",
 			chainID, counterpartyStr,
 			fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(), err)
 	}
 	defer rows.Close()
 
-	// Build map: fromHeight -> []*ELCUpdateRecord
-	recordMap := make(map[string][]*ELCUpdateRecord)
+	// Build map: fromHeight -> []*Record
+	recordMap := make(map[string][]*Record)
 	for rows.Next() {
-		record, err := s.scanELCUpdateRecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
-			return nil, errWithStack("failed to scan ELCUpdateRecord: %w", err)
+			return nil, errWithStack("failed to scan record: %w", err)
 		}
 
 		fromKey := fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight)
@@ -317,7 +316,7 @@ func (s *SqlxELCUpdateStorage) GetSequence(ctx context.Context, chainID string, 
 	}
 
 	// Step 2-3: Build sequential chain starting from fromHeight
-	var result []*ELCUpdateRecord
+	var result []*Record
 	currentHeight := fromHeight
 
 	for {
@@ -329,7 +328,7 @@ func (s *SqlxELCUpdateStorage) GetSequence(ctx context.Context, chainID string, 
 		}
 
 		// Find the record with the highest toHeight
-		var selectedRecord *ELCUpdateRecord
+		var selectedRecord *Record
 		for _, record := range records {
 			if selectedRecord == nil {
 				selectedRecord = record
@@ -363,19 +362,19 @@ func (s *SqlxELCUpdateStorage) GetSequence(ctx context.Context, chainID string, 
 	return result, nil
 }
 
-// Cleanup removes ELCUpdateRecords older than the specified duration based on UpdatedAt
-func (s *SqlxELCUpdateStorage) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
+// Cleanup removes records older than the specified duration based on UpdatedAt
+func (s *SqlxStorage) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 
 	// Delete records based on updated_at
-	recordQuery := `DELETE FROM elc_update_records WHERE updated_at < :cutoff_time`
+	recordQuery := `DELETE FROM records WHERE updated_at < :cutoff_time`
 	namedArgs := map[string]interface{}{
 		"cutoff_time": s.dialect.ConvertTimeToDB(cutoffTime),
 	}
 
 	result, err := s.db.NamedExecContext(ctx, recordQuery, namedArgs)
 	if err != nil {
-		return 0, errWithStack("failed to delete old ELCUpdateRecords: %w", err)
+		return 0, errWithStack("failed to delete old records: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -387,14 +386,14 @@ func (s *SqlxELCUpdateStorage) Cleanup(ctx context.Context, olderThan time.Durat
 }
 
 // Close closes the service and releases any resources
-func (s *SqlxELCUpdateStorage) Close() error {
+func (s *SqlxStorage) Close() error {
 	return s.db.Close()
 }
 
 // Helper methods (implemented below)
 
-func (s *SqlxELCUpdateStorage) insertELCUpdateRecord(ctx context.Context, record *ELCUpdateRecord) error {
-	query := `INSERT INTO elc_update_records (
+func (s *SqlxStorage) insert(ctx context.Context, record *Record) error {
+	query := `INSERT INTO records (
 		chain_id, counterparty_chain_id,
 		from_height_revision_number, from_height_revision_height,
 		to_height_revision_number, to_height_revision_height,
@@ -429,8 +428,8 @@ func (s *SqlxELCUpdateStorage) insertELCUpdateRecord(ctx context.Context, record
 	return err
 }
 
-func (s *SqlxELCUpdateStorage) scanELCUpdateRecord(scanner sqlx.ColScanner) (*ELCUpdateRecord, error) {
-	var record ELCUpdateRecord
+func (s *SqlxStorage) scan(scanner sqlx.ColScanner) (*Record, error) {
+	var record Record
 	var updateClientResultsJSON []byte
 	var updatedAtStr string
 
@@ -468,7 +467,7 @@ func (s *SqlxELCUpdateStorage) scanELCUpdateRecord(scanner sqlx.ColScanner) (*EL
 
 // IsTemporaryError determines if an error is temporary and the operation can be retried
 // For SQLite, this includes database locks, busy errors, and connection issues
-func (s *SqlxELCUpdateStorage) IsTemporaryError(err error) bool {
+func (s *SqlxStorage) IsTemporaryError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -505,7 +504,7 @@ func (s *SqlxELCUpdateStorage) IsTemporaryError(err error) bool {
 }
 
 // Description returns a description of this storage instance
-func (s *SqlxELCUpdateStorage) Description() string {
+func (s *SqlxStorage) Description() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"

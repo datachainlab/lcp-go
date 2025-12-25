@@ -20,7 +20,7 @@ func NewSQLiteDialect() *SQLiteDialect {
 // GetCreateTableSQL returns SQLite-specific table creation statements
 func (d *SQLiteDialect) GetCreateTableSQL() []string {
 	return []string{
-		`CREATE TABLE IF NOT EXISTS elc_update_records (
+		`CREATE TABLE IF NOT EXISTS records (
 			chain_id TEXT NOT NULL,
 			counterparty_chain_id TEXT NOT NULL,
 			from_height_revision_number INTEGER NOT NULL,
@@ -32,12 +32,12 @@ func (d *SQLiteDialect) GetCreateTableSQL() []string {
 			latest_finalized_header BLOB, -- Serialized core.Header bytes
 			PRIMARY KEY (chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height)
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_elc_update_records_chain 
-		 ON elc_update_records(chain_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_elc_update_records_height 
-		 ON elc_update_records(to_height_revision_height)`,
-		`CREATE INDEX IF NOT EXISTS idx_elc_update_records_updated_at 
-		 ON elc_update_records(updated_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_records_chain 
+		 ON records(chain_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_records_height 
+		 ON records(to_height_revision_height)`,
+		`CREATE INDEX IF NOT EXISTS idx_records_updated_at 
+		 ON records(updated_at)`,
 	}
 }
 

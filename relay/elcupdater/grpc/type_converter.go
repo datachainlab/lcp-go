@@ -6,13 +6,13 @@ import (
 	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
-// ConvertELCUpdateRecordFromDbToPb converts storage.ELCUpdateRecord to protobuf ELCUpdateRecord
-func ConvertELCUpdateRecordFromDbToPb(record *storage.ELCUpdateRecord) *ELCUpdateRecord {
+// ConvertRecordFromDbToPb converts storage.Record to protobuf Record
+func ConvertRecordFromDbToPb(record *storage.Record) *Record {
 	if record == nil {
 		return nil
 	}
 
-	return &ELCUpdateRecord{
+	return &Record{
 		ChainId:               record.ChainID,
 		CounterpartyChainId:   record.CounterpartyChainID,
 		FromHeight:            ConvertHeightFromDbToPb(record.FromHeight),
@@ -23,13 +23,13 @@ func ConvertELCUpdateRecordFromDbToPb(record *storage.ELCUpdateRecord) *ELCUpdat
 	}
 }
 
-// ConvertELCUpdateRecordFromPbToDb converts protobuf ELCUpdateRecord to storage.ELCUpdateRecord
-func ConvertELCUpdateRecordFromPbToDb(pbRecord *ELCUpdateRecord) *storage.ELCUpdateRecord {
+// ConvertRecordFromPbToDb converts protobuf Record to storage.Record
+func ConvertRecordFromPbToDb(pbRecord *Record) *storage.Record {
 	if pbRecord == nil {
 		return nil
 	}
 
-	return &storage.ELCUpdateRecord{
+	return &storage.Record{
 		ChainID:               pbRecord.ChainId,
 		CounterpartyChainID:   pbRecord.CounterpartyChainId,
 		FromHeight:            ConvertHeightFromPbToDb(pbRecord.FromHeight),

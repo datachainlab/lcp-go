@@ -19,8 +19,8 @@ message UpdateClientResult {
   bytes signature = 2;
 }
 
-// ELCUPdateRecord represents a updateClient record
-message ELCUpdateRecord {
+// Record represents a updateClient record
+message Record {
   string chain_id = 1;
   string counterparty_chain_id = 2;
   Height from_height = 3;
@@ -31,20 +31,20 @@ message ELCUpdateRecord {
   bytes latest_finalized_header = 7;
 }
 
-// GetLatestRecordRequest represents a request to get the latest ELCUpdateRecord for a chain
+// GetLatestRecordRequest represents a request to get the latest Record for a chain
 message GetLatestRecordRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2; // empty string ok
   string request_id = 3; // Optional request ID for tracing
 }
 
-// GetLatestRecordResponse represents a response containing the latest ELCUpdateRecord
+// GetLatestRecordResponse represents a response containing the latest Record
 message GetLatestRecordResponse {
-  ELCUpdateRecord record = 1; // nil if no record found
+  Record record = 1; // nil if no record found
   bool found = 2;        // true if record was found
 }
 
-// GetSequentialRecordRequest represents a request to get sequential ELCUPdateRecords from a starting height
+// GetSequentialRecordRequest represents a request to get sequential Records from a starting height
 message GetSequentialRecordsRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2;
@@ -53,18 +53,18 @@ message GetSequentialRecordsRequest {
   string request_id = 5; // Optional request ID for tracing
 }
 
-// GetSequenceResponse represents a response containing sequential ELCUPdateRecords
+// GetSequenceResponse represents a response containing sequential Records
 message GetSequentialRecordsResponse {
-  repeated ELCUpdateRecord records = 1; // Sequential records in chronological order
+  repeated Record records = 1; // Sequential records in chronological order
   int32 records_count = 2;         // Number of records found
 }
 
-// ELCUpdaterService provides operations for ELCUpdateRecords
-service ELCUpdaterService {
-  // GetLatestRecord retrieves the last ELCUPdateRecord for a specific chain
+// Service provides operations for Records
+service Service {
+  // GetLatestRecord retrieves the last Record for a specific chain
   rpc GetLatestRecord(GetLatestRecordRequest) returns (GetLatestRecordResponse);
   
-  // GetSequentialRecords retrieves sequential ELCUpdateRecords starting from the specified height
+  // GetSequentialRecords retrieves sequential Records starting from the specified height
   // Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
   rpc GetSequentialRecords(GetSequentialRecordsRequest) returns (GetSequentialRecordsResponse);
 }

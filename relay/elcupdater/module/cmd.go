@@ -127,7 +127,7 @@ func dbListCmd(ctx *config.Context) *cobra.Command {
 	return cmd
 }
 
-// dbGetCmd gets ELCUpdateRecords by chainId, counterpartyChainId, toHeight
+// dbGetCmd gets Records by chainId, counterpartyChainId, toHeight
 func dbGetCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "dbget <path-name:chain-id> <from-height> <to-height>",
@@ -168,7 +168,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 			}
 
 			if len(records) == 0 {
-				fmt.Println("No ELCUpdateRecords found.")
+				fmt.Println("No Records found.")
 				return nil
 			}
 
@@ -178,7 +178,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 				if err != nil {
 					fmt.Printf("failed to marshal result to JSON: %v\n", err)
 				} else {
-					fmt.Printf("ELCUpdateRecords result:\n%s\n", string(resultBytes))
+					fmt.Printf("Records result:\n%s\n", string(resultBytes))
 				}
 			}
 			return nil
@@ -271,7 +271,7 @@ func updateCmd(ctx *config.Context) *cobra.Command {
 
 			// Print detailed summary for target chain
 			if record == nil {
-				fmt.Printf("No new ELCUpdate record created for %s\n", chainPair.TargetChain.ChainID())
+				fmt.Printf("No new record created for %s\n", chainPair.TargetChain.ChainID())
 			} else {
 				summary := record.FormatSummary()
 				resultBytes, err := json.MarshalIndent(summary, "", "  ")
