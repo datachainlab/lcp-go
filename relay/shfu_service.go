@@ -33,15 +33,18 @@ func logMemoryUsage(ctx context.Context, logger *log.RelayLogger, prefix string)
 	)
 }
 
-// recoverFromPanic handles panic recovery for goroutines with logging
-func recoverFromPanic(ctx context.Context, logger *log.RelayLogger, routineName string) {
+// panicToError handles panic recovery for goroutines with logging and returns an error
+func panicToError(ctx context.Context, logger *log.RelayLogger, routineName string) error {
 	if r := recover(); r != nil {
 		fmt.Printf("panic recovered in goroutine %s: %v\n", routineName, r) // write information in case of logger is dead
+		err := fmt.Errorf("panic in %s: %v", routineName, r)
 		logger.ErrorContext(ctx, "panic recovered in goroutine",
-			fmt.Errorf("panic: %v", r),
+			err,
 			"routine", routineName,
 			"stack_trace", string(debug.Stack()))
+		return err
 	}
+	return nil
 }
 
 const MinCleanupInterval = 10 * time.Minute
@@ -99,7 +102,11 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	for _, chainPair := range srv.ChainPairs {
 		pair := chainPair // capture loop variable
 		eg.Go(func() error {
-			defer recoverFromPanic(ctx, logger, fmt.Sprintf("updater-%s", pair.TargetChain.ChainID()))
+			defer func() {
+				if err := panicToError(ctx, logger, fmt.Sprintf("updater-%s", pair.TargetChain.ChainID())); err != nil {
+					panic(err)
+				}
+			}()
 			err := srv.runUpdaterForChainPair(ctx, pair)
 			if err != nil {
 				return fmt.Errorf("updater for chain %s failed: %w", pair.TargetChain.ChainID(), err)
@@ -111,7 +118,11 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	// Start gRPC server if address is configured
 	if srv.GRPCAddr != "" {
 		eg.Go(func() error {
-			defer recoverFromPanic(ctx, logger, "grpc-server")
+			defer func() {
+				if err := panicToError(ctx, logger, "grpc-server"); err != nil {
+					panic(err)
+				}
+			}()
 			err := srv.runGRPCServer(ctx)
 			if err != nil {
 				return fmt.Errorf("gRPC server failed: %w", err)
@@ -123,7 +134,11 @@ func (srv *SHFUService) SHFUServiceRun(ctx context.Context) {
 	// Start cleanup goroutine if CleanupAge is configured with minimum interval
 	if srv.CleanupAge >= MinCleanupInterval {
 		eg.Go(func() error {
-			defer recoverFromPanic(ctx, logger, "cleanup")
+			defer func() {
+				if err := panicToError(ctx, logger, "cleanup"); err != nil {
+					panic(err)
+				}
+			}()
 			err := srv.runCleanup(ctx)
 			if err != nil {
 				return fmt.Errorf("cleanup routine failed: %w", err)
