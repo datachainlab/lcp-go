@@ -49,7 +49,6 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
 	}
 	defer conn.Close()
-	conn.Connect()
 
 	client := NewSHFUServiceClient(conn)
 
@@ -110,7 +109,6 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
 	}
 	defer conn.Close()
-	conn.Connect()
 
 	client := NewSHFUServiceClient(conn)
 
