@@ -228,15 +228,14 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	var results []*shfu_storage.UpdateClientResult
 	var err error
 
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-		return nil, err
-	}
-
 	// Use SHFU gRPC server if configured (environment variable or config), otherwise use local implementation
 	useGRPC, grpcAddress := pr.shouldUseSHFUGRPC()
 	if useGRPC {
 		results, err = getUpdateClientResultsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
+		if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
+			return nil, err
+		}
 		pr.getLogger().InfoContext(ctx, "using local SHFU implementation")
 		results, err = pr.updateELCForUpdateClient(ctx, dstChain, latestFinalizedHeader)
 	}
