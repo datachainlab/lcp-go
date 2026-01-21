@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -49,8 +48,7 @@ type Prover struct {
 	// if not nil, the key is not finalized yet.
 	unfinalizedMsgID core.MsgID
 
-	gauge        *Int64Gauge
-	loadEKIMutex sync.Mutex
+	gauge *Int64Gauge
 }
 
 var (

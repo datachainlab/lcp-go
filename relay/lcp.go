@@ -159,13 +159,6 @@ func (pr *Prover) checkMsgStatus(ctx context.Context, counterparty core.Finality
 }
 
 func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
-	pr.loadEKIMutex.Lock()
-	defer pr.loadEKIMutex.Unlock()
-	return pr.loadEKIAndCheckUpdateNeededThreadUnsafe(ctx, counterparty)
-}
-
-// if returns true, query new key and register key and set it to memory
-func (pr *Prover) loadEKIAndCheckUpdateNeededThreadUnsafe(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
 	now := time.Now()
 
 	// no active enclave key in memory
