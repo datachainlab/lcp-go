@@ -1,0 +1,71 @@
+syntax = "proto3";
+package relayer.provers.lcp;
+
+import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/datachainlab/lcp-go/relay/shfu_grpc";
+option (gogoproto.goproto_getters_all) = false;
+
+// Height represents IBC height with revision number and revision height
+message Height {
+  uint64 revision_number = 1;
+  uint64 revision_height = 2;
+}
+
+// UpdateClientResult represents the result of updateClient operation
+message UpdateClientResult {
+  bytes message = 1;
+  bytes signature = 2;
+}
+
+// SHFURecord represents a SetupHeadersForUpdate record
+message SHFURecord {
+  string chain_id = 1;
+  string counterparty_chain_id = 2;
+  Height from_height = 3;
+  Height to_height = 4;
+  google.protobuf.Timestamp updated_at = 5 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  repeated UpdateClientResult update_client_results = 6;
+  // This contains the Header that was used as latestFinalizedHeader in setupHeadersForUpdate
+  bytes latest_finalized_header = 7;
+}
+
+// GetLatestSHFURequest represents a request to get the latest SHFU record for a chain
+message GetLatestSHFURequest {
+  string chain_id = 1;
+  string counterparty_chain_id = 2; // empty string ok
+  string request_id = 3; // Optional request ID for tracing
+}
+
+// GetLatestSHFUResponse represents a response containing the latest SHFU record
+message GetLatestSHFUResponse {
+  SHFURecord record = 1; // nil if no record found
+  bool found = 2;        // true if record was found
+}
+
+// GetSequentialSHFURecordsRequest represents a request to get sequential SHFU records from a starting height
+message GetSequentialSHFURecordsRequest {
+  string chain_id = 1;
+  string counterparty_chain_id = 2;
+  Height from_height = 3;
+  Height to_height = 4; // optional
+  string request_id = 5; // Optional request ID for tracing
+}
+
+// GetSequentialSHFURecordsResponse represents a response containing sequential SHFU records
+message GetSequentialSHFURecordsResponse {
+  repeated SHFURecord records = 1; // Sequential records in chronological order
+  int32 records_count = 2;         // Number of records found
+}
+
+// SHFUService provides operations for SetupHeadersForUpdate records
+service SHFUService {
+  // GetLatestSequentialSHFU retrieves the last SHFU record for a specific chain
+  rpc GetLatestSHFU(GetLatestSHFURequest) returns (GetLatestSHFUResponse);
+  
+  // GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+  // Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
+  rpc GetSequentialSHFURecords(GetSequentialSHFURecordsRequest) returns (GetSequentialSHFURecordsResponse);
+}
+

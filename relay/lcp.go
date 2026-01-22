@@ -158,7 +158,6 @@ func (pr *Prover) checkMsgStatus(ctx context.Context, counterparty core.Finality
 	return msgRes.BlockHeight().LTE(lfHeader.GetHeight()), true, nil
 }
 
-// if returns true, query new key and register key and set it to memory
 func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
 	now := time.Now()
 

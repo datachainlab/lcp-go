@@ -110,7 +110,7 @@ func TestAggregateMessages(t *testing.T) {
 		return []byte(fmt.Sprintf("signer-%03d", n))
 	}
 
-	err := log.InitLogger("DEBUG", "text", "stdout")
+	err := log.InitLogger("DEBUG", "text", "stdout", false)
 	require.NoError(t, err)
 	logger := log.GetLogger()
 
