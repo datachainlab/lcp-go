@@ -230,10 +230,6 @@ func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, er
 // The order of the returned header slice should be as: [<intermediate headers>..., <update header>]
 // if the header slice's length == nil and err == nil, the relayer should skip the update-client
 func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) (<-chan *core.HeaderOrError, error) {
-	if err := pr.UpdateEKIIfNeeded(ctx, dstChain); err != nil {
-		return nil, err
-	}
-
 	results, err := pr.updateClient(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, err
