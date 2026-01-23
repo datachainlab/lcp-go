@@ -27,10 +27,12 @@ func TestStorageBasicOperations(t *testing.T) {
 		{
 			Message:   []byte("sample_message_1"),
 			Signature: []byte("sample_signature_1"),
+			Signer:    []byte("sample_signer_1"),
 		},
 		{
 			Message:   []byte("sample_message_2"),
 			Signature: []byte("sample_signature_2"),
+			Signer:    []byte("sample_signer_2"),
 		},
 	}
 

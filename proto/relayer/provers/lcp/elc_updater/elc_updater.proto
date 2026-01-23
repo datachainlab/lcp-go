@@ -17,6 +17,7 @@ message Height {
 message UpdateClientResult {
   bytes message = 1;
   bytes signature = 2;
+  bytes signer = 3;
 }
 
 // Record represents a updateClient record

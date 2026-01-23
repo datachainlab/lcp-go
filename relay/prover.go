@@ -242,6 +242,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// Extract messages and signatures from results for existing aggregation logic
 	var messages [][]byte
 	var signatures [][]byte
+	var signer []byte = results[0].Signer
 	for _, result := range results {
 		messages = append(messages, result.Message)
 		signatures = append(signatures, result.Signature)
@@ -251,7 +252,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().InfoContext(ctx, "aggregate messages", "num_messages", len(messages))
-		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, signer)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +286,8 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		if err != nil {
 			return nil, fmt.Errorf("failed to pack header: header=%v %w", h.Header, err)
 		}
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+		signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, signer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
 		}
@@ -296,6 +298,7 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		results = append(results, &elcupdater_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
+			Signer:    signer,
 		})
 	}
 

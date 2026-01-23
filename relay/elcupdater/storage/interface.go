@@ -13,6 +13,7 @@ import (
 type UpdateClientResult struct {
 	Message   []byte
 	Signature []byte
+	Signer    []byte // Enclave key address of the signer
 }
 
 // Record represents a updateClient record for persistence
