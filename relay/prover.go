@@ -242,7 +242,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// Extract messages and signatures from results for existing aggregation logic
 	var messages [][]byte
 	var signatures [][]byte
-	var signer []byte = results[0].Signer
+	var signer []byte = results[len(results)-1].Signer
 	for _, result := range results {
 		messages = append(messages, result.Message)
 		signatures = append(signatures, result.Signature)
