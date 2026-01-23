@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/datachainlab/lcp-go/relay/elcupdater"
+	elcupdater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
@@ -44,5 +45,19 @@ func (pr *Prover) updateClient(ctx context.Context, dstChain core.FinalityAwareC
 		}
 		pr.getLogger().InfoContext(ctx, "using local updateELCForUpdateClient implementation")
 		return pr.updateELCForUpdateClient(ctx, dstChain, latestFinalizedHeader)
+	}
+}
+
+func (pr *Prover) getEnclaveKeyAddressBytes(ctx context.Context, chainID string, counterpartyChainID string) ([]byte, error) {
+	useGRPC, grpcAddress := pr.shouldUseELCUpdaterGRPC()
+	if useGRPC {
+		record, err := elcupdater_grpc.GetLatestRecord(ctx, grpcAddress, chainID, counterpartyChainID)
+		if err != nil {
+			pr.getLogger().ErrorContext(ctx, "failed to get latest ELCUpdateRecord from gRPC server", err)
+			return nil, err
+		}
+		return record.UpdateClientResults[0].Signer, nil
+	} else {
+		return pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(), nil
 	}
 }

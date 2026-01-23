@@ -419,6 +419,10 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed originProver.ProveState: path=%v value=%x %w", path, value, err)
 	}
+	signer, err := pr.getEnclaveKeyAddressBytes(ctx.Context(), pr.path.ChainID, pr.counterpartyPath.ChainID)
+	if err != nil {
+		return nil, clienttypes.Height{}, fmt.Errorf("failed to get enclave key address: %w", err)
+	}
 	m := elc.MsgVerifyMembership{
 		ClientId:    pr.config.ElcClientId,
 		Prefix:      []byte(exported.StoreKey),
@@ -426,7 +430,7 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 		Value:       value,
 		ProofHeight: proofHeight,
 		Proof:       proof,
-		Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		Signer:      signer,
 	}
 	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
 	if err != nil {
