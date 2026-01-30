@@ -53,7 +53,7 @@ message GetSequentialRecordsRequest {
   string request_id = 5; // Optional request ID for tracing
 }
 
-// GetSequenceResponse represents a response containing sequential Records
+// GetSequentialResponse represents a response containing sequential Records
 message GetSequentialRecordsResponse {
   repeated Record records = 1; // Sequential records in chronological order
   int32 records_count = 2;         // Number of records found
