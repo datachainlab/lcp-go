@@ -12,7 +12,7 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/log"
 )
 
-func GetClientStateHeight(ctx context.Context, counterparty core.FinalityAwareChain, height ibcexported.Height) (ibcexported.Height, error) {
+func GetClientStateHeight(ctx context.Context, counterparty core.Chain, height ibcexported.Height) (ibcexported.Height, error) {
 	qCtx := core.NewQueryContext(ctx, height)
 
 	csRes, err := counterparty.QueryClientState(qCtx)
@@ -37,11 +37,11 @@ func GetUpdateClientResultsFromGRPC(ctx context.Context, logger *log.RelayLogger
 	counterpartyChainID := counterparty.ChainID()
 
 	// Get sequentialRecords by height range
-	counterpartyLatestFinalizedHeader, err := counterparty.GetLatestFinalizedHeader(ctx)
+	counterpartyLatestHeight, err := counterparty.LatestHeight(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest finalized header: %w", err)
+		return nil, fmt.Errorf("failed to get latest height: %w", err)
 	}
-	fromHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestFinalizedHeader.GetHeight())
+	fromHeight, err := GetClientStateHeight(ctx, counterparty, counterpartyLatestHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client state height from counterparty chain: %w", err)
 	}
