@@ -62,10 +62,10 @@ type Storage interface {
 	// If counterpartyChainID is empty, it will be ignored in the query
 	GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*Record, error)
 
-	// GetSequence retrieves sequential records starting from the specified height
+	// GetSequential retrieves sequential records starting from the specified height
 	// Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
 	// If toHeight is not nil, stops when reaching a record with that ToHeight
-	GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error)
+	GetSequential(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error)
 
 	// List lists records in the database with optional chain ID filters
 	List(ctx context.Context, chainID, counterpartyChainID string) ([]*Record, error)

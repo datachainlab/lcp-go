@@ -227,7 +227,7 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 	return nil
 }
 
-// runCleanup periodically runs the CleanupOldELCUpdater operation
+// runCleanup periodically runs the Cleanup operation
 func (srv *Service) runCleanup(ctx context.Context) error {
 	logger := elcupdater_log.GetLogger(ctx)
 	// Run cleanup every 5 minutes
@@ -267,6 +267,6 @@ func (srv *Service) newLogger() *log.RelayLogger {
 	}
 
 	return &log.RelayLogger{
-		Logger: log.GetLogger().WithModule("elc-updater").With("chain_ids", strings.Join(chainIDs, ",")),
+		Logger: log.GetLogger().WithModule("elc-updater-service").With("chain_ids", strings.Join(chainIDs, ",")),
 	}
 }

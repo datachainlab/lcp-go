@@ -191,7 +191,7 @@ func dbGetCmd(ctx *config.Context) *cobra.Command {
 func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dbcleanup <duration>",
-		Short: "Clean up old ELC updater records from the database (duration: e.g. '7d', '24h', '30m', '600s')",
+		Short: "Clean up old ELC updater records from the database (duration: e.g. '24h', '30m', '600s')",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dbPath := viper.GetString(flagSQLitePath)
@@ -201,12 +201,12 @@ func dbCleanupCmd(ctx *config.Context) *cobra.Command {
 
 			cleanupStr := args[0]
 			if cleanupStr == "" || cleanupStr == "0" {
-				return fmt.Errorf("cleanup duration argument is required (e.g., '7d', '24h', '30m', '600s')")
+				return fmt.Errorf("cleanup duration argument is required (e.g. '24h', '30m', '600s')")
 			}
 
 			cleanupDuration, err := time.ParseDuration(cleanupStr)
 			if err != nil {
-				return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m', '600s')", cleanupStr, err)
+				return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '24h', '30m', '600s')", cleanupStr, err)
 			}
 
 			fmt.Printf("Opening database: %s\n", dbPath)

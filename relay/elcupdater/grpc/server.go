@@ -42,10 +42,10 @@ func (srv *Server) GetSequentialRecords(ctx context.Context, req *GetSequentialR
 	toHeight := ConvertHeightFromPbToDb(req.ToHeight)
 
 	// Get sequential records from storage (no toHeight limit for gRPC calls)
-	records, err := srv.storage.GetSequence(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
+	records, err := srv.storage.GetSequential(ctx, req.ChainId, req.CounterpartyChainId, fromHeight, toHeight)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetSequence request failed", err)
-		return nil, fmt.Errorf("failed to get GetSequence: %w", err)
+		logger.ErrorContext(ctx, "GetSequential request failed", err)
+		return nil, fmt.Errorf("failed to get GetSequential: %w", err)
 	}
 
 	// Convert records to protobuf messages
@@ -58,7 +58,7 @@ func (srv *Server) GetSequentialRecords(ctx context.Context, req *GetSequentialR
 	for _, record := range records {
 		heights = append(heights, fmt.Sprintf("%d-%d..%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight, record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
 	}
-	logger.InfoContext(ctx, "GetSequence request completed successfully",
+	logger.InfoContext(ctx, "GetSequential request completed successfully",
 		"records_count", len(records),
 		"heights", strings.Join(heights, ","),
 	)

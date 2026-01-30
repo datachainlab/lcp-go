@@ -256,9 +256,9 @@ func (s *SqlxStorage) GetLatestForChain(ctx context.Context, chainID string, cou
 	return record, nil
 }
 
-// GetSequence retrieves sequential records starting from the specified height
+// GetSequential retrieves sequential records starting from the specified height
 // If toHeight is not nil, stops when reaching a record with that ToHeight
-func (s *SqlxStorage) GetSequence(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
+func (s *SqlxStorage) GetSequential(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
 	// Step 1: Get all records with fromHeight >= specified fromHeight
 	query := selectClause + `
 		WHERE chain_id = :chain_id

@@ -11,7 +11,7 @@ import (
 
 // ELCUpdateMockClientState is a dummy implementation that embeds ibcexported.ClientState
 // All methods will panic at runtime unless specifically implemented
-type ClientState struct {
+type MockClientState struct {
 	ibcexported.ClientState // Embedded interface - unimplemented methods will panic
 	latestHeight            ibcexported.Height
 }
@@ -19,39 +19,39 @@ type ClientState struct {
 // Chain is a dummy implementation of core.FinalityAwareChain
 // that returns a specific height for testing SetupHeadersForUpdate calls.
 // It embeds the interface so unimplemented methods will panic at runtime.
-type Chain struct {
+type MockChain struct {
 	core.FinalityAwareChain // Embedded interface - unimplemented methods will panic
 	chainID                 string
 	latestHeight            ibcexported.Height
-	mockClientState         *ClientState
+	mockClientState         *MockClientState
 }
 
 var (
-	_ ibcexported.ClientState = (*ClientState)(nil)
-	_ core.FinalityAwareChain = (*Chain)(nil)
+	_ ibcexported.ClientState = (*MockClientState)(nil)
+	_ core.FinalityAwareChain = (*MockChain)(nil)
 )
 
 // NewChain creates a new Chain instance
-func NewChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *Chain {
-	return &Chain{
+func NewMockChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *MockChain {
+	return &MockChain{
 		chainID:         chainID,
 		latestHeight:    latestHeight,
-		mockClientState: NewClientState(clientStateHeight),
+		mockClientState: NewMockClientState(clientStateHeight),
 	}
 }
 
 // ChainID returns the chain ID
-func (c *Chain) ChainID() string {
+func (c *MockChain) ChainID() string {
 	return c.chainID
 }
 
 // LatestHeight returns the latest height with context (allowed method)
-func (c *Chain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
+func (c *MockChain) LatestHeight(ctx context.Context) (ibcexported.Height, error) {
 	return c.latestHeight, nil
 }
 
 // QueryClientState returns a QueryClientStateResponse with mock client state
-func (c *Chain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+func (c *MockChain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
 	// Use the existing mock client state
 	mockClientState := c.mockClientState
 
@@ -66,14 +66,14 @@ func (c *Chain) QueryClientState(qctx core.QueryContext) (*clienttypes.QueryClie
 	}, nil
 }
 
-// NewClientState creates a new ClientState instance
-func NewClientState(latestHeight ibcexported.Height) *ClientState {
-	return &ClientState{
+// NewMockClientState creates a new MockClientState instance
+func NewMockClientState(latestHeight ibcexported.Height) *MockClientState {
+	return &MockClientState{
 		latestHeight: latestHeight,
 	}
 }
 
 // GetLatestHeight returns the configured latest height
-func (s *ClientState) GetLatestHeight() ibcexported.Height {
+func (s *MockClientState) GetLatestHeight() ibcexported.Height {
 	return s.latestHeight
 }
