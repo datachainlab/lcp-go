@@ -454,7 +454,7 @@ func (pr *Prover) ProveHostConsensusState(ctx core.QueryContext, height exported
 }
 
 func (pr *Prover) getLogger() *log.RelayLogger {
-	logger := log.GetLogger().WithModule(ModuleName)
+	logger := log.GetLogger().WithModule("lcp-prover")
 	if pr.path == nil {
 		return logger
 	}
