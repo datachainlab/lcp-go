@@ -133,7 +133,7 @@ func (pr *Prover) removeUnfinalizedEnclaveKeyInfo(ctx context.Context) error {
 	return nil
 }
 
-func (pr *Prover) removeEnclaveKeyInfos(ctx context.Context) error {
+func (pr *Prover) RemoveEnclaveKeyInfos(ctx context.Context) error {
 	if err := pr.removeFinalizedEnclaveKeyInfo(ctx); err != nil {
 		return err
 	}

@@ -1,9 +1,9 @@
-// Package shfu_storage provides SQLite-based storage for SHFU (SetupHeadersForUpdate) operations.
+// Package storage provides SQLite-based storage for updateClient operations.
 //
 // Temporary Error Handling:
 // The storage implementation provides IsTemporaryError() to detect database locking,
 // connection issues, and other retryable errors.
-package shfu_storage
+package storage
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/shfu_logger"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/log"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -27,18 +27,18 @@ func errWithStack(format string, args ...interface{}) error {
 	return fmt.Errorf("%w\nStack trace:\n%s", baseErr, string(stack))
 }
 
-// SELECT clause for SHFU records - must match the order in scanSHFURecord
-const shfuRecordSelectClause = `
+// SELECT clause for records - must match the order in scan
+const selectClause = `
 	SELECT chain_id, counterparty_chain_id, from_height_revision_number, 
 	       from_height_revision_height, to_height_revision_number, 
 	       to_height_revision_height, updated_at, 
 	       update_client_results, latest_finalized_header
-	FROM shfu_records`
+	FROM records`
 
 /*
 DB Schema Overview:
 
-1. shfu_records - Main records table for SHFU (SetupHeadersForUpdate) operations
+1. records - Main records table for ELCUpdate (updateClient) operations
    - Stores chain information, height data, and execution metadata
    - Primary key: combination of chain_id, counterparty_chain_id, from_height fields, and to_height fields
    - Key fields: chain_id, counterparty_chain_id, from_height_revision_number, from_height_revision_height, to_height_revision_number, to_height_revision_height
@@ -65,16 +65,16 @@ type DBDialect interface {
 	ConfigureDatabase(db *sqlx.DB) error
 }
 
-// SqlxSHFUStorage implements SHFUStorage using sqlx with database abstraction
-type SqlxSHFUStorage struct {
+// SqlxStorage implements Storage using sqlx with database abstraction
+type SqlxStorage struct {
 	db       *sqlx.DB
 	dialect  DBDialect
 	filePath string // SQLite database file path
 }
 
-// NewSqlxSHFUStorage creates a new sqlx-based SHFU storage
-func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxSHFUStorage, error) {
-	storage := &SqlxSHFUStorage{
+// NewSqlxStorage creates a new sqlx-based storage
+func NewSqlxStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxStorage, error) {
+	storage := &SqlxStorage{
 		db:       db,
 		dialect:  dialect,
 		filePath: filePath,
@@ -94,7 +94,7 @@ func NewSqlxSHFUStorage(db *sqlx.DB, dialect DBDialect, filePath string) (*SqlxS
 }
 
 // initSchema creates the required tables
-func (s *SqlxSHFUStorage) initSchema() error {
+func (s *SqlxStorage) initSchema() error {
 	statements := s.dialect.GetCreateTableSQL()
 	for _, stmt := range statements {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -104,31 +104,30 @@ func (s *SqlxSHFUStorage) initSchema() error {
 	return nil
 }
 
-// SaveSHFUResult saves a SetupHeadersForUpdate execution result
-func (s *SqlxSHFUStorage) SaveSHFUResult(ctx context.Context, record *SHFURecord) error {
+// Save saves a updateClient execution result
+func (s *SqlxStorage) Save(ctx context.Context, record *Record) error {
 	// Get logger from context
-	logger := shfu_logger.GetSHFULogger(ctx)
+	logger := log.GetLogger(ctx)
 
 	// Log transaction start
-	logger.InfoContext(ctx, "Starting SaveSHFU transaction",
+	logger.InfoContext(ctx, "Starting Save transaction",
 		"chain_id", record.ChainID,
 		"counterparty_chain_id", record.CounterpartyChainID)
 
-	// Insert the main SHFU record(autocommit mode)
-	if err := s.insertSHFURecord(ctx, record); err != nil {
-		return errWithStack("failed to insert SHFU record: %w", err)
+	if err := s.insert(ctx, record); err != nil {
+		return errWithStack("failed to insert record: %w", err)
 	}
 
 	// Log transaction completion
-	logger.InfoContext(ctx, "Completed SaveSHFU transaction",
+	logger.InfoContext(ctx, "Completed Save transaction",
 		"chain_id", record.ChainID,
 		"counterparty_chain_id", record.CounterpartyChainID)
 
 	return nil
 }
 
-// ListShfuRecords lists SHFU records in the database with optional chain ID filters
-func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterpartyChainID string) ([]*SHFURecord, error) {
+// List lists Records in the database with optional chain ID filters
+func (s *SqlxStorage) List(ctx context.Context, chainID, counterpartyChainID string) ([]*Record, error) {
 	var whereConditions []string
 	namedArgs := map[string]interface{}{}
 
@@ -143,7 +142,7 @@ func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterp
 	}
 
 	// Build the query
-	query := shfuRecordSelectClause
+	query := selectClause
 	if len(whereConditions) > 0 {
 		query += " WHERE " + strings.Join(whereConditions, " AND ")
 	}
@@ -156,9 +155,9 @@ func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterp
 	}
 	defer rows.Close()
 
-	var records []*SHFURecord
+	var records []*Record
 	for rows.Next() {
-		record, err := s.scanSHFURecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -167,9 +166,9 @@ func (s *SqlxSHFUStorage) ListShfuRecords(ctx context.Context, chainID, counterp
 	return records, nil
 }
 
-// FindSHFUByChainAndHeight finds SHFU records for a specific chain and exact height match
-func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error) {
-	query := shfuRecordSelectClause + `
+// FindByChainAndHeight finds records for a specific chain and exact height match
+func (s *SqlxStorage) FindByChainAndHeight(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 		  AND from_height_revision_number = :from_rev_num
 		  AND from_height_revision_height = :from_rev_height
@@ -196,18 +195,18 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 		if counterpartyStr == "" {
 			counterpartyStr = "any"
 		}
-		return nil, errWithStack("failed to query SHFU records (chain=%s, counterparty=%s, fromHeight=%d-%d, toHeight=%d-%d): %w",
+		return nil, errWithStack("failed to query records (chain=%s, counterparty=%s, fromHeight=%d-%d, toHeight=%d-%d): %w",
 			chainID, counterpartyStr,
 			fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(),
 			toHeight.GetRevisionNumber(), toHeight.GetRevisionHeight(), err)
 	}
 	defer rows.Close()
 
-	var records []*SHFURecord
+	var records []*Record
 	for rows.Next() {
-		record, err := s.scanSHFURecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
-			return nil, errWithStack("failed to scan SHFU record: %w", err)
+			return nil, errWithStack("failed to scan record: %w", err)
 		}
 
 		records = append(records, record)
@@ -220,10 +219,10 @@ func (s *SqlxSHFUStorage) FindSHFUByChainAndHeight(ctx context.Context, chainID 
 	return records, nil
 }
 
-// GetLatestSHFUForChain retrieves the most recent SHFU record for a chain
+// GetLatestForChain retrieves the most recent Record for a chain
 // If counterpartyChainID is empty, it will be ignored in the query
-func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID string, counterpartyChainID string) (*SHFURecord, error) {
-	query := shfuRecordSelectClause + `
+func (s *SqlxStorage) GetLatestForChain(ctx context.Context, chainID string, counterpartyChainID string) (*Record, error) {
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 	`
 	if counterpartyChainID != "" {
@@ -241,7 +240,7 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 
 	rows, err := s.db.NamedQueryContext(ctx, query, namedArgs)
 	if err != nil {
-		return nil, errWithStack("failed to query latest SHFU record: %w", err)
+		return nil, errWithStack("failed to query latest Record: %w", err)
 	}
 	defer rows.Close()
 
@@ -249,19 +248,19 @@ func (s *SqlxSHFUStorage) GetLatestSHFUForChain(ctx context.Context, chainID str
 		return nil, nil
 	}
 
-	record, err := s.scanSHFURecord(rows)
+	record, err := s.scan(rows)
 	if err != nil {
-		return nil, errWithStack("failed to scan latest SHFU record: %w", err)
+		return nil, errWithStack("failed to scan latest Record: %w", err)
 	}
 
 	return record, nil
 }
 
-// GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+// GetSequential retrieves sequential records starting from the specified height
 // If toHeight is not nil, stops when reaching a record with that ToHeight
-func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*SHFURecord, error) {
+func (s *SqlxStorage) GetSequential(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
 	// Step 1: Get all records with fromHeight >= specified fromHeight
-	query := shfuRecordSelectClause + `
+	query := selectClause + `
 		WHERE chain_id = :chain_id
 	`
 	if counterpartyChainID != "" {
@@ -294,18 +293,18 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 		if counterpartyStr == "" {
 			counterpartyStr = "any"
 		}
-		return nil, errWithStack("failed to query sequential SHFU records (chain=%s, counterparty=%s, fromHeight=%d-%d): %w",
+		return nil, errWithStack("failed to query sequential records (chain=%s, counterparty=%s, fromHeight=%d-%d): %w",
 			chainID, counterpartyStr,
 			fromHeight.GetRevisionNumber(), fromHeight.GetRevisionHeight(), err)
 	}
 	defer rows.Close()
 
-	// Build map: fromHeight -> []*SHFURecord
-	recordMap := make(map[string][]*SHFURecord)
+	// Build map: fromHeight -> []*Record
+	recordMap := make(map[string][]*Record)
 	for rows.Next() {
-		record, err := s.scanSHFURecord(rows)
+		record, err := s.scan(rows)
 		if err != nil {
-			return nil, errWithStack("failed to scan SHFU record: %w", err)
+			return nil, errWithStack("failed to scan record: %w", err)
 		}
 
 		fromKey := fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight)
@@ -317,7 +316,7 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 	}
 
 	// Step 2-3: Build sequential chain starting from fromHeight
-	var result []*SHFURecord
+	var result []*Record
 	currentHeight := fromHeight
 
 	for {
@@ -329,7 +328,7 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 		}
 
 		// Find the record with the highest toHeight
-		var selectedRecord *SHFURecord
+		var selectedRecord *Record
 		for _, record := range records {
 			if selectedRecord == nil {
 				selectedRecord = record
@@ -363,19 +362,19 @@ func (s *SqlxSHFUStorage) GetSequentialSHFURecords(ctx context.Context, chainID 
 	return result, nil
 }
 
-// CleanupOldSHFU removes SHFU records older than the specified duration based on UpdatedAt
-func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Duration) (int64, error) {
+// Cleanup removes records older than the specified duration based on UpdatedAt
+func (s *SqlxStorage) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 
 	// Delete records based on updated_at
-	recordQuery := `DELETE FROM shfu_records WHERE updated_at < :cutoff_time`
+	recordQuery := `DELETE FROM records WHERE updated_at < :cutoff_time`
 	namedArgs := map[string]interface{}{
 		"cutoff_time": s.dialect.ConvertTimeToDB(cutoffTime),
 	}
 
 	result, err := s.db.NamedExecContext(ctx, recordQuery, namedArgs)
 	if err != nil {
-		return 0, errWithStack("failed to delete old SHFU records: %w", err)
+		return 0, errWithStack("failed to delete old records: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -387,14 +386,14 @@ func (s *SqlxSHFUStorage) CleanupOldSHFU(ctx context.Context, olderThan time.Dur
 }
 
 // Close closes the service and releases any resources
-func (s *SqlxSHFUStorage) Close() error {
+func (s *SqlxStorage) Close() error {
 	return s.db.Close()
 }
 
 // Helper methods (implemented below)
 
-func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, record *SHFURecord) error {
-	query := `INSERT INTO shfu_records (
+func (s *SqlxStorage) insert(ctx context.Context, record *Record) error {
+	query := `INSERT INTO records (
 		chain_id, counterparty_chain_id,
 		from_height_revision_number, from_height_revision_height,
 		to_height_revision_number, to_height_revision_height,
@@ -429,8 +428,8 @@ func (s *SqlxSHFUStorage) insertSHFURecord(ctx context.Context, record *SHFUReco
 	return err
 }
 
-func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, error) {
-	var record SHFURecord
+func (s *SqlxStorage) scan(scanner sqlx.ColScanner) (*Record, error) {
+	var record Record
 	var updateClientResultsJSON []byte
 	var updatedAtStr string
 
@@ -468,7 +467,7 @@ func (s *SqlxSHFUStorage) scanSHFURecord(scanner sqlx.ColScanner) (*SHFURecord, 
 
 // IsTemporaryError determines if an error is temporary and the operation can be retried
 // For SQLite, this includes database locks, busy errors, and connection issues
-func (s *SqlxSHFUStorage) IsTemporaryError(err error) bool {
+func (s *SqlxStorage) IsTemporaryError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -505,7 +504,7 @@ func (s *SqlxSHFUStorage) IsTemporaryError(err error) bool {
 }
 
 // Description returns a description of this storage instance
-func (s *SqlxSHFUStorage) Description() string {
+func (s *SqlxStorage) Description() string {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"

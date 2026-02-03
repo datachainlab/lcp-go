@@ -4,7 +4,7 @@ package relayer.provers.lcp;
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/datachainlab/lcp-go/relay/shfu_grpc";
+option go_package = "github.com/datachainlab/lcp-go/relay/elcupdater/grpc";
 option (gogoproto.goproto_getters_all) = false;
 
 // Height represents IBC height with revision number and revision height
@@ -19,8 +19,8 @@ message UpdateClientResult {
   bytes signature = 2;
 }
 
-// SHFURecord represents a SetupHeadersForUpdate record
-message SHFURecord {
+// Record represents a updateClient record
+message Record {
   string chain_id = 1;
   string counterparty_chain_id = 2;
   Height from_height = 3;
@@ -31,21 +31,21 @@ message SHFURecord {
   bytes latest_finalized_header = 7;
 }
 
-// GetLatestSHFURequest represents a request to get the latest SHFU record for a chain
-message GetLatestSHFURequest {
+// GetLatestRecordRequest represents a request to get the latest Record for a chain
+message GetLatestRecordRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2; // empty string ok
   string request_id = 3; // Optional request ID for tracing
 }
 
-// GetLatestSHFUResponse represents a response containing the latest SHFU record
-message GetLatestSHFUResponse {
-  SHFURecord record = 1; // nil if no record found
+// GetLatestRecordResponse represents a response containing the latest Record
+message GetLatestRecordResponse {
+  Record record = 1; // nil if no record found
   bool found = 2;        // true if record was found
 }
 
-// GetSequentialSHFURecordsRequest represents a request to get sequential SHFU records from a starting height
-message GetSequentialSHFURecordsRequest {
+// GetSequentialRecordRequest represents a request to get sequential Records from a starting height
+message GetSequentialRecordsRequest {
   string chain_id = 1;
   string counterparty_chain_id = 2;
   Height from_height = 3;
@@ -53,19 +53,19 @@ message GetSequentialSHFURecordsRequest {
   string request_id = 5; // Optional request ID for tracing
 }
 
-// GetSequentialSHFURecordsResponse represents a response containing sequential SHFU records
-message GetSequentialSHFURecordsResponse {
-  repeated SHFURecord records = 1; // Sequential records in chronological order
+// GetSequentialResponse represents a response containing sequential Records
+message GetSequentialRecordsResponse {
+  repeated Record records = 1; // Sequential records in chronological order
   int32 records_count = 2;         // Number of records found
 }
 
-// SHFUService provides operations for SetupHeadersForUpdate records
-service SHFUService {
-  // GetLatestSequentialSHFU retrieves the last SHFU record for a specific chain
-  rpc GetLatestSHFU(GetLatestSHFURequest) returns (GetLatestSHFUResponse);
+// Service provides operations for Records
+service Service {
+  // GetLatestRecord retrieves the last Record for a specific chain
+  rpc GetLatestRecord(GetLatestRecordRequest) returns (GetLatestRecordResponse);
   
-  // GetSequentialSHFURecords retrieves sequential SHFU records starting from the specified height
+  // GetSequentialRecords retrieves sequential Records starting from the specified height
   // Returns records in chronological order where each record's FromHeight matches the previous record's ToHeight
-  rpc GetSequentialSHFURecords(GetSequentialSHFURecordsRequest) returns (GetSequentialSHFURecordsResponse);
+  rpc GetSequentialRecords(GetSequentialRecordsRequest) returns (GetSequentialRecordsResponse);
 }
 

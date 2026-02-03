@@ -50,10 +50,10 @@ message ProverConfig {
     // max chunk size(byte) for update client
     uint32 max_chunk_size_for_update_client = 33;
 
-    // SHFU gRPC server address
+    // ELCUpdater gRPC server address
     // if empty (default), local implementation will be used
     // if specified, SetupHeadersForUpdate will use this gRPC server instead
-    string shfu_grpc_address = 34;
+    string elc_updater_grpc_address = 34;
 }
 
 message Fraction {

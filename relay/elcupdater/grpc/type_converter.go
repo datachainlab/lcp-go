@@ -1,18 +1,18 @@
-package shfu_grpc
+package grpc
 
 import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/shfu_storage"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
-// ConvertSHFURecordFromDbToPb converts storage.SHFURecord to protobuf SHFURecord
-func ConvertSHFURecordFromDbToPb(record *shfu_storage.SHFURecord) *SHFURecord {
+// ConvertRecordFromDbToPb converts storage.Record to protobuf Record
+func ConvertRecordFromDbToPb(record *storage.Record) *Record {
 	if record == nil {
 		return nil
 	}
 
-	return &SHFURecord{
+	return &Record{
 		ChainId:               record.ChainID,
 		CounterpartyChainId:   record.CounterpartyChainID,
 		FromHeight:            ConvertHeightFromDbToPb(record.FromHeight),
@@ -23,13 +23,13 @@ func ConvertSHFURecordFromDbToPb(record *shfu_storage.SHFURecord) *SHFURecord {
 	}
 }
 
-// ConvertSHFURecordFromPbToDb converts protobuf SHFURecord to storage.SHFURecord
-func ConvertSHFURecordFromPbToDb(pbRecord *SHFURecord) *shfu_storage.SHFURecord {
+// ConvertRecordFromPbToDb converts protobuf Record to storage.Record
+func ConvertRecordFromPbToDb(pbRecord *Record) *storage.Record {
 	if pbRecord == nil {
 		return nil
 	}
 
-	return &shfu_storage.SHFURecord{
+	return &storage.Record{
 		ChainID:               pbRecord.ChainId,
 		CounterpartyChainID:   pbRecord.CounterpartyChainId,
 		FromHeight:            ConvertHeightFromPbToDb(pbRecord.FromHeight),
@@ -69,7 +69,7 @@ func ConvertHeightFromPbToDb(pbHeight *Height) clienttypes.Height {
 }
 
 // ConvertUpdateClientResultsFromDbToPb converts storage UpdateClientResults to protobuf format
-func ConvertUpdateClientResultsFromDbToPb(results []*shfu_storage.UpdateClientResult) []*UpdateClientResult {
+func ConvertUpdateClientResultsFromDbToPb(results []*storage.UpdateClientResult) []*UpdateClientResult {
 	if results == nil {
 		return nil
 	}
@@ -85,14 +85,14 @@ func ConvertUpdateClientResultsFromDbToPb(results []*shfu_storage.UpdateClientRe
 }
 
 // ConvertUpdateClientResultsFromPbToDb converts protobuf UpdateClientResults to storage format
-func ConvertUpdateClientResultsFromPbToDb(pbResults []*UpdateClientResult) []*shfu_storage.UpdateClientResult {
+func ConvertUpdateClientResultsFromPbToDb(pbResults []*UpdateClientResult) []*storage.UpdateClientResult {
 	if pbResults == nil {
 		return nil
 	}
 
-	results := make([]*shfu_storage.UpdateClientResult, len(pbResults))
+	results := make([]*storage.UpdateClientResult, len(pbResults))
 	for i, pbResult := range pbResults {
-		results[i] = &shfu_storage.UpdateClientResult{
+		results[i] = &storage.UpdateClientResult{
 			Message:   pbResult.Message,
 			Signature: pbResult.Signature,
 		}

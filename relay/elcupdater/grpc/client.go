@@ -1,4 +1,4 @@
-package shfu_grpc
+package grpc
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
-	"github.com/datachainlab/lcp-go/relay/shfu_logger"
-	"github.com/datachainlab/lcp-go/relay/shfu_storage"
+	elcupdater_log "github.com/datachainlab/lcp-go/relay/elcupdater/log"
+	"github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/google/uuid"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
@@ -17,13 +17,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// GetSequentialSHFURecords retrieves sequential SHFU records from gRPC server
+// GetSequentialRecords retrieves sequential ELCUpdateRecords from gRPC server
 // If toHeight is not nil, stops when reaching a record with that ToHeight
-func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*shfu_storage.SHFURecord, error) {
+func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*storage.Record, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).With(
-			"function", "GetSequentialSHFURecords",
+		Logger: elcupdater_log.GetLogger(ctx).With(
+			"function", "GetSequentialRecords",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,
 			"chain_id", chainID,
@@ -32,28 +32,28 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 		),
 	}
 
-	logger.InfoContext(ctx, "GetSequentialSHFURecords request started")
+	logger.InfoContext(ctx, "GetSequentialRecords request started")
 
 	if grpcAddress == "" {
-		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed - no gRPC address", fmt.Errorf("SHFU gRPC address not provided"))
-		return nil, fmt.Errorf("SHFU gRPC address not provided")
+		logger.ErrorContext(ctx, "GetSequentialRecords request failed - no gRPC address", fmt.Errorf("ELCUpdater gRPC address not provided"))
+		return nil, fmt.Errorf("ELCUpdater gRPC address not provided")
 	}
 
-	// Connect to SHFU gRPC server
+	// Connect to ELCUpdater gRPC server
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed - connection error", err)
-		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
+		logger.ErrorContext(ctx, "GetSequentialRecords request failed - connection error", err)
+		return nil, fmt.Errorf("failed to connect to ELCUpdater gRPC server: %w", err)
 	}
 	defer conn.Close()
 
-	client := NewSHFUServiceClient(conn)
+	client := NewServiceClient(conn)
 
-	// Request sequential SHFU records
-	req := &GetSequentialSHFURecordsRequest{
+	// Request sequential ELCUpdate records
+	req := &GetSequentialRecordsRequest{
 		ChainId:             chainID,
 		CounterpartyChainId: counterpartyChainID,
 		FromHeight:          ConvertHeightFromIbcToPb(fromHeight),
@@ -61,30 +61,30 @@ func GetSequentialSHFURecords(ctx context.Context, grpcAddress string, chainID s
 		RequestId:           requestID,
 	}
 
-	resp, err := client.GetSequentialSHFURecords(ctx, req)
+	resp, err := client.GetSequentialRecords(ctx, req)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetSequentialSHFURecords request failed - gRPC call error", err)
-		return nil, fmt.Errorf("failed to get sequential SHFU records from gRPC server: %w", err)
+		logger.ErrorContext(ctx, "GetSequentialRecords request failed - gRPC call error", err)
+		return nil, fmt.Errorf("failed to GetSequentialRecords from gRPC server: %w", err)
 	}
 
-	// Convert gRPC response to storage SHFURecord slice
-	var records []*shfu_storage.SHFURecord
+	// Convert gRPC response to storage Record slice
+	var records []*storage.Record
 	for _, pbRecord := range resp.Records {
-		records = append(records, ConvertSHFURecordFromPbToDb(pbRecord))
+		records = append(records, ConvertRecordFromPbToDb(pbRecord))
 	}
 
-	logger.InfoContext(ctx, "GetSequentialSHFURecords request completed successfully",
+	logger.InfoContext(ctx, "GetSequentialRecords request completed successfully",
 		"records_count", len(records))
 
 	return records, nil
 }
 
-// GetLatestSHFU retrieves the latest SHFU record from gRPC server
-func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) (*shfu_storage.SHFURecord, error) {
+// GetLatestRecord retrieves the latest ELCUpdate record from gRPC server
+func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string) (*storage.Record, error) {
 	requestID := uuid.Must(uuid.NewV7()).String()
 	logger := log.RelayLogger{
-		Logger: shfu_logger.GetSHFULogger(ctx).With(
-			"function", "GetLatestSHFU",
+		Logger: elcupdater_log.GetLogger(ctx).With(
+			"function", "GetLatestRecord",
 			"request_id", requestID,
 			"grpc_address", grpcAddress,
 			"chain_id", chainID,
@@ -92,49 +92,48 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 		),
 	}
 
-	logger.InfoContext(ctx, "GetLatestSHFU request started")
-
+	logger.InfoContext(ctx, "GetLatestRecord request started")
 	if grpcAddress == "" {
-		logger.ErrorContext(ctx, "GetLatestSHFU request failed - no gRPC address", fmt.Errorf("SHFU gRPC address not provided"))
-		return nil, fmt.Errorf("SHFU gRPC address not provided")
+		logger.ErrorContext(ctx, "GetLatestRecord request failed - no gRPC address", fmt.Errorf("ELCUpdater gRPC address not provided"))
+		return nil, fmt.Errorf("ELCUpdater gRPC address not provided")
 	}
 
-	// Connect to SHFU gRPC server
+	// Connect to ELCUpdate gRPC server
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetLatestSHFU request failed - connection error", err)
-		return nil, fmt.Errorf("failed to connect to SHFU gRPC server: %w", err)
+		logger.ErrorContext(ctx, "GetLatestELCUpdate request failed - connection error", err)
+		return nil, fmt.Errorf("failed to connect to ELCUpdate gRPC server: %w", err)
 	}
 	defer conn.Close()
 
-	client := NewSHFUServiceClient(conn)
+	client := NewServiceClient(conn)
 
-	// Request latest SHFU record
-	req := &GetLatestSHFURequest{
+	// Request latest ELCUpdate record
+	req := &GetLatestRecordRequest{
 		ChainId:             chainID,
 		CounterpartyChainId: counterpartyChainID,
 		RequestId:           requestID,
 	}
 
-	resp, err := client.GetLatestSHFU(ctx, req)
+	resp, err := client.GetLatestRecord(ctx, req)
 	if err != nil {
-		logger.ErrorContext(ctx, "GetLatestSHFU request failed - gRPC call error", err)
-		return nil, fmt.Errorf("failed to get latest SHFU record from gRPC server: %w", err)
+		logger.ErrorContext(ctx, "GetLatestRecord request failed - gRPC call error", err)
+		return nil, fmt.Errorf("failed to GetLatestRecord from gRPC server: %w", err)
 	}
 
 	if !resp.Found || resp.Record == nil {
-		logger.InfoContext(ctx, "GetLatestSHFU request completed - no record found",
+		logger.InfoContext(ctx, "GetLatestRecord request completed - no record found",
 			"found", resp.Found, "record", resp.Record != nil)
 		return nil, nil // No record found
 	}
 
-	// Convert gRPC response to storage SHFURecord
-	record := ConvertSHFURecordFromPbToDb(resp.Record)
+	// Convert gRPC response to storage Record
+	record := ConvertRecordFromPbToDb(resp.Record)
 
-	logger.InfoContext(ctx, "GetLatestSHFU request completed successfully",
+	logger.InfoContext(ctx, "GetLatestRecord request completed successfully",
 		"found", true,
 		"record_from_height", fmt.Sprintf("%d-%d", record.FromHeight.RevisionNumber, record.FromHeight.RevisionHeight),
 		"record_to_height", fmt.Sprintf("%d-%d", record.ToHeight.RevisionNumber, record.ToHeight.RevisionHeight))
@@ -144,7 +143,7 @@ func GetLatestSHFU(ctx context.Context, grpcAddress string, chainID string, coun
 
 // GetLatestFinalizedHeader retrieves the latest finalized header from gRPC server
 func GetLatestFinalizedHeader(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, codec codec.ProtoCodecMarshaler) (core.Header, error) {
-	latestRecord, err := GetLatestSHFU(ctx, grpcAddress, chainID, counterpartyChainID)
+	latestRecord, err := GetLatestRecord(ctx, grpcAddress, chainID, counterpartyChainID)
 	if err != nil {
 		return nil, err
 	}

@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	lcp "github.com/datachainlab/lcp-go/relay"
+	lcp "github.com/datachainlab/lcp-go/relay/module"
 	"github.com/datachainlab/lcp-go/relay/signers/raw"
 	lcptm "github.com/datachainlab/lcp-go/relay/tendermint"
 	tendermint "github.com/hyperledger-labs/yui-relayer/chains/tendermint/module"
