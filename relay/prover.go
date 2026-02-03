@@ -383,32 +383,36 @@ func aggregateMessages(
 }
 
 func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signers [][]byte, messageBatchSize uint64) ([]*elc.MsgAggregateMessages, error) {
-	var res []*elc.MsgAggregateMessages
-	var currentBatchStartIndex uint64 = 0
-	var lastSigner []byte
 	if messageBatchSize < 2 {
 		return nil, fmt.Errorf("messageBatchSize must be greater than 1: messageBatchSize=%v", messageBatchSize)
 	}
-	for i := 0; ; i++ {
-		count := uint64(i) - currentBatchStartIndex // note that current index is exclusive
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("messages must not be empty")
+	} else if len(messages) == 1 {
+		return []*elc.MsgAggregateMessages{
+			&elc.MsgAggregateMessages{
+				Signer:     signers[0],
+				Messages:   messages,
+				Signatures: signatures,
+			},
+		}, nil
+	}
+
+	var res []*elc.MsgAggregateMessages
+	i0 := 0 // batch start index
+	for i := 0; i < len(messages); i++ {
+		count := uint64(i - i0 + 1)
 		// check batch split condition
-		if (i == len(messages)) ||
-			(count == messageBatchSize) ||
-			(lastSigner != nil && !bytes.Equal(signers[i], lastSigner)) {
+		if (i == len(messages)-1) ||
+			count == messageBatchSize ||
+			!bytes.Equal(signers[i], signers[i+1]) {
 			// split batch
 			res = append(res, &elc.MsgAggregateMessages{
-				Signer:     lastSigner,
-				Messages:   messages[currentBatchStartIndex:i],
-				Signatures: signatures[currentBatchStartIndex:i],
+				Signer:     signers[i0],
+				Messages:   messages[i0 : i+1],
+				Signatures: signatures[i0 : i+1],
 			})
-			if i == len(messages) {
-				break
-			}
-			currentBatchStartIndex = uint64(i)
-			lastSigner = signers[i]
-		} else {
-			// continue batch
-			lastSigner = signers[i]
+			i0 = i + 1
 		}
 	}
 	return res, nil
