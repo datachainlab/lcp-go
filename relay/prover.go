@@ -388,14 +388,6 @@ func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signers [][]byt
 	}
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("messages must not be empty")
-	} else if len(messages) == 1 {
-		return []*elc.MsgAggregateMessages{
-			&elc.MsgAggregateMessages{
-				Signer:     signers[0],
-				Messages:   messages,
-				Signatures: signatures,
-			},
-		}, nil
 	}
 
 	var res []*elc.MsgAggregateMessages
