@@ -11,6 +11,60 @@ import (
 	"google.golang.org/grpc"
 )
 
+func TestSplitMessagesBySigner(t *testing.T) {
+	var M = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("message-%03d", n))
+	}
+	var S = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("signature-%03d", n))
+	}
+	var Signer = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("signer-%03d", n))
+	}
+	var cases = []struct {
+		Messages   [][]byte
+		Signatures [][]byte
+		BatchSizes []int
+		Signers    [][]byte
+		Error      bool
+	}{
+		{
+			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
+			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
+			BatchSizes: []int{5},
+			Signers:    [][]byte{Signer(0), Signer(0), Signer(0), Signer(0), Signer(0)},
+			Error:      false,
+		},
+		{
+			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
+			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
+			BatchSizes: []int{2, 1, 2},
+			Signers:    [][]byte{Signer(0), Signer(0), Signer(1), Signer(2), Signer(2)},
+			Error:      false,
+		},
+	}
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			require := require.New(t)
+			signerMessages, err := splitMessagesBySigner(c.Messages, c.Signatures, c.Signers)
+			if c.Error {
+				require.Error(err)
+				return
+			} else {
+				require.NoError(err)
+			}
+			require.Len(signerMessages, len(signerMessages))
+			messageIndex := 0
+			for i, size := range c.BatchSizes {
+				require.Equal(signerMessages[i].Signer, c.Signers[messageIndex])
+				require.Len(signerMessages[i].Messages, size)
+				require.Len(signerMessages[i].Signatures, size)
+				messageIndex += size
+			}
+		})
+	}
+}
+
 func TestSplitIntoMultiBatch(t *testing.T) {
 	var M = func(n uint8) []byte {
 		return []byte(fmt.Sprintf("message-%03d", n))
@@ -25,7 +79,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 		Messages         [][]byte
 		Signatures       [][]byte
 		BatchSizes       []int
-		Signers          [][]byte
+		Signer           []byte
 		MessageBatchSize uint64
 		Error            bool
 	}{
@@ -34,7 +88,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0)},
 			Signatures:       [][]byte{S(0)},
 			BatchSizes:       []int{1},
-			Signers:          [][]byte{Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 1,
 			Error:            true,
 		},
@@ -42,7 +96,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0), M(1)},
 			Signatures:       [][]byte{S(0), S(1)},
 			BatchSizes:       []int{2},
-			Signers:          [][]byte{Signer(0), Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 2,
 			Error:            false,
 		},
@@ -50,7 +104,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0), M(1), M(2)},
 			Signatures:       [][]byte{S(0), S(1), S(2)},
 			BatchSizes:       []int{3},
-			Signers:          [][]byte{Signer(0), Signer(0), Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 3,
 			Error:            false,
 		},
@@ -58,7 +112,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0), M(1), M(2)},
 			Signatures:       [][]byte{S(0), S(1), S(2)},
 			BatchSizes:       []int{2, 1},
-			Signers:          [][]byte{Signer(0), Signer(0), Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 2,
 			Error:            false,
 		},
@@ -66,7 +120,7 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0), M(1), M(2), M(3)},
 			Signatures:       [][]byte{S(0), S(1), S(2), S(3)},
 			BatchSizes:       []int{3, 1},
-			Signers:          [][]byte{Signer(0), Signer(0), Signer(0), Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 3,
 			Error:            false,
 		},
@@ -74,23 +128,15 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 			Messages:         [][]byte{M(0), M(1), M(2), M(3), M(4)},
 			Signatures:       [][]byte{S(0), S(1), S(2), S(3), S(4)},
 			BatchSizes:       []int{3, 2},
-			Signers:          [][]byte{Signer(0), Signer(0), Signer(0), Signer(0), Signer(0)},
+			Signer:           Signer(0),
 			MessageBatchSize: 3,
-			Error:            false,
-		},
-		{
-			Messages:         [][]byte{M(0), M(1), M(2), M(3), M(4)},
-			Signatures:       [][]byte{S(0), S(1), S(2), S(3), S(4)},
-			BatchSizes:       []int{2, 1, 2},
-			Signers:          [][]byte{Signer(0), Signer(0), Signer(1), Signer(2), Signer(2)},
-			MessageBatchSize: 5,
 			Error:            false,
 		},
 	}
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			require := require.New(t)
-			batches, err := splitIntoMultiBatch(c.Messages, c.Signatures, c.Signers, c.MessageBatchSize)
+			batches, err := splitIntoMultiBatch(c.Messages, c.Signatures, c.Signer, c.MessageBatchSize)
 			if c.Error {
 				require.Error(err)
 				return
@@ -98,12 +144,10 @@ func TestSplitIntoMultiBatch(t *testing.T) {
 				require.NoError(err)
 			}
 			require.Len(batches, len(c.BatchSizes))
-			messageIndex := 0
 			for i, size := range c.BatchSizes {
-				require.Equal(batches[i].Signer, c.Signers[messageIndex])
+				require.Equal(batches[i].Signer, c.Signer)
 				require.Len(batches[i].Messages, size)
 				require.Len(batches[i].Signatures, size)
-				messageIndex += size
 			}
 		})
 	}
@@ -127,7 +171,7 @@ func TestAggregateMessages(t *testing.T) {
 	var cases = []struct {
 		Messages   [][]byte
 		Signatures [][]byte
-		Signers    [][]byte
+		Signer     []byte
 		BatchSize  uint64
 		Error      bool
 	}{
@@ -135,21 +179,21 @@ func TestAggregateMessages(t *testing.T) {
 		{
 			Messages:   [][]byte{},
 			Signatures: [][]byte{},
-			Signers:    [][]byte{Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
 			Error:      true,
 		},
 		{
 			Messages:   [][]byte{M(0)},
 			Signatures: [][]byte{S(0)},
-			Signers:    [][]byte{Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
 			Error:      false,
 		},
 		{
 			Messages:   [][]byte{M(0), M(1)},
 			Signatures: [][]byte{S(0), S(1)},
-			Signers:    [][]byte{Signer(0), Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
 			Error:      false,
 		},
@@ -157,36 +201,29 @@ func TestAggregateMessages(t *testing.T) {
 		{
 			Messages:   [][]byte{M(0), M(1)},
 			Signatures: [][]byte{S(0), S(1)},
-			Signers:    [][]byte{Signer(0), Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  1,
 			Error:      true,
 		},
 		{
 			Messages:   [][]byte{M(0), M(1), M(2)},
 			Signatures: [][]byte{S(0), S(1), S(2)},
-			Signers:    [][]byte{Signer(0), Signer(0), Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
 			Error:      false,
 		},
 		{
 			Messages:   [][]byte{M(0), M(1), M(2), M(3)},
 			Signatures: [][]byte{S(0), S(1), S(2), S(3)},
-			Signers:    [][]byte{Signer(0), Signer(0), Signer(0), Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
 			Error:      false,
 		},
 		{
 			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
 			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
-			Signers:    [][]byte{Signer(0), Signer(0), Signer(0), Signer(0), Signer(0)},
+			Signer:     Signer(0),
 			BatchSize:  2,
-			Error:      false,
-		},
-		{
-			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
-			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
-			Signers:    [][]byte{Signer(0), Signer(0), Signer(1), Signer(1), Signer(2)},
-			BatchSize:  5,
 			Error:      false,
 		},
 	}
@@ -194,7 +231,7 @@ func TestAggregateMessages(t *testing.T) {
 	for i, c := range cases {
 		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
 			require := require.New(t)
-			res, err := aggregateMessages(context.Background(), logger, c.BatchSize, mockMessageAggregator, c.Messages, c.Signatures, c.Signers)
+			res, err := aggregateMessages(context.Background(), logger, c.BatchSize, mockMessageAggregator, c.Messages, c.Signatures, c.Signer)
 			if c.Error {
 				require.Error(err)
 				return

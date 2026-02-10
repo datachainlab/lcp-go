@@ -253,11 +253,18 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().InfoContext(ctx, "aggregate messages", "num_messages", len(messages))
-		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, signers)
+
+		signerMessages, err := splitMessagesBySigner(messages, signatures, signers)
 		if err != nil {
 			return nil, err
 		}
-		updates = append(updates, update)
+		for _, m := range signerMessages {
+			update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, m.Messages, m.Signatures, m.Signer)
+			if err != nil {
+				return nil, err
+			}
+			updates = append(updates, update)
+		}
 	} else {
 		pr.getLogger().InfoContext(ctx, "updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
@@ -309,6 +316,26 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 	return results, nil
 }
 
+func splitMessagesBySigner(messages [][]byte, signatures [][]byte, signers [][]byte) ([]*elc.MsgAggregateMessages, error) {
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("messages must not be empty")
+	}
+
+	var res []*elc.MsgAggregateMessages
+	i0 := 0 // batch start index
+	for i := 0; i < len(messages); i++ {
+		if (i == len(messages)-1) || !bytes.Equal(signers[i], signers[i+1]) {
+			res = append(res, &elc.MsgAggregateMessages{
+				Signer:     signers[i0],
+				Messages:   messages[i0 : i+1],
+				Signatures: signatures[i0 : i+1],
+			})
+			i0 = i + 1
+		}
+	}
+	return res, nil
+}
+
 type MessageAggregator func(ctx context.Context, in *elc.MsgAggregateMessages, opts ...grpc.CallOption) (*elc.MsgAggregateMessagesResponse, error)
 
 func aggregateMessages(
@@ -318,7 +345,7 @@ func aggregateMessages(
 	messageAggregator MessageAggregator,
 	messages [][]byte,
 	signatures [][]byte,
-	signers [][]byte,
+	signer []byte,
 ) (*lcptypes.UpdateClientMessage, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("aggregateMessages: messages must not be empty")
@@ -326,7 +353,7 @@ func aggregateMessages(
 		return nil, fmt.Errorf("aggregateMessages: messages and signatures must have the same length: messages=%v signatures=%v", len(messages), len(signatures))
 	}
 	for {
-		batches, err := splitIntoMultiBatch(messages, signatures, signers, batchSize)
+		batches, err := splitIntoMultiBatch(messages, signatures, signer, batchSize)
 		if err != nil {
 			return nil, err
 		}
@@ -382,30 +409,31 @@ func aggregateMessages(
 	}
 }
 
-func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signers [][]byte, messageBatchSize uint64) ([]*elc.MsgAggregateMessages, error) {
+func splitIntoMultiBatch(messages [][]byte, signatures [][]byte, signer []byte, messageBatchSize uint64) ([]*elc.MsgAggregateMessages, error) {
+	var res []*elc.MsgAggregateMessages
+	var currentMessages [][]byte
+	var currentBatchStartIndex uint64 = 0
 	if messageBatchSize < 2 {
 		return nil, fmt.Errorf("messageBatchSize must be greater than 1: messageBatchSize=%v", messageBatchSize)
 	}
-	if len(messages) == 0 {
-		return nil, fmt.Errorf("messages must not be empty")
-	}
-
-	var res []*elc.MsgAggregateMessages
-	i0 := 0 // batch start index
 	for i := 0; i < len(messages); i++ {
-		count := uint64(i - i0 + 1)
-		// check batch split condition
-		if (i == len(messages)-1) ||
-			count == messageBatchSize ||
-			!bytes.Equal(signers[i], signers[i+1]) {
-			// split batch
+		currentMessages = append(currentMessages, messages[i])
+		if uint64(len(currentMessages)) == messageBatchSize {
 			res = append(res, &elc.MsgAggregateMessages{
-				Signer:     signers[i0],
-				Messages:   messages[i0 : i+1],
-				Signatures: signatures[i0 : i+1],
+				Signer:     signer,
+				Messages:   currentMessages,
+				Signatures: signatures[currentBatchStartIndex : currentBatchStartIndex+messageBatchSize],
 			})
-			i0 = i + 1
+			currentMessages = nil
+			currentBatchStartIndex = uint64(i + 1)
 		}
+	}
+	if len(currentMessages) > 0 {
+		res = append(res, &elc.MsgAggregateMessages{
+			Signer:     signer,
+			Messages:   currentMessages,
+			Signatures: signatures[currentBatchStartIndex:],
+		})
 	}
 	return res, nil
 }
