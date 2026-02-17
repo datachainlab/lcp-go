@@ -242,20 +242,29 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 	// Extract messages and signatures from results for existing aggregation logic
 	var messages [][]byte
 	var signatures [][]byte
+	var signers [][]byte
 	for _, result := range results {
 		messages = append(messages, result.Message)
 		signatures = append(signatures, result.Signature)
+		signers = append(signers, result.Signer)
 	}
 
 	var updates []core.Header
 	// NOTE: assume that the messages length and the signatures length are the same
 	if pr.config.MessageAggregation {
 		pr.getLogger().InfoContext(ctx, "aggregate messages", "num_messages", len(messages))
-		update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, messages, signatures, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+
+		signerMessages, err := splitMessagesBySigner(messages, signatures, signers)
 		if err != nil {
 			return nil, err
 		}
-		updates = append(updates, update)
+		for _, m := range signerMessages {
+			update, err := aggregateMessages(ctx, pr.getLogger(), pr.config.GetMessageAggregationBatchSize(), pr.lcpServiceClient.AggregateMessages, m.Messages, m.Signatures, m.Signer)
+			if err != nil {
+				return nil, err
+			}
+			updates = append(updates, update)
+		}
 	} else {
 		pr.getLogger().InfoContext(ctx, "updateClient", "num_messages", len(messages))
 		for i := 0; i < len(messages); i++ {
@@ -285,7 +294,8 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		if err != nil {
 			return nil, fmt.Errorf("failed to pack header: header=%v %w", h.Header, err)
 		}
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
+		signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, signer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
 		}
@@ -296,6 +306,7 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		results = append(results, &elcupdater_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
+			Signer:    signer,
 		})
 	}
 
@@ -303,6 +314,26 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
 	}
 	return results, nil
+}
+
+func splitMessagesBySigner(messages [][]byte, signatures [][]byte, signers [][]byte) ([]*elc.MsgAggregateMessages, error) {
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("messages must not be empty")
+	}
+
+	var res []*elc.MsgAggregateMessages
+	i0 := 0 // batch start index
+	for i := 0; i < len(messages); i++ {
+		if (i == len(messages)-1) || !bytes.Equal(signers[i], signers[i+1]) {
+			res = append(res, &elc.MsgAggregateMessages{
+				Signer:     signers[i0],
+				Messages:   messages[i0 : i+1],
+				Signatures: signatures[i0 : i+1],
+			})
+			i0 = i + 1
+		}
+	}
+	return res, nil
 }
 
 type MessageAggregator func(ctx context.Context, in *elc.MsgAggregateMessages, opts ...grpc.CallOption) (*elc.MsgAggregateMessagesResponse, error)
@@ -416,6 +447,10 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 	if err != nil {
 		return nil, clienttypes.Height{}, fmt.Errorf("failed originProver.ProveState: path=%v value=%x %w", path, value, err)
 	}
+	signer, err := pr.getEnclaveKeyAddressBytes(ctx.Context(), pr.path.ChainID, pr.counterpartyPath.ChainID)
+	if err != nil {
+		return nil, clienttypes.Height{}, fmt.Errorf("failed to get enclave key address: %w", err)
+	}
 	m := elc.MsgVerifyMembership{
 		ClientId:    pr.config.ElcClientId,
 		Prefix:      []byte(exported.StoreKey),
@@ -423,7 +458,7 @@ func (pr *Prover) ProveState(ctx core.QueryContext, path string, value []byte) (
 		Value:       value,
 		ProofHeight: proofHeight,
 		Proof:       proof,
-		Signer:      pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		Signer:      signer,
 	}
 	res, err := pr.lcpServiceClient.VerifyMembership(ctx.Context(), &m)
 	if err != nil {

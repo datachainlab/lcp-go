@@ -79,6 +79,7 @@ func ConvertUpdateClientResultsFromDbToPb(results []*storage.UpdateClientResult)
 		pbResults[i] = &UpdateClientResult{
 			Message:   result.Message,
 			Signature: result.Signature,
+			Signer:    result.Signer,
 		}
 	}
 	return pbResults
@@ -95,6 +96,7 @@ func ConvertUpdateClientResultsFromPbToDb(pbResults []*UpdateClientResult) []*st
 		results[i] = &storage.UpdateClientResult{
 			Message:   pbResult.Message,
 			Signature: pbResult.Signature,
+			Signer:    pbResult.Signer,
 		}
 	}
 	return results
