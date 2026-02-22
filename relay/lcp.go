@@ -933,9 +933,15 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 		msgs = append(msgs, msg)
 	}
 
-	// 3. Submit the msgs to the LCP Client
-	if _, err := dst.SendMsgs(ctx, msgs); err != nil {
-		return err
+	// 3. Submit update messages in small units.
+	// Sending all messages in a single request can exceed transport limits when
+	// many intermediate headers are required.
+	totalMsgs := len(msgs)
+	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs)
+	for i, msg := range msgs {
+		if _, err := dst.SendMsgs(ctx, []sdk.Msg{msg}); err != nil {
+			return fmt.Errorf("failed to submit update client message: index=%d total=%d %w", i+1, totalMsgs, err)
+		}
 	}
 	return nil
 }
