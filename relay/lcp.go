@@ -13,6 +13,7 @@ import (
 
 	"github.com/avast/retry-go"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/gogoproto/proto"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	mapset "github.com/deckarep/golang-set/v2"
@@ -38,6 +39,8 @@ const (
 	RATypeDCAP            RAType = 2
 	RATypeZKDCAPRisc0     RAType = 3
 	RATypeMockZKDCAPRisc0 RAType = 4
+	// Keep each SendMsgs batch small enough to leave room for tx/signature overhead.
+	activateClientMaxBatchMsgBytes = 512 * 1024
 )
 
 type EIP712DomainParams struct {
@@ -933,15 +936,54 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 		msgs = append(msgs, msg)
 	}
 
-	// 3. Submit update messages in small units.
+	// 3. Submit update messages in bounded batches.
 	// Sending all messages in a single request can exceed transport limits when
 	// many intermediate headers are required.
 	totalMsgs := len(msgs)
-	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs)
-	for i, msg := range msgs {
-		if _, err := dst.SendMsgs(ctx, []sdk.Msg{msg}); err != nil {
-			return fmt.Errorf("failed to submit update client message: index=%d total=%d %w", i+1, totalMsgs, err)
+	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs, "max_batch_msg_bytes", activateClientMaxBatchMsgBytes)
+	var (
+		batch         []sdk.Msg
+		batchMsgBytes uint64
+		sentMsgs      int
+		batchIndex    int
+	)
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
 		}
+		batchIndex += 1
+		start := sentMsgs + 1
+		end := sentMsgs + len(batch)
+		if _, err := dst.SendMsgs(ctx, batch); err != nil {
+			return fmt.Errorf("failed to submit update client message batch: batch=%d range=%d-%d total=%d estimated_batch_msg_bytes=%d %w", batchIndex, start, end, totalMsgs, batchMsgBytes, err)
+		}
+		sentMsgs += len(batch)
+		batch = nil
+		batchMsgBytes = 0
+		return nil
+	}
+	for i, msg := range msgs {
+		bz, err := proto.Marshal(msg)
+		if err != nil {
+			return fmt.Errorf("failed to marshal update client message: index=%d total=%d %w", i+1, totalMsgs, err)
+		}
+		msgBytes := uint64(len(bz))
+		if len(batch) > 0 && batchMsgBytes+msgBytes > activateClientMaxBatchMsgBytes {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+		batch = append(batch, msg)
+		batchMsgBytes += msgBytes
+		// Oversized single msg still needs to be sent on its own.
+		if len(batch) == 1 && batchMsgBytes > activateClientMaxBatchMsgBytes {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	if err := flush(); err != nil {
+		return err
 	}
 	return nil
 }
