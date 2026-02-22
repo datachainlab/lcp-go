@@ -49,6 +49,8 @@ message ProverConfig {
 
     // max chunk size(byte) for update client
     uint32 max_chunk_size_for_update_client = 33;
+    // max total message bytes per SendMsgs batch in activateClient
+    uint32 activate_client_max_batch_msg_bytes = 34;
 }
 
 message Fraction {

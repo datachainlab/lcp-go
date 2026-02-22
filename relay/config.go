@@ -20,7 +20,8 @@ const (
 	DefaultDialTimeout                 = 20 // seconds
 	DefaultMessageAggregationBatchSize = 8
 	// It is necessary to subtract from 4 MB to account for metadata size.
-	DefaultMaxChunkSize = 4*1024*1024 - 1024
+	DefaultMaxChunkSize                   = 4*1024*1024 - 1024
+	DefaultActivateClientMaxBatchMsgBytes = 512 * 1024
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -97,6 +98,14 @@ func (pc ProverConfig) GetMaxChunkSizeForUpdateClient() uint32 {
 		return DefaultMaxChunkSize
 	} else {
 		return pc.MaxChunkSizeForUpdateClient
+	}
+}
+
+func (pc ProverConfig) GetActivateClientMaxBatchMsgBytes() uint32 {
+	if pc.ActivateClientMaxBatchMsgBytes == 0 {
+		return DefaultActivateClientMaxBatchMsgBytes
+	} else {
+		return pc.ActivateClientMaxBatchMsgBytes
 	}
 }
 

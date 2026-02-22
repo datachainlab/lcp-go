@@ -39,8 +39,6 @@ const (
 	RATypeDCAP            RAType = 2
 	RATypeZKDCAPRisc0     RAType = 3
 	RATypeMockZKDCAPRisc0 RAType = 4
-	// Keep each SendMsgs batch small enough to leave room for tx/signature overhead.
-	activateClientMaxBatchMsgBytes = 512 * 1024
 )
 
 type EIP712DomainParams struct {
@@ -940,7 +938,8 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 	// Sending all messages in a single request can exceed transport limits when
 	// many intermediate headers are required.
 	totalMsgs := len(msgs)
-	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs, "max_batch_msg_bytes", activateClientMaxBatchMsgBytes)
+	maxBatchMsgBytes := uint64(srcProver.config.GetActivateClientMaxBatchMsgBytes())
+	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs, "max_batch_msg_bytes", maxBatchMsgBytes)
 	var (
 		batch         []sdk.Msg
 		batchMsgBytes uint64
@@ -968,7 +967,7 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 			return fmt.Errorf("failed to marshal update client message: index=%d total=%d %w", i+1, totalMsgs, err)
 		}
 		msgBytes := uint64(len(bz))
-		if len(batch) > 0 && batchMsgBytes+msgBytes > activateClientMaxBatchMsgBytes {
+		if len(batch) > 0 && batchMsgBytes+msgBytes > maxBatchMsgBytes {
 			if err := flush(); err != nil {
 				return err
 			}
@@ -976,7 +975,7 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 		batch = append(batch, msg)
 		batchMsgBytes += msgBytes
 		// Oversized single msg still needs to be sent on its own.
-		if len(batch) == 1 && batchMsgBytes > activateClientMaxBatchMsgBytes {
+		if len(batch) == 1 && batchMsgBytes > maxBatchMsgBytes {
 			if err := flush(); err != nil {
 				return err
 			}
