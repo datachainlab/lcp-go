@@ -940,51 +940,66 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 	totalMsgs := len(msgs)
 	maxBatchMsgBytes := uint64(srcProver.config.GetActivateClientMaxBatchMsgBytes())
 	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs, "max_batch_msg_bytes", maxBatchMsgBytes)
+	batches, err := splitMsgsByEstimatedSize(msgs, maxBatchMsgBytes)
+	if err != nil {
+		return err
+	}
+	sentMsgs := 0
+	for batchIndex, batch := range batches {
+		start := sentMsgs
+		end := sentMsgs + len(batch.msgs) - 1
+		if _, err := dst.SendMsgs(ctx, batch.msgs); err != nil {
+			return fmt.Errorf("failed to submit update client message batch: batch=%d range=%d-%d total=%d estimated_batch_msg_bytes=%d %w", batchIndex, start, end, totalMsgs, batch.estimatedMsgBytes, err)
+		}
+		sentMsgs += len(batch.msgs)
+	}
+	return nil
+}
+
+type estimatedMsgBatch struct {
+	msgs              []sdk.Msg
+	estimatedMsgBytes uint64
+}
+
+func splitMsgsByEstimatedSize(msgs []sdk.Msg, maxBatchMsgBytes uint64) ([]estimatedMsgBatch, error) {
+	if maxBatchMsgBytes == 0 {
+		return nil, errors.New("maxBatchMsgBytes must be greater than 0")
+	}
+	totalMsgs := len(msgs)
 	var (
-		batch         []sdk.Msg
-		batchMsgBytes uint64
-		sentMsgs      int
-		batchIndex    int
+		batches       []estimatedMsgBatch
+		currentMsgs   []sdk.Msg
+		currentMsgLen uint64
 	)
-	flush := func() error {
-		if len(batch) == 0 {
-			return nil
+	flush := func() {
+		if len(currentMsgs) == 0 {
+			return
 		}
-		batchIndex += 1
-		start := sentMsgs + 1
-		end := sentMsgs + len(batch)
-		if _, err := dst.SendMsgs(ctx, batch); err != nil {
-			return fmt.Errorf("failed to submit update client message batch: batch=%d range=%d-%d total=%d estimated_batch_msg_bytes=%d %w", batchIndex, start, end, totalMsgs, batchMsgBytes, err)
-		}
-		sentMsgs += len(batch)
-		batch = nil
-		batchMsgBytes = 0
-		return nil
+		batches = append(batches, estimatedMsgBatch{
+			msgs:              currentMsgs,
+			estimatedMsgBytes: currentMsgLen,
+		})
+		currentMsgs = nil
+		currentMsgLen = 0
 	}
 	for i, msg := range msgs {
 		bz, err := proto.Marshal(msg)
 		if err != nil {
-			return fmt.Errorf("failed to marshal update client message: index=%d total=%d %w", i+1, totalMsgs, err)
+			return nil, fmt.Errorf("failed to marshal update client message: index=%d total=%d %w", i, totalMsgs, err)
 		}
 		msgBytes := uint64(len(bz))
-		if len(batch) > 0 && batchMsgBytes+msgBytes > maxBatchMsgBytes {
-			if err := flush(); err != nil {
-				return err
-			}
+		if len(currentMsgs) > 0 && currentMsgLen+msgBytes > maxBatchMsgBytes {
+			flush()
 		}
-		batch = append(batch, msg)
-		batchMsgBytes += msgBytes
+		currentMsgs = append(currentMsgs, msg)
+		currentMsgLen += msgBytes
 		// Oversized single msg still needs to be sent on its own.
-		if len(batch) == 1 && batchMsgBytes > maxBatchMsgBytes {
-			if err := flush(); err != nil {
-				return err
-			}
+		if len(currentMsgs) == 1 && currentMsgLen > maxBatchMsgBytes {
+			flush()
 		}
 	}
-	if err := flush(); err != nil {
-		return err
-	}
-	return nil
+	flush()
+	return batches, nil
 }
 
 type LCPQuerier struct {
