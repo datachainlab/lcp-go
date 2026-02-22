@@ -369,28 +369,44 @@ func (pr *Prover) validateAdvisoryIDs(ids []string) bool {
 }
 
 func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeState bool) ([]*elc.MsgUpdateClientResponse, error) {
+	var responses []*elc.MsgUpdateClientResponse
+	_, err := pr.updateELCWithCallback(ctx, elcClientID, includeState, func(_ int, res *elc.MsgUpdateClientResponse) error {
+		responses = append(responses, res)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return responses, nil
+}
 
+func (pr *Prover) updateELCWithCallback(
+	ctx context.Context,
+	elcClientID string,
+	includeState bool,
+	callback func(index int, res *elc.MsgUpdateClientResponse) error,
+) (int, error) {
 	// 1. check if the latest height of the client is less than the given height
 
 	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	if !res.Found {
-		return nil, fmt.Errorf("client not found: client_id=%v", elcClientID)
+		return 0, fmt.Errorf("client not found: client_id=%v", elcClientID)
 	}
 	latestHeader, err := pr.originProver.GetLatestFinalizedHeader(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	var clientState ibcexported.ClientState
 	if err := pr.codec.UnpackAny(res.ClientState, &clientState); err != nil {
-		return nil, err
+		return 0, err
 	}
 	if clientState.GetLatestHeight().GTE(latestHeader.GetHeight()) {
 		pr.getLogger().InfoContext(ctx, "no need to update the client", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
-		return nil, nil
+		return 0, nil
 	}
 
 	pr.getLogger().InfoContext(ctx, "try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
@@ -399,29 +415,31 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	// 3. send a request that contains a header from 2 to update the client in ELC
-	var responses []*elc.MsgUpdateClientResponse
 	i := 0
 	for h := range headerStream {
 		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+			return i, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
 		}
 		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
+			return i, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 		}
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
 		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
+			return i, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
 		}
-		responses = append(responses, res)
+		if callback != nil {
+			if err := callback(i, res); err != nil {
+				return i, err
+			}
+		}
 		i += 1
 	}
-
-	return responses, nil
+	return i, nil
 }
 
 func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.FinalityAwareChain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
@@ -896,53 +914,47 @@ func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.P
 
 	srcProver.getLogger().InfoContext(ctx, "try to activate the LCP client", "elc_client_id", srcProver.config.ElcClientId)
 
+	signer, err := dst.Chain.GetAddress()
+	if err != nil {
+		return err
+	}
+
 	// 1. LCP client synchronises with the latest header of the upstream chain
-	var updates []*elc.MsgUpdateClientResponse
+	// 2. Submit `MsgUpdateClient` one by one while headers are produced.
+	var totalMsgs int
 	if err := retry.Do(func() error {
-		var err error
-		updates, err = srcProver.updateELC(ctx, srcProver.config.ElcClientId, true)
+		totalMsgs = 0
+		_, err := srcProver.updateELCWithCallback(ctx, srcProver.config.ElcClientId, true, func(i int, update *elc.MsgUpdateClientResponse) error {
+			message := &lcptypes.UpdateClientMessage{
+				ProxyMessage: update.Message,
+				Signatures:   [][]byte{update.Signature},
+			}
+			if err := message.ValidateBasic(); err != nil {
+				return retry.Unrecoverable(err)
+			}
+			msg, err := clienttypes.NewMsgUpdateClient(pathEnd.ClientID, message, signer.String())
+			if err != nil {
+				return retry.Unrecoverable(err)
+			}
+			if _, err := dst.SendMsgs(ctx, []sdk.Msg{msg}); err != nil {
+				return retry.Unrecoverable(fmt.Errorf("failed to submit update client message: index=%d %w", i+1, err))
+			}
+			totalMsgs++
+			if totalMsgs == 1 || totalMsgs%1000 == 0 {
+				srcProver.getLogger().InfoContext(ctx, "submitted update client messages", "num_messages", totalMsgs)
+			}
+			return nil
+		})
 		if err != nil {
 			return err
-		} else if len(updates) == 0 {
+		} else if totalMsgs == 0 {
 			return fmt.Errorf("no available updates: elc_client_id=%v", srcProver.config.ElcClientId)
 		}
 		return nil
 	}, retry.Attempts(retryMaxAttempts+1), retry.Delay(retryInterval), retry.Context(ctx)); err != nil {
 		return err
 	}
-
-	signer, err := dst.Chain.GetAddress()
-	if err != nil {
-		return err
-	}
-
-	// 2. Create a `MsgUpdateClient`s to apply to the LCP Client with the results of 1.
-	var msgs []sdk.Msg
-	for _, update := range updates {
-		message := &lcptypes.UpdateClientMessage{
-			ProxyMessage: update.Message,
-			Signatures:   [][]byte{update.Signature},
-		}
-		if err := message.ValidateBasic(); err != nil {
-			return err
-		}
-		msg, err := clienttypes.NewMsgUpdateClient(pathEnd.ClientID, message, signer.String())
-		if err != nil {
-			return err
-		}
-		msgs = append(msgs, msg)
-	}
-
-	// 3. Submit update messages in small units.
-	// Sending all messages in a single request can exceed transport limits when
-	// many intermediate headers are required.
-	totalMsgs := len(msgs)
-	srcProver.getLogger().InfoContext(ctx, "submit update client messages", "num_messages", totalMsgs)
-	for i, msg := range msgs {
-		if _, err := dst.SendMsgs(ctx, []sdk.Msg{msg}); err != nil {
-			return fmt.Errorf("failed to submit update client message: index=%d total=%d %w", i+1, totalMsgs, err)
-		}
-	}
+	srcProver.getLogger().InfoContext(ctx, "completed activate client", "num_messages", totalMsgs)
 	return nil
 }
 
