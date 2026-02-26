@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -44,6 +45,12 @@ type EIP712DomainParams struct {
 	ChainId               uint64
 	VerifyingContractAddr common.Address
 }
+
+const (
+	counterpartyClientStateRetryAttempts = 8
+	minCounterpartyQueryRetryDelay       = 2 * time.Second
+	maxCounterpartyQueryRetryDelay       = 15 * time.Second
+)
 
 // UpdateEKIIfNeeded checks if the enclave key needs to be updated
 func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.FinalityAwareChain) error {
@@ -437,6 +444,70 @@ func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.Fina
 	}
 }
 
+func queryClientStateRetryDelay(counterparty core.Chain) time.Duration {
+	delay := counterparty.AverageBlockTime()
+	if delay < minCounterpartyQueryRetryDelay {
+		return minCounterpartyQueryRetryDelay
+	}
+	if delay > maxCounterpartyQueryRetryDelay {
+		return maxCounterpartyQueryRetryDelay
+	}
+	return delay
+}
+
+func isClientStateNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "client not found") ||
+		strings.Contains(msg, "ibcclientclientnotfound") ||
+		strings.Contains(msg, "8beef474")
+}
+
+func (pr *Prover) queryCounterpartyClientStateWithRetry(ctx context.Context, counterparty core.Chain) (*clienttypes.QueryClientStateResponse, error) {
+	clientID := ""
+	if path := counterparty.Path(); path != nil {
+		clientID = path.ClientID
+	}
+
+	var (
+		latestHeight ibcexported.Height
+		res          *clienttypes.QueryClientStateResponse
+	)
+	delay := queryClientStateRetryDelay(counterparty)
+	err := retry.Do(func() error {
+		h, err := counterparty.LatestHeight(ctx)
+		if err != nil {
+			return err
+		}
+		latestHeight = h
+
+		res, err = counterparty.QueryClientState(core.NewQueryContext(ctx, h))
+		if err == nil {
+			return nil
+		}
+		if isClientStateNotFoundError(err) {
+			pr.getLogger().InfoContext(ctx, "counterparty client state not found at current height; retrying",
+				"client_id", clientID,
+				"counterparty_latest_height", h,
+				"error", err.Error(),
+			)
+			return err
+		}
+		return retry.Unrecoverable(err)
+	},
+		retry.Attempts(counterpartyClientStateRetryAttempts),
+		retry.Delay(delay),
+		retry.Context(ctx),
+		retry.LastErrorOnly(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query counterparty client state: client_id=%v latest_height=%v %w", clientID, latestHeight, err)
+	}
+	return res, nil
+}
+
 func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.Chain, eki *enclave.IASEnclaveKeyInfo) (core.MsgID, error) {
 	clientLogger := pr.getClientLogger(pr.originChain.Path().ClientID)
 	if err := ias.VerifyReport([]byte(eki.Report), eki.Signature, eki.SigningCert, time.Now()); err != nil {
@@ -461,11 +532,7 @@ func (pr *Prover) registerIASEnclaveKey(ctx context.Context, counterparty core.C
 		SigningCert:       eki.SigningCert,
 		OperatorSignature: nil,
 	}
-	cplatestHeight, err := counterparty.LatestHeight(ctx)
-	if err != nil {
-		return nil, err
-	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
+	counterpartyClientRes, err := pr.queryCounterpartyClientStateWithRetry(ctx, counterparty)
 	if err != nil {
 		return nil, err
 	}
@@ -549,11 +616,7 @@ func (pr *Prover) registerZKDCAPEnclaveKey(ctx context.Context, counterparty cor
 	if err != nil {
 		return nil, err
 	}
-	cplatestHeight, err := counterparty.LatestHeight(ctx)
-	if err != nil {
-		return nil, err
-	}
-	counterpartyClientRes, err := counterparty.QueryClientState(core.NewQueryContext(ctx, cplatestHeight))
+	counterpartyClientRes, err := pr.queryCounterpartyClientStateWithRetry(ctx, counterparty)
 	if err != nil {
 		return nil, err
 	}
