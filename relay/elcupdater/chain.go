@@ -27,11 +27,10 @@ type MockChain struct {
 }
 
 var (
-	_ ibcexported.ClientState = (*MockClientState)(nil)
-	_ core.FinalityAwareChain = (*MockChain)(nil)
+	_            ibcexported.ClientState = (*MockClientState)(nil)
+	_            core.FinalityAwareChain = (*MockChain)(nil)
+	DUMMY_HEIGHT                         = clienttypes.Height{RevisionNumber: 0xDEAD, RevisionHeight: 0xBEEF}
 )
-
-const DUMMY_HEIGHT = clienttypes.Height{RevisionNumber: 0xDEAD, RevisionHeight: 0xBEEF}
 
 // NewChain creates a new Chain instance
 func NewMockChain(chainID string, clientStateHeight ibcexported.Height) *MockChain {
