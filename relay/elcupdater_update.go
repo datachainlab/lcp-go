@@ -45,7 +45,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 
 		if latestRecord != nil {
 			fromHeight = latestRecord.ToHeight
-			dstChain = elcupdater.NewMockChain(counterparty.ChainID(), counterpartyLatestFinalizedHeader.GetHeight(), fromHeight)
+			dstChain = elcupdater.NewMockChain(counterparty.ChainID(), fromHeight)
 		} else {
 			fromHeight = csHeight
 			dstChain = counterparty

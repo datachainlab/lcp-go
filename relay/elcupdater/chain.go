@@ -31,11 +31,13 @@ var (
 	_ core.FinalityAwareChain = (*MockChain)(nil)
 )
 
+const DUMMY_HEIGHT = clienttypes.Height{RevisionNumber: 0xDEAD, RevisionHeight: 0xBEEF}
+
 // NewChain creates a new Chain instance
-func NewMockChain(chainID string, latestHeight ibcexported.Height, clientStateHeight ibcexported.Height) *MockChain {
+func NewMockChain(chainID string, clientStateHeight ibcexported.Height) *MockChain {
 	return &MockChain{
 		chainID:         chainID,
-		latestHeight:    latestHeight,
+		latestHeight:    DUMMY_HEIGHT,
 		mockClientState: NewMockClientState(clientStateHeight),
 	}
 }
