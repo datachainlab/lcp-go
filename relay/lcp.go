@@ -158,7 +158,6 @@ func (pr *Prover) checkMsgStatus(ctx context.Context, counterparty core.Finality
 	return msgRes.BlockHeight().LTE(lfHeader.GetHeight()), true, nil
 }
 
-// if returns true, query new key and register key and set it to memory
 func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty core.FinalityAwareChain) (bool, error) {
 	now := time.Now()
 
@@ -704,7 +703,7 @@ func bytes2Hex(b []byte) string {
 	return "0x" + hex.EncodeToString(b)
 }
 
-func (pr *Prover) doAvailableEnclaveKeys(ctx context.Context) (*AvailableEnclaveKeysResult, error) {
+func (pr *Prover) DoAvailableEnclaveKeys(ctx context.Context) (*AvailableEnclaveKeysResult, error) {
 	res, err := pr.lcpServiceClient.AvailableEnclaveKeys(ctx, &enclave.QueryAvailableEnclaveKeysRequest{Mrenclave: pr.config.GetMrenclave()})
 	if err != nil {
 		return nil, err
@@ -718,7 +717,7 @@ type CreateELCResult struct {
 }
 
 // height: 0 means the latest height
-func (pr *Prover) doCreateELC(ctx context.Context, elcClientID string, height uint64) (*CreateELCResult, error) {
+func (pr *Prover) DoCreateELC(ctx context.Context, elcClientID string, height uint64) (*CreateELCResult, error) {
 	header, err := pr.originProver.GetLatestFinalizedHeader(ctx)
 	if err != nil {
 		return nil, err
@@ -759,7 +758,7 @@ type UpdateELCResult struct {
 	Messages []*lcptypes.UpdateStateProxyMessage `json:"messages"`
 }
 
-func (pr *Prover) doUpdateELC(ctx context.Context, elcClientID string) (*UpdateELCResult, error) {
+func (pr *Prover) DoUpdateELC(ctx context.Context, elcClientID string) (*UpdateELCResult, error) {
 	if pr.activeEnclaveKey == nil {
 		eki, err := pr.selectNewEnclaveKey(ctx)
 		if err != nil {
@@ -816,7 +815,7 @@ type Any struct {
 	Value   []byte `json:"value"`
 }
 
-func (pr *Prover) doQueryELC(ctx context.Context, elcClientID string) (*QueryELCResult, error) {
+func (pr *Prover) DoQueryELC(ctx context.Context, elcClientID string) (*QueryELCResult, error) {
 	r, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{ClientId: elcClientID})
 	if err != nil {
 		return nil, err
@@ -884,7 +883,7 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 	})
 }
 
-func activateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
+func ActivateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {
 	srcProver, err := coreutil.UnwrapProver[*Prover](src)
 	if err != nil {
 		return err

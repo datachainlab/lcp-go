@@ -1,4 +1,4 @@
-package relay
+package module
 
 import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"

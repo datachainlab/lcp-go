@@ -13,7 +13,7 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
-func (pr *Prover) restoreELC(ctx context.Context, counterparty core.FinalityAwareChain, elcClientID string, height uint64) error {
+func (pr *Prover) RestoreELC(ctx context.Context, counterparty core.FinalityAwareChain, elcClientID string, height uint64) error {
 	// ensure the client does not exist in the LCP service
 	if res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
 		ClientId: elcClientID,

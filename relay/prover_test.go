@@ -11,6 +11,60 @@ import (
 	"google.golang.org/grpc"
 )
 
+func TestSplitMessagesBySigner(t *testing.T) {
+	var M = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("message-%03d", n))
+	}
+	var S = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("signature-%03d", n))
+	}
+	var Signer = func(n uint8) []byte {
+		return []byte(fmt.Sprintf("signer-%03d", n))
+	}
+	var cases = []struct {
+		Messages   [][]byte
+		Signatures [][]byte
+		BatchSizes []int
+		Signers    [][]byte
+		Error      bool
+	}{
+		{
+			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
+			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
+			BatchSizes: []int{5},
+			Signers:    [][]byte{Signer(0), Signer(0), Signer(0), Signer(0), Signer(0)},
+			Error:      false,
+		},
+		{
+			Messages:   [][]byte{M(0), M(1), M(2), M(3), M(4)},
+			Signatures: [][]byte{S(0), S(1), S(2), S(3), S(4)},
+			BatchSizes: []int{2, 1, 2},
+			Signers:    [][]byte{Signer(0), Signer(0), Signer(1), Signer(2), Signer(2)},
+			Error:      false,
+		},
+	}
+	for i, c := range cases {
+		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			require := require.New(t)
+			signerMessages, err := splitMessagesBySigner(c.Messages, c.Signatures, c.Signers)
+			if c.Error {
+				require.Error(err)
+				return
+			} else {
+				require.NoError(err)
+			}
+			require.Len(signerMessages, len(signerMessages))
+			messageIndex := 0
+			for i, size := range c.BatchSizes {
+				require.Equal(signerMessages[i].Signer, c.Signers[messageIndex])
+				require.Len(signerMessages[i].Messages, size)
+				require.Len(signerMessages[i].Signatures, size)
+				messageIndex += size
+			}
+		})
+	}
+}
+
 func TestSplitIntoMultiBatch(t *testing.T) {
 	var M = func(n uint8) []byte {
 		return []byte(fmt.Sprintf("message-%03d", n))
@@ -110,7 +164,7 @@ func TestAggregateMessages(t *testing.T) {
 		return []byte(fmt.Sprintf("signer-%03d", n))
 	}
 
-	err := log.InitLogger("DEBUG", "text", "stdout")
+	err := log.InitLogger("DEBUG", "text", "stdout", false)
 	require.NoError(t, err)
 	logger := log.GetLogger()
 

@@ -1,4 +1,4 @@
-package relay
+package module
 
 import (
 	"encoding/json"
@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/datachainlab/lcp-go/relay"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/hyperledger-labs/yui-relayer/config"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/coreutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	elcupdater "github.com/datachainlab/lcp-go/relay/elcupdater/module"
 )
 
 const (
@@ -44,6 +47,7 @@ func LCPCmd(ctx *config.Context) *cobra.Command {
 		activateClientCmd(ctx),
 		removeEnclaveKeyInfoCmd(ctx),
 		updateOperatorsCmd(ctx),
+		elcupdater.ElcUpdaterCmd(ctx),
 	)
 
 	return cmd
@@ -71,12 +75,12 @@ func availableEnclaveKeysCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
-			ekis, err := prover.doAvailableEnclaveKeys(cmd.Context())
+			ekis, err := prover.DoAvailableEnclaveKeys(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -116,7 +120,7 @@ func updateEnclaveKeyCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -153,7 +157,7 @@ func activateClientCmd(ctx *config.Context) *cobra.Command {
 				pathEnd = path.Src
 				target, counterparty = c[dst], c[src]
 			}
-			return activateClient(cmd.Context(), pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
+			return relay.ActivateClient(cmd.Context(), pathEnd, target, counterparty, viper.GetDuration(flagRetryInterval), viper.GetUint(flagRetryMaxAttempts))
 		},
 	}
 	return retryMaxAttemptsFlag(retryIntervalFlag(srcFlag(cmd)))
@@ -181,7 +185,7 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -190,9 +194,9 @@ func createELCCmd(ctx *config.Context) *cobra.Command {
 			if viper.GetString(flagELCClientID) != "" {
 				elcClientID = viper.GetString(flagELCClientID)
 			} else {
-				elcClientID = prover.config.ElcClientId
+				elcClientID = prover.GetConfig().ElcClientId
 			}
-			out, err := prover.doCreateELC(cmd.Context(), elcClientID, viper.GetUint64(flagHeight))
+			out, err := prover.DoCreateELC(cmd.Context(), elcClientID, viper.GetUint64(flagHeight))
 			if err != nil {
 				return err
 			}
@@ -231,7 +235,7 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -240,9 +244,9 @@ func updateELCCmd(ctx *config.Context) *cobra.Command {
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
 			} else {
-				elcClientID = prover.config.ElcClientId
+				elcClientID = prover.GetConfig().ElcClientId
 			}
-			out, err := prover.doUpdateELC(cmd.Context(), elcClientID)
+			out, err := prover.DoUpdateELC(cmd.Context(), elcClientID)
 			if err != nil {
 				return err
 			}
@@ -279,7 +283,7 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -288,9 +292,9 @@ func queryELCCmd(ctx *config.Context) *cobra.Command {
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
 			} else {
-				elcClientID = prover.config.ElcClientId
+				elcClientID = prover.GetConfig().ElcClientId
 			}
-			out, err := prover.doQueryELC(cmd.Context(), elcClientID)
+			out, err := prover.DoQueryELC(cmd.Context(), elcClientID)
 			if err != nil {
 				return err
 			}
@@ -330,7 +334,7 @@ func restoreELCCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -339,9 +343,9 @@ func restoreELCCmd(ctx *config.Context) *cobra.Command {
 			if id := viper.GetString(flagELCClientID); id != "" {
 				elcClientID = id
 			} else {
-				elcClientID = prover.config.ElcClientId
+				elcClientID = prover.GetConfig().ElcClientId
 			}
-			return prover.restoreELC(cmd.Context(), verifier, elcClientID, viper.GetUint64(flagHeight))
+			return prover.RestoreELC(cmd.Context(), verifier, elcClientID, viper.GetUint64(flagHeight))
 		},
 	}
 	return elcClientIDFlag(heightFlag(srcFlag(cmd)))
@@ -369,12 +373,12 @@ func removeEnclaveKeyInfoCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
 
-			return prover.removeEnclaveKeyInfos(cmd.Context())
+			return prover.RemoveEnclaveKeyInfos(cmd.Context())
 		},
 	}
 	return srcFlag(cmd)
@@ -405,7 +409,7 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				direction = "dst"
 			}
 
-			prover, err := coreutil.UnwrapProver[*Prover](target)
+			prover, err := coreutil.UnwrapProver[*relay.Prover](target)
 			if err != nil {
 				return fmt.Errorf("%s of %q is not a relay.Prover: %v", direction, args[0], err)
 			}
@@ -424,12 +428,12 @@ func updateOperatorsCmd(ctx *config.Context) *cobra.Command {
 				}
 				newOpAddrs = append(newOpAddrs, common.HexToAddress(op))
 			}
-			threshold := Fraction{
+			threshold := relay.Fraction{
 				Numerator:   viper.GetUint64(flagThresholdNumerator),
 				Denominator: viper.GetUint64(flagThresholdDenominator),
 			}
 			nonce := viper.GetUint64(flagNonce)
-			return prover.updateOperators(cmd.Context(), counterparty, nonce, newOpAddrs, threshold)
+			return prover.UpdateOperators(cmd.Context(), counterparty, nonce, newOpAddrs, threshold)
 		},
 	}
 	cmd = thresholdFlag(
