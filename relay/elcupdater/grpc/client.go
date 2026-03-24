@@ -17,6 +17,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+const (
+	// defaultGRPCMaxMsgSize is the maximum gRPC message size for ELCUpdater communication.
+	// Must match defaultGRPCMaxMsgSize. Defined separately to avoid import cycle.
+	defaultGRPCMaxMsgSize = 32 * 1024 * 1024 // 32 MB
+)
+
 // GetSequentialRecords retrieves sequential ELCUpdateRecords from gRPC server
 // If toHeight is not nil, stops when reaching a record with that ToHeight
 func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID string, counterpartyChainID string, fromHeight exported.Height, toHeight exported.Height) ([]*storage.Record, error) {
@@ -43,6 +49,10 @@ func GetSequentialRecords(ctx context.Context, grpcAddress string, chainID strin
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(defaultGRPCMaxMsgSize),
+			grpc.MaxCallSendMsgSize(defaultGRPCMaxMsgSize),
+		),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "GetSequentialRecords request failed - connection error", err)
@@ -102,6 +112,10 @@ func GetLatestRecord(ctx context.Context, grpcAddress string, chainID string, co
 	conn, err := grpc.NewClient(grpcAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(defaultGRPCMaxMsgSize),
+			grpc.MaxCallSendMsgSize(defaultGRPCMaxMsgSize),
+		),
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "GetLatestELCUpdate request failed - connection error", err)

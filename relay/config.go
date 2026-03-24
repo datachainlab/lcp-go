@@ -21,6 +21,10 @@ const (
 	DefaultMessageAggregationBatchSize = 8
 	// It is necessary to subtract from 4 MB to account for metadata size.
 	DefaultMaxChunkSize = 4*1024*1024 - 1024
+	// DefaultGRPCMaxMsgSize is the maximum gRPC message size for LCP service communication.
+	// The default gRPC limit (4 MB) is insufficient when AggregateMessages batches
+	// accumulate multiple UpdateClient results.
+	DefaultGRPCMaxMsgSize = 32 * 1024 * 1024 // 32 MB
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)

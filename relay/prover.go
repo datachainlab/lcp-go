@@ -61,6 +61,10 @@ func NewProver(config ProverConfig, originChain core.Chain, originProver core.Pr
 		grpc.WithBlock(),
 		grpc.WithTimeout(config.GetDialTimeout()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(DefaultGRPCMaxMsgSize),
+			grpc.MaxCallSendMsgSize(DefaultGRPCMaxMsgSize),
+		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to LCP service: %w", err)

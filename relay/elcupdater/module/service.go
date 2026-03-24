@@ -195,6 +195,8 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 	}
 
 	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(lcp.DefaultGRPCMaxMsgSize),
+		grpc.MaxSendMsgSize(lcp.DefaultGRPCMaxMsgSize),
 		grpc.UnaryInterceptor(recovery.UnaryServerInterceptor(recovery.WithRecoveryHandler(recoveryHandler))),
 	)
 
