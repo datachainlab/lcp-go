@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	"github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -91,6 +93,7 @@ func updateClient(ctx context.Context, chunkSize uint32, client LCPServiceClient
 			err,
 		)
 	}
+	logUpdateClientResponse(ctx, anyHeader, chunkSize, chunks, resp)
 	return resp, nil
 }
 
@@ -114,4 +117,28 @@ func lastChunkSize(chunks [][]byte) int {
 		return 0
 	}
 	return len(chunks[len(chunks)-1])
+}
+
+func logUpdateClientResponse(ctx context.Context, anyHeader *types.Any, chunkSize uint32, chunks [][]byte, resp *elc.MsgUpdateClientResponse) {
+	logger := log.GetLogger()
+	if logger == nil {
+		return
+	}
+
+	const defaultGRPCMaxRecvMsgSize = 4 * 1024 * 1024
+	responseProtoSize := proto.Size(resp)
+	logger.WithModule("lcp-prover").InfoContext(
+		ctx,
+		"UpdateClientStream response received",
+		"header_bytes", len(anyHeader.Value),
+		"chunk_size", chunkSize,
+		"chunk_count", len(chunks),
+		"last_chunk_size", lastChunkSize(chunks),
+		"response_proto_size", responseProtoSize,
+		"response_message_bytes", len(resp.Message),
+		"response_signature_bytes", len(resp.Signature),
+		"response_exceeds_default_4mb", responseProtoSize > defaultGRPCMaxRecvMsgSize,
+		"max_recv_msg_size", DefaultGRPCMaxMsgSize,
+		"max_send_msg_size", DefaultGRPCMaxMsgSize,
+	)
 }
