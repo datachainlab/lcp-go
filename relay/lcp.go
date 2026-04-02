@@ -856,6 +856,11 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 	if err != nil {
 		return nil, err
 	} else if res.Found {
+		pr.getLogger().InfoContext(ctx, "reusing existing ELC client",
+			"elc_client_id", elcClientID,
+			"requested_height_is_nil", height == nil,
+			"requested_height", formatHeightForLog(height),
+		)
 		return nil, nil
 	}
 	// NOTE: Query the LCP for available keys, but no need to register it into on-chain here
@@ -881,6 +886,13 @@ func (pr *Prover) createELC(ctx context.Context, elcClientID string, height ibce
 		ConsensusState: anyOriginConsensusState,
 		Signer:         tmpEKI.GetEnclaveKeyAddress().Bytes(),
 	})
+}
+
+func formatHeightForLog(height ibcexported.Height) string {
+	if height == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d", height.GetRevisionNumber(), height.GetRevisionHeight())
 }
 
 func ActivateClient(ctx context.Context, pathEnd *core.PathEnd, src, dst *core.ProvableChain, retryInterval time.Duration, retryMaxAttempts uint) error {

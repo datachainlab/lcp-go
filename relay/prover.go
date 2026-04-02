@@ -184,7 +184,11 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 	if res, err := pr.createELC(ctx, pr.config.ElcClientId, height); err != nil {
 		return nil, nil, fmt.Errorf("failed to create ELC: %w", err)
 	} else if res == nil {
-		pr.getLogger().InfoContext(ctx, "no need to create ELC", "elc_client_id", pr.config.ElcClientId)
+		pr.getLogger().InfoContext(ctx, "no need to create ELC",
+			"elc_client_id", pr.config.ElcClientId,
+			"requested_height_is_nil", height == nil,
+			"requested_height", formatHeightForLog(height),
+		)
 	}
 
 	// NOTE after creates client, register an enclave key into the client state
