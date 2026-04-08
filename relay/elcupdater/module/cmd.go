@@ -336,7 +336,7 @@ func serverCmd(ctx *config.Context) *cobra.Command {
 			if cleanupAgeStr != "" && cleanupAgeStr != "0" {
 				cleanupAge, err = time.ParseDuration(cleanupAgeStr)
 				if err != nil {
-					return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '7d', '24h', '30m')", cleanupAgeStr, err)
+					return fmt.Errorf("invalid cleanup duration format '%s': %w (examples: '168h', '24h', '30m')", cleanupAgeStr, err)
 				}
 			}
 
@@ -527,7 +527,7 @@ func bindPFlagUpdateInterval(cmd *cobra.Command) *cobra.Command {
 }
 
 func bindPFlagCleanupAge(cmd *cobra.Command) *cobra.Command {
-	cmd.Flags().String(flagCleanupAge, "7d", "cleanup records older than this age (examples: '7d', '24h', '30m', '600s', empty or '0' to disable)")
+	cmd.Flags().String(flagCleanupAge, "168h", "cleanup records older than this age (examples: '168h', '24h', '30m', '600s', empty or '0' to disable)")
 	if err := viper.BindPFlag(flagCleanupAge, cmd.Flags().Lookup(flagCleanupAge)); err != nil {
 		panic(err)
 	}
