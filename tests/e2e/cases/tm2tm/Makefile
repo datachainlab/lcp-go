@@ -32,6 +32,10 @@ handshake:
 test-relay:
 	RLY_BIN=$(RLY_BIN) ./scripts/test-relay
 
+.PHONY: test-nonmembership
+test-nonmembership:
+	RLY_BIN=$(RLY_BIN) ./scripts/test-timeout
+
 .PHONY: restore
 restore:
 	RLY_BIN=$(RLY_BIN) ./scripts/restore
