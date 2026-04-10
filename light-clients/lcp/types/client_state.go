@@ -233,8 +233,8 @@ func (cs ClientState) VerifyMembership(
 	}
 	// Note that this function(VerifyMembership) is also used for verifying NonMembership proof and NonMembership proof has no hashed value in its proof.
 	if len(value) == 0 {
-		if len(msg.Value) != 0 {
-			return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=empty got=%X", msg.Value)
+		if msg.Value != [32]byte{} {
+			return errorsmod.Wrapf(ErrInvalidStateCommitment, "invalid value: expected=[32]byte{} got=%X", msg.Value)
 		}
 	} else {
 		hashedValue := crypto.Keccak256Hash(value)
