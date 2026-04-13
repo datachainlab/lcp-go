@@ -123,6 +123,10 @@ make -C ${E2E_TEST_DIR} test-elc-cmd
 if [ "$OPERATORS_ENABLED" = "true" ]; then
     make -C ${E2E_TEST_DIR} test-operators
 fi
+
+# The nonmembership test will timeout, so the channel will no loger be available. Therefore this test is performed last.
+make -C ${E2E_TEST_DIR} test-nonmembership
+
 make -C ${E2E_TEST_DIR} network-down
 if [ "$NO_RUN_LCP" = false ]; then
     kill $LCP_PID
