@@ -194,8 +194,11 @@ func (pr *Prover) CreateInitialLightClientState(ctx context.Context, height expo
 // GetLatestFinalizedHeader returns the latest finalized header on this chain
 // The returned header is expected to be the latest one of headers that can be verified by the light client
 func (pr *Prover) GetLatestFinalizedHeader(ctx context.Context) (core.Header, error) {
-	// Use ELC updater gRPC server if configured (environment variable or config), otherwise use origin prover
-	useGRPC, grpcAddress := pr.shouldUseELCUpdaterGRPC()
+	// Use ELC updater gRPC server if configured (environment variable and config), otherwise use origin prover
+	useGRPC, grpcAddress, err := pr.shouldUseELCUpdaterGRPC()
+	if err != nil {
+		return nil, err
+	}
 	if useGRPC {
 		pr.getLogger().InfoContext(ctx, "using ELC updater gRPC server for latest finalized header", "address", grpcAddress)
 
