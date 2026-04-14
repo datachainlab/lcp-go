@@ -5,6 +5,7 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 
@@ -15,28 +16,38 @@ import (
 )
 
 // shouldUseELCUpdaterGRPC determines whether to use ELC updater gRPC server based on config and environment variable
-// Environment variable YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=yes enables gRPC, disabled by default
-func (pr *Prover) shouldUseELCUpdaterGRPC() (bool, string) {
-	// First check if address is configured
-	if pr.config.ElcUpdaterGrpcAddress == "" {
-		// No address configured, cannot use gRPC
-		return false, ""
+// Environment variable YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=true enables gRPC, disabled by default
+func (pr *Prover) shouldUseELCUpdaterGRPC() (bool, string, error) {
+	// Check if gRPC is enabled via environment variable
+	envEnable, present := os.LookupEnv("YRLY_LCP_ELC_UPDATER_GRPC_ENABLE")
+	if !present {
+		return false, "", nil
+	}
+	b, err := strconv.ParseBool(envEnable)
+	if err != nil {
+		return false, "", fmt.Errorf("invalid value for YRLY_LCP_ELC_UPDATER_GRPC_ENABLE: %w", err)
+	}
+	if !b {
+		// gRPC is explicitly disabled by the environment variable
+		return false, "", nil
 	}
 
-	// Check if gRPC is enabled via environment variable
-	envEnable := os.Getenv("YRLY_LCP_ELC_UPDATER_GRPC_ENABLE")
-	if b, err := strconv.ParseBool(envEnable); err != nil || !b {
-		// Environment variable is not true or is not set, gRPC disabled by default
-		return false, ""
+	// Check if address is configured
+	if pr.config.ElcUpdaterGrpcAddress == "" {
+		// No address configured, cannot use gRPC
+		return false, "", fmt.Errorf("elc_updater_grpc_address must be non-blank in prover config when YRLY_LCP_ELC_UPDATER_GRPC_ENABLE is enabled (got %q)", envEnable)
 	}
 
 	// Address configured and gRPC enabled, use gRPC
-	return true, pr.config.ElcUpdaterGrpcAddress
+	return true, pr.config.ElcUpdaterGrpcAddress, nil
 }
 
 func (pr *Prover) updateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	// Use ELC updater gRPC server if configured (environment variable or config), otherwise use local implementation
-	useGRPC, grpcAddress := pr.shouldUseELCUpdaterGRPC()
+	// Use ELC updater gRPC server if configured (environment variable and config), otherwise use local implementation
+	useGRPC, grpcAddress, err := pr.shouldUseELCUpdaterGRPC()
+	if err != nil {
+		return nil, err
+	}
 	if useGRPC {
 		return elcupdater.GetUpdateClientResultsFromGRPC(ctx, pr.getLogger(), grpcAddress, pr.originChain, dstChain, latestFinalizedHeader)
 	} else {
@@ -49,7 +60,10 @@ func (pr *Prover) updateClient(ctx context.Context, dstChain core.FinalityAwareC
 }
 
 func (pr *Prover) getEnclaveKeyAddressBytes(ctx context.Context, chainID string, counterpartyChainID string) ([]byte, error) {
-	useGRPC, grpcAddress := pr.shouldUseELCUpdaterGRPC()
+	useGRPC, grpcAddress, err := pr.shouldUseELCUpdaterGRPC()
+	if err != nil {
+		return nil, err
+	}
 	if useGRPC {
 		record, err := elcupdater_grpc.GetLatestRecord(ctx, grpcAddress, chainID, counterpartyChainID)
 		if err != nil {
