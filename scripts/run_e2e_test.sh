@@ -1,7 +1,7 @@
 #!/bin/sh
 set -ex
 
-# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap> <--explicit_state_update_client> <--key_expiration=<integer>>
+# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap> <--tm2tm_explicit_state> <--key_expiration=<integer>>
 
 E2E_TEST_DIR=./tests/e2e/cases/tm2tm
 OPERATORS_ENABLED=false
@@ -15,7 +15,7 @@ export ZKDCAP=false
 export LCP_ZKDCAP_RISC0_MOCK=false
 export LCP_RISC0_IMAGE_ID
 export YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT=false
-ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap,explicit_state_update_client,key_expiration: -- "$@")
+ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap,tm2tm_explicit_state,key_expiration: -- "$@")
 eval set -- "$ARGS"
 while true; do
     case "$1" in
@@ -46,8 +46,8 @@ while true; do
             LCP_ZKDCAP_RISC0_MOCK=true
             shift
             ;;
-        --explicit_state_update_client)
-            echo "Explicit-state update-client path enabled"
+        --tm2tm_explicit_state)
+            echo "tm2tm explicit-state test path enabled"
             YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT=true
             shift
             ;;
