@@ -3,7 +3,9 @@ package relay
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -27,7 +29,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 type Prover struct {
@@ -309,29 +313,64 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 	}
 
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	plan, err := pr.buildExplicitStateUpdatePlanForHeaderUnits(
-		ctx,
-		extractExplicitStateHeaderUnits(sourceHeaderUnits),
-		pr.config.ElcClientId,
-		false,
-		signer,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", pr.config.ElcClientId, err)
+	var results []*elcupdater_storage.UpdateClientResult
+	runSerialUpdate := func() ([]*elcupdater_storage.UpdateClientResult, error) {
+		serialResults := make([]*elcupdater_storage.UpdateClientResult, 0, len(anyHeaders))
+		for _, anyHeader := range anyHeaders {
+			res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, signer)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
+			}
+			serialResults = append(serialResults, &elcupdater_storage.UpdateClientResult{
+				Message:   res.Message,
+				Signature: res.Signature,
+				Signer:    signer,
+			})
+		}
+		return serialResults, nil
 	}
-	pr.getLogger().InfoContext(
-		ctx,
-		"explicit-state update plan",
-		"strategy", explicitStateLaneStrategy(),
-		"num_source_headers", len(sourceHeaderUnits),
-		"num_units", len(plan.Units),
-		"num_lanes", len(plan.LaneWidths),
-		"lane_widths", plan.LaneWidths,
-		"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, plan.LaneWidths),
-	)
-	results, err := pr.executeExplicitStateUpdatePlan(ctx, plan)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
+	if useExplicitStateUpdateClient() {
+		plan, err := pr.buildExplicitStateUpdatePlanForHeaderUnits(
+			ctx,
+			extractExplicitStateHeaderUnits(sourceHeaderUnits),
+			pr.config.ElcClientId,
+			false,
+			signer,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", pr.config.ElcClientId, err)
+		}
+		pr.getLogger().InfoContext(
+			ctx,
+			"explicit-state update plan",
+			"strategy", explicitStateLaneStrategy(),
+			"num_source_headers", len(sourceHeaderUnits),
+			"num_units", len(plan.Units),
+			"num_lanes", len(plan.LaneWidths),
+			"lane_widths", plan.LaneWidths,
+			"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, plan.LaneWidths),
+		)
+		results, err = pr.executeExplicitStateUpdatePlan(ctx, plan)
+		if err != nil {
+			if !shouldFallbackToSerialUpdateClient(err) {
+				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
+			}
+			pr.getLogger().InfoContext(
+				ctx,
+				"fall back to serial update client after explicit-state batch failure",
+				"client_id", pr.config.ElcClientId,
+				"error", err.Error(),
+			)
+			results, err = runSerialUpdate()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		results, err = runSerialUpdate()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, result := range results {
@@ -344,6 +383,18 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
 	}
 	return results, nil
+}
+
+func shouldFallbackToSerialUpdateClient(err error) bool {
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if errors.Is(current, io.EOF) || errors.Is(current, io.ErrUnexpectedEOF) {
+			return true
+		}
+		if grpcstatus.Code(current) == codes.Unimplemented {
+			return true
+		}
+	}
+	return false
 }
 
 func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(

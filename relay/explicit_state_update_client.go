@@ -15,9 +15,23 @@ import (
 	"github.com/datachainlab/lcp-go/relay/elc"
 )
 
+const envExplicitStateUpdateClient = "YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT"
 const envExplicitStateLaneStrategy = "YRLY_LCP_EXPLICIT_STATE_LANE_STRATEGY"
 const queryClientMethod = "/lcp.service.elc.v1.Query/Client"
 const tendermintHeaderTypeURL = "/ibc.lightclients.tendermint.v1.Header"
+
+func useExplicitStateUpdateClient() bool {
+	v, ok := os.LookupEnv(envExplicitStateUpdateClient)
+	if !ok {
+		return false
+	}
+	switch v {
+	case "1", "true", "TRUE", "True":
+		return true
+	default:
+		return false
+	}
+}
 
 func (pr *Prover) buildExplicitStateUpdatePlanForHeaders(
 	ctx context.Context,
