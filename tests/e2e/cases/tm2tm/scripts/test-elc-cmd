@@ -3,7 +3,6 @@
 set -eu
 
 RLY="${RLY_BIN} --debug"
-ELC_UPDATE_SLEEP_SECONDS="${E2E_ELC_UPDATE_SLEEP_SECONDS:-5}"
 
 echo "query non-existent ELCs"
 
@@ -45,8 +44,8 @@ if [ "${dst_elc_exists}" != "true" ]; then
   exit 1
 fi
 
-echo "sleeping for ${ELC_UPDATE_SLEEP_SECONDS} seconds"
-sleep "${ELC_UPDATE_SLEEP_SECONDS}"
+echo "sleeping for 5 seconds"
+sleep 5
 
 echo "update the ELCs"
 
