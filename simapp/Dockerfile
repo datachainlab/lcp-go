@@ -1,4 +1,4 @@
-FROM golang:1.23-bullseye
+FROM golang:1.23.9-bullseye
 
 COPY . /root/
 WORKDIR /root/simapp

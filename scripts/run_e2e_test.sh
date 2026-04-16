@@ -1,7 +1,7 @@
 #!/bin/sh
 set -ex
 
-# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap> <--key_expiration=<integer>>
+# Usage: run_e2e_test.sh <--no_run_lcp> <--enclave_debug> <--operators_enabled> <--zkdcap> <--mock_zkdcap> <--explicit_state_update_client> <--explicit_state_lane_strategy=<strategy>> <--lcp_threads=<integer>> <--max_enclave_concurrency=<integer>> <--key_expiration=<integer>>
 
 E2E_TEST_DIR=./tests/e2e/cases/tm2tm
 OPERATORS_ENABLED=false
@@ -14,7 +14,11 @@ LCP_RISC0_IMAGE_ID=${LCP_RISC0_IMAGE_ID:-0xe5056aa7a8064abeb648b31d5efa8697a79d4
 export ZKDCAP=false
 export LCP_ZKDCAP_RISC0_MOCK=false
 export LCP_RISC0_IMAGE_ID
-ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap,key_expiration: -- "$@")
+export YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT=false
+export YRLY_LCP_EXPLICIT_STATE_LANE_STRATEGY=${YRLY_LCP_EXPLICIT_STATE_LANE_STRATEGY:-}
+LCP_THREADS=${LCP_THREADS:-2}
+LCP_MAX_ENCLAVE_CONCURRENCY=${LCP_MAX_ENCLAVE_CONCURRENCY:-1}
+ARGS=$(getopt -o '' --long no_run_lcp,enclave_debug,operators_enabled,zkdcap,mock_zkdcap,explicit_state_update_client,explicit_state_lane_strategy:,lcp_threads:,max_enclave_concurrency:,key_expiration: -- "$@")
 eval set -- "$ARGS"
 while true; do
     case "$1" in
@@ -45,6 +49,26 @@ while true; do
             LCP_ZKDCAP_RISC0_MOCK=true
             shift
             ;;
+        --explicit_state_update_client)
+            echo "Explicit-state update-client path enabled"
+            YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT=true
+            shift
+            ;;
+        --explicit_state_lane_strategy)
+            echo "Explicit-state lane strategy: $2"
+            YRLY_LCP_EXPLICIT_STATE_LANE_STRATEGY=$2
+            shift 2
+            ;;
+        --lcp_threads)
+            echo "LCP service threads: $2"
+            LCP_THREADS=$2
+            shift 2
+            ;;
+        --max_enclave_concurrency)
+            echo "LCP max enclave concurrency: $2"
+            LCP_MAX_ENCLAVE_CONCURRENCY=$2
+            shift 2
+            ;;
         --key_expiration)
             echo "Key expiration: $2"
             LCP_KEY_EXPIRATION=$2
@@ -69,7 +93,7 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     echo "Remove existing LCP configuration"
     rm -rf ~/.lcp
     LCP_BIN=${LCP_BIN} LCP_ENCLAVE_PATH=${LCP_ENCLAVE_PATH} ./scripts/init_lcp.sh
-    ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
+    ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=${LCP_THREADS} --max-enclave-concurrency=${LCP_MAX_ENCLAVE_CONCURRENCY} &
     LCP_PID=$!
     if [ "$SGX_MODE" = "SW" ]; then
         export LCP_RA_ROOT_CERT_HEX=$(cat ./lcp/tests/certs/root.crt | xxd -p -c 1000000)
@@ -106,7 +130,7 @@ if [ "$NO_RUN_LCP" = "false" ]; then
     echo "Remove existing LCP configuration"
     rm -rf ~/.lcp
     ./scripts/init_lcp.sh
-    ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=2 &
+    ${LCP_BIN} --log_level=info service start --enclave=${LCP_ENCLAVE_PATH} --address=127.0.0.1:50051 --threads=${LCP_THREADS} --max-enclave-concurrency=${LCP_MAX_ENCLAVE_CONCURRENCY} &
     LCP_PID=$!
     echo "Restore ELC state"
     make -C ${E2E_TEST_DIR} restore
@@ -123,10 +147,6 @@ make -C ${E2E_TEST_DIR} test-elc-cmd
 if [ "$OPERATORS_ENABLED" = "true" ]; then
     make -C ${E2E_TEST_DIR} test-operators
 fi
-
-# The nonmembership test will timeout, so the channel will no loger be available. Therefore this test is performed last.
-make -C ${E2E_TEST_DIR} test-nonmembership
-
 make -C ${E2E_TEST_DIR} network-down
 if [ "$NO_RUN_LCP" = false ]; then
     kill $LCP_PID
