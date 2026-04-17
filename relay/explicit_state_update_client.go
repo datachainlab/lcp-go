@@ -70,7 +70,12 @@ func (pr *Prover) buildExplicitStateUpdatePlanForHeaderUnits(
 func planExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*ExplicitStateHeaderUnit, error) {
 	strategy := explicitStateLaneStrategy()
 	switch strategy {
-	case "", "conservative":
+	case "":
+		if explicitStateHeaderUnitsHaveEmbeddedBaseState(headerUnits) {
+			return planSingleHeaderExplicitStateLanes(headerUnits)
+		}
+		return planConservativeExplicitStateHeaderLanes(headerUnits)
+	case "conservative":
 		return planConservativeExplicitStateHeaderLanes(headerUnits)
 	case "shared_trusted_height":
 		return planSharedTrustedHeightExplicitStateLanes(headerUnits)
@@ -86,6 +91,18 @@ func planExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*
 
 func explicitStateLaneStrategy() string {
 	return os.Getenv(envExplicitStateLaneStrategy)
+}
+
+func explicitStateHeaderUnitsHaveEmbeddedBaseState(headerUnits []*ExplicitStateHeaderUnit) bool {
+	if len(headerUnits) == 0 {
+		return false
+	}
+	for _, unit := range headerUnits {
+		if unit == nil || unit.Header == nil || unit.BaseState == nil {
+			return false
+		}
+	}
+	return true
 }
 
 func planConservativeExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*ExplicitStateHeaderUnit, error) {

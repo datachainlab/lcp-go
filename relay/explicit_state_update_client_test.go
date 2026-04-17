@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	commitmenttypes "github.com/cosmos/ibc-go/v8/modules/core/23-commitment/types"
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	tmclienttypes "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
@@ -161,6 +161,31 @@ func TestPlanExplicitStateHeaderLanesSingleHeader(t *testing.T) {
 	units, err := buildExplicitStateHeaderUnits(headers)
 	if err != nil {
 		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
+	}
+	lanes, err := planExplicitStateHeaderLanes(units)
+	if err != nil {
+		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
+	}
+	if len(lanes) != 2 {
+		t.Fatalf("unexpected lane count: %d", len(lanes))
+	}
+	if len(lanes[0]) != 1 || len(lanes[1]) != 1 {
+		t.Fatalf("unexpected lane widths: %#v", lanes)
+	}
+}
+
+func TestPlanExplicitStateHeaderLanesAutoSelectsSingleHeaderForEmbeddedBaseState(t *testing.T) {
+	units := []*ExplicitStateHeaderUnit{
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-0"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-1"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
+		},
 	}
 	lanes, err := planExplicitStateHeaderLanes(units)
 	if err != nil {
