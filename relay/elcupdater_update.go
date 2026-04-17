@@ -48,7 +48,7 @@ func (pr *Prover) UpdateELCAndStore(ctx context.Context, counterparty core.Final
 			dstChain = elcupdater.NewMockChain(counterparty.ChainID(), fromHeight)
 		} else {
 			fromHeight = csHeight
-			dstChain = counterparty
+			dstChain = NewLCPQuerier(pr.lcpServiceClient, pr.config.ElcClientId)
 		}
 	}
 
