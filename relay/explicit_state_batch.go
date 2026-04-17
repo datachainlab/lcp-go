@@ -103,13 +103,13 @@ func executeSpeculativeUpdateClientBatchStream(
 	client LCPServiceClient,
 	in *ExecuteSpeculativeUpdateClientBatchRequest,
 ) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	stream, err := client.ExecuteSpeculativeUpdateClientBatchStream(ctx)
+	stream, err := client.SpeculativeUpdateClientBatchStream(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call ExecuteSpeculativeUpdateClientBatchStream: %w", err)
+		return nil, fmt.Errorf("failed to call SpeculativeUpdateClientBatchStream: %w", err)
 	}
-	if err := stream.Send(&elc.MsgExecuteSpeculativeUpdateClientBatchStreamChunk{
-		Chunk: &elc.MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init{
-			Init: &elc.ExecuteSpeculativeUpdateClientBatchStreamInit{
+	if err := stream.Send(&elc.MsgSpeculativeUpdateClientBatchStreamChunk{
+		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_Init{
+			Init: &elc.SpeculativeUpdateClientBatchStreamInit{
 				ClientId: in.ClientId,
 			},
 		},
@@ -117,8 +117,8 @@ func executeSpeculativeUpdateClientBatchStream(
 		return nil, fmt.Errorf("failed to send speculative batch init: %w", err)
 	}
 	for i, unit := range in.Units {
-		if err := stream.Send(&elc.MsgExecuteSpeculativeUpdateClientBatchStreamChunk{
-			Chunk: &elc.MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit{
+		if err := stream.Send(&elc.MsgSpeculativeUpdateClientBatchStreamChunk{
+			Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_Unit{
 				Unit: encodeSpeculativeUpdateClientUnit(unit),
 			},
 		}); err != nil {

@@ -723,29 +723,29 @@ func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchRequest proto.InternalMessageInfo
 
-type MsgExecuteSpeculativeUpdateClientBatchStreamChunk struct {
+type MsgSpeculativeUpdateClientBatchStreamChunk struct {
 	// Types that are valid to be assigned to Chunk:
-	//	*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init
-	//	*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit
-	Chunk isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk `protobuf_oneof:"chunk"`
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_Init
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_Unit
+	Chunk isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk `protobuf_oneof:"chunk"`
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Reset() {
-	*m = MsgExecuteSpeculativeUpdateClientBatchStreamChunk{}
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Reset() {
+	*m = MsgSpeculativeUpdateClientBatchStreamChunk{}
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) String() string {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) String() string {
 	return proto.CompactTextString(m)
 }
-func (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk) ProtoMessage() {}
-func (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Descriptor() ([]byte, []int) {
+func (*MsgSpeculativeUpdateClientBatchStreamChunk) ProtoMessage() {}
+func (*MsgSpeculativeUpdateClientBatchStreamChunk) Descriptor() ([]byte, []int) {
 	return fileDescriptor_28db3542707b11e8, []int{16}
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_Unmarshal(b []byte) error {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_MsgExecuteSpeculativeUpdateClientBatchStreamChunk.Marshal(b, m, deterministic)
+		return xxx_messageInfo_MsgSpeculativeUpdateClientBatchStreamChunk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -755,85 +755,85 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_Marshal(b []byte
 		return b[:n], nil
 	}
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgExecuteSpeculativeUpdateClientBatchStreamChunk.Merge(m, src)
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MsgSpeculativeUpdateClientBatchStreamChunk.Merge(m, src)
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_Size() int {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_Size() int {
 	return m.Size()
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgExecuteSpeculativeUpdateClientBatchStreamChunk.DiscardUnknown(m)
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_MsgSpeculativeUpdateClientBatchStreamChunk.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_MsgExecuteSpeculativeUpdateClientBatchStreamChunk proto.InternalMessageInfo
+var xxx_messageInfo_MsgSpeculativeUpdateClientBatchStreamChunk proto.InternalMessageInfo
 
-type isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk interface {
-	isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk()
+type isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk interface {
+	isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk()
 	MarshalTo([]byte) (int, error)
 	Size() int
 }
 
-type MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init struct {
-	Init *ExecuteSpeculativeUpdateClientBatchStreamInit `protobuf:"bytes,1,opt,name=init,proto3,oneof" json:"init,omitempty"`
+type MsgSpeculativeUpdateClientBatchStreamChunk_Init struct {
+	Init *SpeculativeUpdateClientBatchStreamInit `protobuf:"bytes,1,opt,name=init,proto3,oneof" json:"init,omitempty"`
 }
-type MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit struct {
+type MsgSpeculativeUpdateClientBatchStreamChunk_Unit struct {
 	Unit *SpeculativeUpdateClientUnit `protobuf:"bytes,2,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
 }
 
-func (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_Init) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
-func (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_Unit) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) GetChunk() isMsgExecuteSpeculativeUpdateClientBatchStreamChunk_Chunk {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetChunk() isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk {
 	if m != nil {
 		return m.Chunk
 	}
 	return nil
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) GetInit() *ExecuteSpeculativeUpdateClientBatchStreamInit {
-	if x, ok := m.GetChunk().(*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init); ok {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetInit() *SpeculativeUpdateClientBatchStreamInit {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_Init); ok {
 		return x.Init
 	}
 	return nil
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) GetUnit() *SpeculativeUpdateClientUnit {
-	if x, ok := m.GetChunk().(*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit); ok {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnit() *SpeculativeUpdateClientUnit {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_Unit); ok {
 		return x.Unit
 	}
 	return nil
 }
 
 // XXX_OneofWrappers is for the internal use of the proto package.
-func (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk) XXX_OneofWrappers() []interface{} {
+func (*MsgSpeculativeUpdateClientBatchStreamChunk) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
-		(*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init)(nil),
-		(*MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_Init)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_Unit)(nil),
 	}
 }
 
-type ExecuteSpeculativeUpdateClientBatchStreamInit struct {
+type SpeculativeUpdateClientBatchStreamInit struct {
 	ClientId string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 }
 
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Reset() {
-	*m = ExecuteSpeculativeUpdateClientBatchStreamInit{}
+func (m *SpeculativeUpdateClientBatchStreamInit) Reset() {
+	*m = SpeculativeUpdateClientBatchStreamInit{}
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) String() string {
+func (m *SpeculativeUpdateClientBatchStreamInit) String() string {
 	return proto.CompactTextString(m)
 }
-func (*ExecuteSpeculativeUpdateClientBatchStreamInit) ProtoMessage() {}
-func (*ExecuteSpeculativeUpdateClientBatchStreamInit) Descriptor() ([]byte, []int) {
+func (*SpeculativeUpdateClientBatchStreamInit) ProtoMessage() {}
+func (*SpeculativeUpdateClientBatchStreamInit) Descriptor() ([]byte, []int) {
 	return fileDescriptor_28db3542707b11e8, []int{17}
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_Unmarshal(b []byte) error {
+func (m *SpeculativeUpdateClientBatchStreamInit) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *SpeculativeUpdateClientBatchStreamInit) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchStreamInit.Marshal(b, m, deterministic)
+		return xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -843,17 +843,17 @@ func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_Marshal(b []byte, de
 		return b[:n], nil
 	}
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchStreamInit.Merge(m, src)
+func (m *SpeculativeUpdateClientBatchStreamInit) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit.Merge(m, src)
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_Size() int {
+func (m *SpeculativeUpdateClientBatchStreamInit) XXX_Size() int {
 	return m.Size()
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchStreamInit.DiscardUnknown(m)
+func (m *SpeculativeUpdateClientBatchStreamInit) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchStreamInit proto.InternalMessageInfo
+var xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit proto.InternalMessageInfo
 
 type ObservedStateTransition struct {
 	PrevHeight  *types1.Height `protobuf:"bytes,1,opt,name=prev_height,json=prevHeight,proto3" json:"prev_height,omitempty"`
@@ -996,8 +996,8 @@ func init() {
 	proto.RegisterType((*ExplicitStateRef)(nil), "lcp.service.elc.v1.ExplicitStateRef")
 	proto.RegisterType((*SpeculativeUpdateClientUnit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnit")
 	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchRequest)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchRequest")
-	proto.RegisterType((*MsgExecuteSpeculativeUpdateClientBatchStreamChunk)(nil), "lcp.service.elc.v1.MsgExecuteSpeculativeUpdateClientBatchStreamChunk")
-	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchStreamInit)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchStreamInit")
+	proto.RegisterType((*MsgSpeculativeUpdateClientBatchStreamChunk)(nil), "lcp.service.elc.v1.MsgSpeculativeUpdateClientBatchStreamChunk")
+	proto.RegisterType((*SpeculativeUpdateClientBatchStreamInit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientBatchStreamInit")
 	proto.RegisterType((*ObservedStateTransition)(nil), "lcp.service.elc.v1.ObservedStateTransition")
 	proto.RegisterType((*StitchedSpeculativeUpdateClientUnitResult)(nil), "lcp.service.elc.v1.StitchedSpeculativeUpdateClientUnitResult")
 	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchResponse)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchResponse")
@@ -1113,9 +1113,9 @@ type MsgClient interface {
 	// ExecuteSpeculativeUpdateClientBatch defines a rpc handler method for
 	// explicit-state speculative UpdateClient batch execution.
 	ExecuteSpeculativeUpdateClientBatch(ctx context.Context, in *ExecuteSpeculativeUpdateClientBatchRequest, opts ...grpc.CallOption) (*ExecuteSpeculativeUpdateClientBatchResponse, error)
-	// ExecuteSpeculativeUpdateClientBatchStream defines a client-streaming rpc
+	// SpeculativeUpdateClientBatchStream defines a client-streaming rpc
 	// handler method for explicit-state speculative UpdateClient batch execution.
-	ExecuteSpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_ExecuteSpeculativeUpdateClientBatchStreamClient, error)
+	SpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_SpeculativeUpdateClientBatchStreamClient, error)
 	// AggregateMessages defines a rpc handler method for MsgAggregateMessages
 	AggregateMessages(ctx context.Context, in *MsgAggregateMessages, opts ...grpc.CallOption) (*MsgAggregateMessagesResponse, error)
 	// VerifyMembership defines a rpc handler method for MsgVerifyMembership
@@ -1193,30 +1193,30 @@ func (c *msgClient) ExecuteSpeculativeUpdateClientBatch(ctx context.Context, in 
 	return out, nil
 }
 
-func (c *msgClient) ExecuteSpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_ExecuteSpeculativeUpdateClientBatchStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &_Msg_serviceDesc.Streams[1], "/lcp.service.elc.v1.Msg/ExecuteSpeculativeUpdateClientBatchStream", opts...)
+func (c *msgClient) SpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_SpeculativeUpdateClientBatchStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_Msg_serviceDesc.Streams[1], "/lcp.service.elc.v1.Msg/SpeculativeUpdateClientBatchStream", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &msgExecuteSpeculativeUpdateClientBatchStreamClient{stream}
+	x := &msgSpeculativeUpdateClientBatchStreamClient{stream}
 	return x, nil
 }
 
-type Msg_ExecuteSpeculativeUpdateClientBatchStreamClient interface {
-	Send(*MsgExecuteSpeculativeUpdateClientBatchStreamChunk) error
+type Msg_SpeculativeUpdateClientBatchStreamClient interface {
+	Send(*MsgSpeculativeUpdateClientBatchStreamChunk) error
 	CloseAndRecv() (*ExecuteSpeculativeUpdateClientBatchResponse, error)
 	grpc.ClientStream
 }
 
-type msgExecuteSpeculativeUpdateClientBatchStreamClient struct {
+type msgSpeculativeUpdateClientBatchStreamClient struct {
 	grpc.ClientStream
 }
 
-func (x *msgExecuteSpeculativeUpdateClientBatchStreamClient) Send(m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) error {
+func (x *msgSpeculativeUpdateClientBatchStreamClient) Send(m *MsgSpeculativeUpdateClientBatchStreamChunk) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *msgExecuteSpeculativeUpdateClientBatchStreamClient) CloseAndRecv() (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+func (x *msgSpeculativeUpdateClientBatchStreamClient) CloseAndRecv() (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
 	if err := x.ClientStream.CloseSend(); err != nil {
 		return nil, err
 	}
@@ -1265,9 +1265,9 @@ type MsgServer interface {
 	// ExecuteSpeculativeUpdateClientBatch defines a rpc handler method for
 	// explicit-state speculative UpdateClient batch execution.
 	ExecuteSpeculativeUpdateClientBatch(context.Context, *ExecuteSpeculativeUpdateClientBatchRequest) (*ExecuteSpeculativeUpdateClientBatchResponse, error)
-	// ExecuteSpeculativeUpdateClientBatchStream defines a client-streaming rpc
+	// SpeculativeUpdateClientBatchStream defines a client-streaming rpc
 	// handler method for explicit-state speculative UpdateClient batch execution.
-	ExecuteSpeculativeUpdateClientBatchStream(Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error
+	SpeculativeUpdateClientBatchStream(Msg_SpeculativeUpdateClientBatchStreamServer) error
 	// AggregateMessages defines a rpc handler method for MsgAggregateMessages
 	AggregateMessages(context.Context, *MsgAggregateMessages) (*MsgAggregateMessagesResponse, error)
 	// VerifyMembership defines a rpc handler method for MsgVerifyMembership
@@ -1292,8 +1292,8 @@ func (*UnimplementedMsgServer) UpdateClientStream(srv Msg_UpdateClientStreamServ
 func (*UnimplementedMsgServer) ExecuteSpeculativeUpdateClientBatch(ctx context.Context, req *ExecuteSpeculativeUpdateClientBatchRequest) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteSpeculativeUpdateClientBatch not implemented")
 }
-func (*UnimplementedMsgServer) ExecuteSpeculativeUpdateClientBatchStream(srv Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method ExecuteSpeculativeUpdateClientBatchStream not implemented")
+func (*UnimplementedMsgServer) SpeculativeUpdateClientBatchStream(srv Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented")
 }
 func (*UnimplementedMsgServer) AggregateMessages(ctx context.Context, req *MsgAggregateMessages) (*MsgAggregateMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AggregateMessages not implemented")
@@ -1389,26 +1389,26 @@ func _Msg_ExecuteSpeculativeUpdateClientBatch_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Msg_ExecuteSpeculativeUpdateClientBatchStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(MsgServer).ExecuteSpeculativeUpdateClientBatchStream(&msgExecuteSpeculativeUpdateClientBatchStreamServer{stream})
+func _Msg_SpeculativeUpdateClientBatchStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(MsgServer).SpeculativeUpdateClientBatchStream(&msgSpeculativeUpdateClientBatchStreamServer{stream})
 }
 
-type Msg_ExecuteSpeculativeUpdateClientBatchStreamServer interface {
+type Msg_SpeculativeUpdateClientBatchStreamServer interface {
 	SendAndClose(*ExecuteSpeculativeUpdateClientBatchResponse) error
-	Recv() (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk, error)
+	Recv() (*MsgSpeculativeUpdateClientBatchStreamChunk, error)
 	grpc.ServerStream
 }
 
-type msgExecuteSpeculativeUpdateClientBatchStreamServer struct {
+type msgSpeculativeUpdateClientBatchStreamServer struct {
 	grpc.ServerStream
 }
 
-func (x *msgExecuteSpeculativeUpdateClientBatchStreamServer) SendAndClose(m *ExecuteSpeculativeUpdateClientBatchResponse) error {
+func (x *msgSpeculativeUpdateClientBatchStreamServer) SendAndClose(m *ExecuteSpeculativeUpdateClientBatchResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *msgExecuteSpeculativeUpdateClientBatchStreamServer) Recv() (*MsgExecuteSpeculativeUpdateClientBatchStreamChunk, error) {
-	m := new(MsgExecuteSpeculativeUpdateClientBatchStreamChunk)
+func (x *msgSpeculativeUpdateClientBatchStreamServer) Recv() (*MsgSpeculativeUpdateClientBatchStreamChunk, error) {
+	m := new(MsgSpeculativeUpdateClientBatchStreamChunk)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1506,8 +1506,8 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 		{
-			StreamName:    "ExecuteSpeculativeUpdateClientBatchStream",
-			Handler:       _Msg_ExecuteSpeculativeUpdateClientBatchStream_Handler,
+			StreamName:    "SpeculativeUpdateClientBatchStream",
+			Handler:       _Msg_SpeculativeUpdateClientBatchStream_Handler,
 			ClientStreams: true,
 		},
 	},
@@ -2337,7 +2337,7 @@ func (m *ExecuteSpeculativeUpdateClientBatchRequest) MarshalToSizedBuffer(dAtA [
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Marshal() (dAtA []byte, err error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2347,12 +2347,12 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Marshal() (dAtA []by
 	return dAtA[:n], nil
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) MarshalTo(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2369,12 +2369,12 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) MarshalToSizedBuffer
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) MarshalTo(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Init) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Init) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	if m.Init != nil {
 		{
@@ -2390,12 +2390,12 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) MarshalToSizedB
 	}
 	return len(dAtA) - i, nil
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalTo(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	if m.Unit != nil {
 		{
@@ -2411,7 +2411,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalToSizedB
 	}
 	return len(dAtA) - i, nil
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Marshal() (dAtA []byte, err error) {
+func (m *SpeculativeUpdateClientBatchStreamInit) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -2421,12 +2421,12 @@ func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Marshal() (dAtA []byte, 
 	return dAtA[:n], nil
 }
 
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) MarshalTo(dAtA []byte) (int, error) {
+func (m *SpeculativeUpdateClientBatchStreamInit) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *SpeculativeUpdateClientBatchStreamInit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2963,7 +2963,7 @@ func (m *ExecuteSpeculativeUpdateClientBatchRequest) Size() (n int) {
 	return n
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Size() (n int) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2975,7 +2975,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Size() (n int) {
 	return n
 }
 
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) Size() (n int) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Init) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2987,7 +2987,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init) Size() (n int) 
 	}
 	return n
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) Size() (n int) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -2999,7 +2999,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit) Size() (n int) 
 	}
 	return n
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Size() (n int) {
+func (m *SpeculativeUpdateClientBatchStreamInit) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -5563,7 +5563,7 @@ func (m *ExecuteSpeculativeUpdateClientBatchRequest) Unmarshal(dAtA []byte) erro
 	}
 	return nil
 }
-func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) error {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5586,10 +5586,10 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byt
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: MsgExecuteSpeculativeUpdateClientBatchStreamChunk: wiretype end group for non-group")
+			return fmt.Errorf("proto: MsgSpeculativeUpdateClientBatchStreamChunk: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgExecuteSpeculativeUpdateClientBatchStreamChunk: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: MsgSpeculativeUpdateClientBatchStreamChunk: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -5621,11 +5621,11 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byt
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &ExecuteSpeculativeUpdateClientBatchStreamInit{}
+			v := &SpeculativeUpdateClientBatchStreamInit{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Chunk = &MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Init{v}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_Init{v}
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -5660,7 +5660,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byt
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Chunk = &MsgExecuteSpeculativeUpdateClientBatchStreamChunk_Unit{v}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_Unit{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5683,7 +5683,7 @@ func (m *MsgExecuteSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byt
 	}
 	return nil
 }
-func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Unmarshal(dAtA []byte) error {
+func (m *SpeculativeUpdateClientBatchStreamInit) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -5706,10 +5706,10 @@ func (m *ExecuteSpeculativeUpdateClientBatchStreamInit) Unmarshal(dAtA []byte) e
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ExecuteSpeculativeUpdateClientBatchStreamInit: wiretype end group for non-group")
+			return fmt.Errorf("proto: SpeculativeUpdateClientBatchStreamInit: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ExecuteSpeculativeUpdateClientBatchStreamInit: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SpeculativeUpdateClientBatchStreamInit: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

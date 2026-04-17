@@ -30,7 +30,7 @@ import (
 )
 
 type explicitStateBatchTestService interface {
-	ExecuteSpeculativeUpdateClientBatchStream(elc.Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error
+	SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error
 }
 
 type explicitStateFallbackTestServer struct {
@@ -63,7 +63,7 @@ type explicitStateBatchTestServer struct {
 	captured **ExecuteSpeculativeUpdateClientBatchRequest
 }
 
-func (s explicitStateBatchTestServer) ExecuteSpeculativeUpdateClientBatchStream(stream elc.Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error {
+func (s explicitStateBatchTestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	req, err := recvSpeculativeBatchStreamRequest(stream)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ type explicitStateBatchMultiRequestServer struct {
 	captured *[]*ExecuteSpeculativeUpdateClientBatchRequest
 }
 
-func (s explicitStateBatchMultiRequestServer) ExecuteSpeculativeUpdateClientBatchStream(stream elc.Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error {
+func (s explicitStateBatchMultiRequestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	req, err := recvSpeculativeBatchStreamRequest(stream)
 	if err != nil {
 		return err
@@ -231,7 +231,7 @@ func (s explicitStateIntegrationTestServer) Client(_ context.Context, req *elc.Q
 	}, nil
 }
 
-func (s explicitStateIntegrationTestServer) ExecuteSpeculativeUpdateClientBatchStream(stream elc.Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) error {
+func (s explicitStateIntegrationTestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	req, err := recvSpeculativeBatchStreamRequest(stream)
 	if err != nil {
 		return err
@@ -252,7 +252,7 @@ func (s explicitStateIntegrationTestServer) ExecuteSpeculativeUpdateClientBatchS
 	})
 }
 
-func recvSpeculativeBatchStreamRequest(stream elc.Msg_ExecuteSpeculativeUpdateClientBatchStreamServer) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
+func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
 	initChunk, err := stream.Recv()
 	if err != nil {
 		return nil, err
