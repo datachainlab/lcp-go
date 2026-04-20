@@ -641,92 +641,12 @@ func (m *ExplicitStateRef) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ExplicitStateRef proto.InternalMessageInfo
 
-type SpeculativeUpdateClientUnit struct {
-	UnitId        string           `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
-	Update        MsgUpdateClient  `protobuf:"bytes,2,opt,name=update,proto3" json:"update"`
-	BaseState     ExplicitStateRef `protobuf:"bytes,3,opt,name=base_state,json=baseState,proto3" json:"base_state"`
-	DependencyIds []string         `protobuf:"bytes,4,rep,name=dependency_ids,json=dependencyIds,proto3" json:"dependency_ids,omitempty"`
-}
-
-func (m *SpeculativeUpdateClientUnit) Reset()         { *m = SpeculativeUpdateClientUnit{} }
-func (m *SpeculativeUpdateClientUnit) String() string { return proto.CompactTextString(m) }
-func (*SpeculativeUpdateClientUnit) ProtoMessage()    {}
-func (*SpeculativeUpdateClientUnit) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{14}
-}
-func (m *SpeculativeUpdateClientUnit) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *SpeculativeUpdateClientUnit) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_SpeculativeUpdateClientUnit.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *SpeculativeUpdateClientUnit) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SpeculativeUpdateClientUnit.Merge(m, src)
-}
-func (m *SpeculativeUpdateClientUnit) XXX_Size() int {
-	return m.Size()
-}
-func (m *SpeculativeUpdateClientUnit) XXX_DiscardUnknown() {
-	xxx_messageInfo_SpeculativeUpdateClientUnit.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_SpeculativeUpdateClientUnit proto.InternalMessageInfo
-
-type ExecuteSpeculativeUpdateClientBatchRequest struct {
-	ClientId string                         `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Units    []*SpeculativeUpdateClientUnit `protobuf:"bytes,2,rep,name=units,proto3" json:"units,omitempty"`
-}
-
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) Reset() {
-	*m = ExecuteSpeculativeUpdateClientBatchRequest{}
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) String() string {
-	return proto.CompactTextString(m)
-}
-func (*ExecuteSpeculativeUpdateClientBatchRequest) ProtoMessage() {}
-func (*ExecuteSpeculativeUpdateClientBatchRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{15}
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchRequest.Merge(m, src)
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ExecuteSpeculativeUpdateClientBatchRequest proto.InternalMessageInfo
-
 type MsgSpeculativeUpdateClientBatchStreamChunk struct {
 	// Types that are valid to be assigned to Chunk:
 	//	*MsgSpeculativeUpdateClientBatchStreamChunk_Init
-	//	*MsgSpeculativeUpdateClientBatchStreamChunk_Unit
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd
 	Chunk isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk `protobuf_oneof:"chunk"`
 }
 
@@ -738,7 +658,7 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) String() string {
 }
 func (*MsgSpeculativeUpdateClientBatchStreamChunk) ProtoMessage() {}
 func (*MsgSpeculativeUpdateClientBatchStreamChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{16}
+	return fileDescriptor_28db3542707b11e8, []int{14}
 }
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -776,13 +696,23 @@ type isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk interface {
 type MsgSpeculativeUpdateClientBatchStreamChunk_Init struct {
 	Init *SpeculativeUpdateClientBatchStreamInit `protobuf:"bytes,1,opt,name=init,proto3,oneof" json:"init,omitempty"`
 }
-type MsgSpeculativeUpdateClientBatchStreamChunk_Unit struct {
-	Unit *SpeculativeUpdateClientUnit `protobuf:"bytes,2,opt,name=unit,proto3,oneof" json:"unit,omitempty"`
+type MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit struct {
+	UnitInit *SpeculativeUpdateClientUnitInit `protobuf:"bytes,2,opt,name=unit_init,json=unitInit,proto3,oneof" json:"unit_init,omitempty"`
+}
+type MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk struct {
+	UnitHeaderChunk *SpeculativeUpdateClientUnitHeaderChunk `protobuf:"bytes,3,opt,name=unit_header_chunk,json=unitHeaderChunk,proto3,oneof" json:"unit_header_chunk,omitempty"`
+}
+type MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd struct {
+	UnitEnd *SpeculativeUpdateClientUnitEnd `protobuf:"bytes,4,opt,name=unit_end,json=unitEnd,proto3,oneof" json:"unit_end,omitempty"`
 }
 
 func (*MsgSpeculativeUpdateClientBatchStreamChunk_Init) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
-func (*MsgSpeculativeUpdateClientBatchStreamChunk_Unit) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+}
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+}
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
 
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetChunk() isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk {
@@ -799,9 +729,23 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetInit() *SpeculativeUpdat
 	return nil
 }
 
-func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnit() *SpeculativeUpdateClientUnit {
-	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_Unit); ok {
-		return x.Unit
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnitInit() *SpeculativeUpdateClientUnitInit {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit); ok {
+		return x.UnitInit
+	}
+	return nil
+}
+
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnitHeaderChunk() *SpeculativeUpdateClientUnitHeaderChunk {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk); ok {
+		return x.UnitHeaderChunk
+	}
+	return nil
+}
+
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnitEnd() *SpeculativeUpdateClientUnitEnd {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd); ok {
+		return x.UnitEnd
 	}
 	return nil
 }
@@ -810,7 +754,9 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnit() *SpeculativeUpdat
 func (*MsgSpeculativeUpdateClientBatchStreamChunk) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
 		(*MsgSpeculativeUpdateClientBatchStreamChunk_Init)(nil),
-		(*MsgSpeculativeUpdateClientBatchStreamChunk_Unit)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd)(nil),
 	}
 }
 
@@ -821,12 +767,10 @@ type SpeculativeUpdateClientBatchStreamInit struct {
 func (m *SpeculativeUpdateClientBatchStreamInit) Reset() {
 	*m = SpeculativeUpdateClientBatchStreamInit{}
 }
-func (m *SpeculativeUpdateClientBatchStreamInit) String() string {
-	return proto.CompactTextString(m)
-}
-func (*SpeculativeUpdateClientBatchStreamInit) ProtoMessage() {}
+func (m *SpeculativeUpdateClientBatchStreamInit) String() string { return proto.CompactTextString(m) }
+func (*SpeculativeUpdateClientBatchStreamInit) ProtoMessage()    {}
 func (*SpeculativeUpdateClientBatchStreamInit) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{17}
+	return fileDescriptor_28db3542707b11e8, []int{15}
 }
 func (m *SpeculativeUpdateClientBatchStreamInit) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -855,6 +799,125 @@ func (m *SpeculativeUpdateClientBatchStreamInit) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit proto.InternalMessageInfo
 
+type SpeculativeUpdateClientUnitInit struct {
+	UnitId        string           `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	TypeUrl       string           `protobuf:"bytes,2,opt,name=type_url,json=typeUrl,proto3" json:"type_url,omitempty"`
+	IncludeState  bool             `protobuf:"varint,3,opt,name=include_state,json=includeState,proto3" json:"include_state,omitempty"`
+	Signer        []byte           `protobuf:"bytes,4,opt,name=signer,proto3" json:"signer,omitempty"`
+	BaseState     ExplicitStateRef `protobuf:"bytes,5,opt,name=base_state,json=baseState,proto3" json:"base_state"`
+	DependencyIds []string         `protobuf:"bytes,6,rep,name=dependency_ids,json=dependencyIds,proto3" json:"dependency_ids,omitempty"`
+}
+
+func (m *SpeculativeUpdateClientUnitInit) Reset()         { *m = SpeculativeUpdateClientUnitInit{} }
+func (m *SpeculativeUpdateClientUnitInit) String() string { return proto.CompactTextString(m) }
+func (*SpeculativeUpdateClientUnitInit) ProtoMessage()    {}
+func (*SpeculativeUpdateClientUnitInit) Descriptor() ([]byte, []int) {
+	return fileDescriptor_28db3542707b11e8, []int{16}
+}
+func (m *SpeculativeUpdateClientUnitInit) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpeculativeUpdateClientUnitInit) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SpeculativeUpdateClientUnitInit.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SpeculativeUpdateClientUnitInit) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpeculativeUpdateClientUnitInit.Merge(m, src)
+}
+func (m *SpeculativeUpdateClientUnitInit) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpeculativeUpdateClientUnitInit) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpeculativeUpdateClientUnitInit.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpeculativeUpdateClientUnitInit proto.InternalMessageInfo
+
+type SpeculativeUpdateClientUnitHeaderChunk struct {
+	UnitId string `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	Data   []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (m *SpeculativeUpdateClientUnitHeaderChunk) Reset() {
+	*m = SpeculativeUpdateClientUnitHeaderChunk{}
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) String() string { return proto.CompactTextString(m) }
+func (*SpeculativeUpdateClientUnitHeaderChunk) ProtoMessage()    {}
+func (*SpeculativeUpdateClientUnitHeaderChunk) Descriptor() ([]byte, []int) {
+	return fileDescriptor_28db3542707b11e8, []int{17}
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SpeculativeUpdateClientUnitHeaderChunk.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpeculativeUpdateClientUnitHeaderChunk.Merge(m, src)
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpeculativeUpdateClientUnitHeaderChunk.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpeculativeUpdateClientUnitHeaderChunk proto.InternalMessageInfo
+
+type SpeculativeUpdateClientUnitEnd struct {
+	UnitId string `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+}
+
+func (m *SpeculativeUpdateClientUnitEnd) Reset()         { *m = SpeculativeUpdateClientUnitEnd{} }
+func (m *SpeculativeUpdateClientUnitEnd) String() string { return proto.CompactTextString(m) }
+func (*SpeculativeUpdateClientUnitEnd) ProtoMessage()    {}
+func (*SpeculativeUpdateClientUnitEnd) Descriptor() ([]byte, []int) {
+	return fileDescriptor_28db3542707b11e8, []int{18}
+}
+func (m *SpeculativeUpdateClientUnitEnd) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpeculativeUpdateClientUnitEnd) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SpeculativeUpdateClientUnitEnd.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SpeculativeUpdateClientUnitEnd) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpeculativeUpdateClientUnitEnd.Merge(m, src)
+}
+func (m *SpeculativeUpdateClientUnitEnd) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpeculativeUpdateClientUnitEnd) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpeculativeUpdateClientUnitEnd.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpeculativeUpdateClientUnitEnd proto.InternalMessageInfo
+
 type ObservedStateTransition struct {
 	PrevHeight  *types1.Height `protobuf:"bytes,1,opt,name=prev_height,json=prevHeight,proto3" json:"prev_height,omitempty"`
 	PrevStateId []byte         `protobuf:"bytes,2,opt,name=prev_state_id,json=prevStateId,proto3" json:"prev_state_id,omitempty"`
@@ -866,7 +929,7 @@ func (m *ObservedStateTransition) Reset()         { *m = ObservedStateTransition
 func (m *ObservedStateTransition) String() string { return proto.CompactTextString(m) }
 func (*ObservedStateTransition) ProtoMessage()    {}
 func (*ObservedStateTransition) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{18}
+	return fileDescriptor_28db3542707b11e8, []int{19}
 }
 func (m *ObservedStateTransition) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -908,7 +971,7 @@ func (m *StitchedSpeculativeUpdateClientUnitResult) String() string {
 }
 func (*StitchedSpeculativeUpdateClientUnitResult) ProtoMessage() {}
 func (*StitchedSpeculativeUpdateClientUnitResult) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{19}
+	return fileDescriptor_28db3542707b11e8, []int{20}
 }
 func (m *StitchedSpeculativeUpdateClientUnitResult) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -950,7 +1013,7 @@ func (m *ExecuteSpeculativeUpdateClientBatchResponse) String() string {
 }
 func (*ExecuteSpeculativeUpdateClientBatchResponse) ProtoMessage() {}
 func (*ExecuteSpeculativeUpdateClientBatchResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_28db3542707b11e8, []int{20}
+	return fileDescriptor_28db3542707b11e8, []int{21}
 }
 func (m *ExecuteSpeculativeUpdateClientBatchResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -994,10 +1057,11 @@ func init() {
 	proto.RegisterType((*UpdateClientStreamInit)(nil), "lcp.service.elc.v1.UpdateClientStreamInit")
 	proto.RegisterType((*UpdateClientStreamHeaderChunk)(nil), "lcp.service.elc.v1.UpdateClientStreamHeaderChunk")
 	proto.RegisterType((*ExplicitStateRef)(nil), "lcp.service.elc.v1.ExplicitStateRef")
-	proto.RegisterType((*SpeculativeUpdateClientUnit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnit")
-	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchRequest)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchRequest")
 	proto.RegisterType((*MsgSpeculativeUpdateClientBatchStreamChunk)(nil), "lcp.service.elc.v1.MsgSpeculativeUpdateClientBatchStreamChunk")
 	proto.RegisterType((*SpeculativeUpdateClientBatchStreamInit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientBatchStreamInit")
+	proto.RegisterType((*SpeculativeUpdateClientUnitInit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitInit")
+	proto.RegisterType((*SpeculativeUpdateClientUnitHeaderChunk)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitHeaderChunk")
+	proto.RegisterType((*SpeculativeUpdateClientUnitEnd)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitEnd")
 	proto.RegisterType((*ObservedStateTransition)(nil), "lcp.service.elc.v1.ObservedStateTransition")
 	proto.RegisterType((*StitchedSpeculativeUpdateClientUnitResult)(nil), "lcp.service.elc.v1.StitchedSpeculativeUpdateClientUnitResult")
 	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchResponse)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchResponse")
@@ -1006,90 +1070,91 @@ func init() {
 func init() { proto.RegisterFile("lcp/service/elc/v1/tx.proto", fileDescriptor_28db3542707b11e8) }
 
 var fileDescriptor_28db3542707b11e8 = []byte{
-	// 1317 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0x4f, 0x6f, 0x1b, 0x45,
-	0x14, 0xf7, 0xc6, 0x8e, 0x13, 0x3f, 0xbb, 0x7f, 0x98, 0x44, 0x89, 0xeb, 0x14, 0x3b, 0xda, 0x82,
-	0x70, 0x5b, 0xba, 0x4b, 0xd2, 0x03, 0x52, 0x51, 0x81, 0x24, 0x0a, 0x4a, 0x24, 0x0c, 0x68, 0x43,
-	0x8b, 0x80, 0x83, 0xbb, 0xde, 0x9d, 0xac, 0x47, 0x6c, 0x76, 0x97, 0x9d, 0x59, 0x2b, 0xfe, 0x06,
-	0x5c, 0x90, 0x2a, 0xf1, 0x01, 0xe8, 0x89, 0x6f, 0xc0, 0x81, 0x13, 0xd7, 0x1e, 0x7b, 0xe4, 0x80,
-	0x22, 0xda, 0x5e, 0x90, 0x38, 0x51, 0x89, 0x3b, 0x9a, 0xd9, 0x89, 0xb3, 0xfe, 0xb7, 0xdd, 0x34,
-	0xe9, 0xcd, 0x6f, 0xe6, 0xbd, 0xdf, 0x7b, 0xef, 0xf7, 0xde, 0xbc, 0xe7, 0x85, 0x15, 0xd7, 0x0a,
-	0x74, 0x8a, 0xc3, 0x1e, 0xb1, 0xb0, 0x8e, 0x5d, 0x4b, 0xef, 0xad, 0xe9, 0xec, 0x50, 0x0b, 0x42,
-	0x9f, 0xf9, 0x08, 0xb9, 0x56, 0xa0, 0xc9, 0x4b, 0x0d, 0xbb, 0x96, 0xd6, 0x5b, 0xab, 0x2d, 0x3a,
-	0xbe, 0xe3, 0x8b, 0x6b, 0x9d, 0xff, 0x8a, 0x35, 0x6b, 0x57, 0x1c, 0xdf, 0x77, 0x5c, 0xac, 0x0b,
-	0xa9, 0x13, 0xed, 0xeb, 0xa6, 0xd7, 0x97, 0x57, 0x0d, 0xd2, 0xb1, 0x74, 0xcb, 0x0f, 0xb1, 0x6e,
-	0xb9, 0x04, 0x7b, 0x8c, 0x7b, 0x88, 0x7f, 0xc5, 0x0a, 0xea, 0x4f, 0x33, 0x70, 0xa9, 0x45, 0x9d,
-	0xad, 0x10, 0x9b, 0x0c, 0x6f, 0x89, 0x1b, 0xb4, 0x06, 0xa5, 0x58, 0xa7, 0x4d, 0xec, 0xaa, 0xb2,
-	0xaa, 0x34, 0x4b, 0x9b, 0x8b, 0x2f, 0x8e, 0x1a, 0x97, 0xfb, 0xe6, 0x81, 0x7b, 0x47, 0x1d, 0x5c,
-	0xa9, 0xc6, 0x7c, 0xfc, 0x7b, 0xd7, 0x46, 0x5f, 0x40, 0x45, 0x9e, 0x53, 0x66, 0x32, 0x5c, 0x9d,
-	0x59, 0x55, 0x9a, 0xe5, 0xf5, 0x45, 0x2d, 0x8e, 0x4c, 0x3b, 0x8e, 0x4c, 0xdb, 0xf0, 0xfa, 0x9b,
-	0xcb, 0x2f, 0x8e, 0x1a, 0x0b, 0x43, 0x58, 0xc2, 0x46, 0x35, 0xca, 0xb1, 0xb8, 0xc7, 0x25, 0xf4,
-	0x35, 0x5c, 0xb2, 0x7c, 0x8f, 0x62, 0x8f, 0x46, 0x54, 0x82, 0xe6, 0x53, 0x40, 0x6b, 0x2f, 0x8e,
-	0x1a, 0x4b, 0x12, 0x74, 0xd8, 0x4c, 0x35, 0x2e, 0x0e, 0x4e, 0x62, 0xe8, 0x25, 0x28, 0x52, 0xe2,
-	0x78, 0x38, 0xac, 0x16, 0x56, 0x95, 0x66, 0xc5, 0x90, 0xd2, 0x9d, 0xf9, 0x1f, 0x1e, 0x35, 0x72,
-	0x7f, 0x3f, 0x6a, 0xe4, 0xd4, 0x6f, 0x61, 0x79, 0x84, 0x14, 0x03, 0xd3, 0x80, 0xa3, 0xa0, 0x2a,
-	0xcc, 0x1d, 0x60, 0x4a, 0x4d, 0x07, 0x0b, 0x6a, 0x2a, 0xc6, 0xb1, 0x88, 0xae, 0x42, 0x89, 0x03,
-	0x99, 0x2c, 0x0a, 0x63, 0x02, 0x2a, 0xc6, 0xc9, 0x41, 0x02, 0xfc, 0x37, 0x45, 0x50, 0x7e, 0x2f,
-	0xb0, 0xcf, 0x44, 0xf9, 0xbb, 0x50, 0xec, 0x62, 0xd3, 0xc6, 0x61, 0x1a, 0xd9, 0x86, 0xd4, 0x41,
-	0xd7, 0xe0, 0x02, 0xf1, 0x2c, 0x37, 0xb2, 0x71, 0x82, 0xcc, 0x79, 0xa3, 0x22, 0x0f, 0x4f, 0x47,
-	0x4c, 0x32, 0xf4, 0x73, 0x24, 0x86, 0xc1, 0x62, 0x8b, 0x3a, 0x1b, 0x8e, 0x13, 0x62, 0xc7, 0x64,
-	0xb8, 0x15, 0x9b, 0xd3, 0x44, 0x58, 0x4a, 0x32, 0x2c, 0x54, 0x83, 0x79, 0xe9, 0x82, 0x56, 0x67,
-	0x56, 0xf3, 0xcd, 0x8a, 0x31, 0x90, 0x51, 0x1d, 0x60, 0xe0, 0x82, 0x56, 0xf3, 0xe2, 0x36, 0x71,
-	0x92, 0xf0, 0xfa, 0x00, 0xae, 0x4e, 0xf2, 0x7a, 0x8e, 0x79, 0xfd, 0xab, 0xc0, 0x42, 0x8b, 0x3a,
-	0xf7, 0x71, 0x48, 0xf6, 0xfb, 0x2d, 0x7c, 0xd0, 0xc1, 0x21, 0xed, 0x92, 0x00, 0xad, 0x8c, 0x15,
-	0x3d, 0x51, 0xde, 0x25, 0x28, 0x06, 0x21, 0xde, 0x27, 0x87, 0x12, 0x59, 0x4a, 0x08, 0x41, 0x21,
-	0x30, 0x59, 0x57, 0xd4, 0xaf, 0x64, 0x88, 0xdf, 0x68, 0x11, 0x66, 0x7b, 0xa6, 0x1b, 0x61, 0x59,
-	0xb6, 0x58, 0x40, 0x5b, 0x50, 0x09, 0x42, 0xdf, 0xdf, 0x6f, 0x77, 0x31, 0x71, 0xba, 0xac, 0x3a,
-	0x2b, 0xda, 0xa4, 0xa6, 0x91, 0x8e, 0xa5, 0xf1, 0x91, 0xa0, 0xc9, 0x41, 0xd0, 0x5b, 0xd3, 0x76,
-	0x84, 0xc6, 0x66, 0xe1, 0xf1, 0x51, 0x23, 0x67, 0x94, 0x85, 0x55, 0x7c, 0xc4, 0xa1, 0x85, 0x58,
-	0x2d, 0xc6, 0xd0, 0x42, 0x48, 0x54, 0x64, 0x6e, 0x4a, 0xa3, 0xb4, 0x61, 0x65, 0x42, 0xca, 0xe7,
-	0x48, 0xea, 0x91, 0x02, 0x4b, 0x03, 0x0f, 0x9f, 0xf9, 0xde, 0xeb, 0xe0, 0x75, 0x94, 0xc1, 0xc2,
-	0x99, 0x18, 0x9c, 0x9d, 0xcc, 0x60, 0x71, 0x0a, 0x83, 0x1d, 0xa8, 0x4f, 0xce, 0xef, 0x1c, 0x49,
-	0xfc, 0x5d, 0x81, 0xda, 0xc8, 0x7b, 0xde, 0x63, 0x21, 0x36, 0x0f, 0xb6, 0xba, 0x91, 0xf7, 0x1d,
-	0xfa, 0x18, 0x0a, 0xc4, 0x23, 0x4c, 0xa0, 0x97, 0xd7, 0x6f, 0x68, 0xe3, 0x1b, 0x49, 0x1b, 0x37,
-	0xdd, 0xf5, 0x08, 0xdb, 0xc9, 0x19, 0xc2, 0x12, 0xdd, 0x87, 0x4a, 0x3c, 0x80, 0xda, 0x16, 0x47,
-	0x94, 0xa3, 0x6a, 0x2d, 0x1b, 0xd2, 0x8e, 0xb0, 0x14, 0xa1, 0xec, 0xe4, 0x8c, 0x72, 0xf7, 0x44,
-	0xdc, 0x9c, 0x83, 0x59, 0x01, 0xa8, 0xfe, 0xa8, 0xc0, 0xd2, 0xe4, 0x18, 0xd2, 0xdb, 0x60, 0x6c,
-	0x1e, 0xce, 0xa4, 0xce, 0xc3, 0xfc, 0xd0, 0xe0, 0xb9, 0x02, 0xf3, 0xac, 0x1f, 0xe0, 0x76, 0x14,
-	0xba, 0xa2, 0x27, 0x4a, 0xc6, 0x1c, 0x97, 0xef, 0x85, 0xae, 0x7a, 0x1b, 0xde, 0x4c, 0x4d, 0x84,
-	0xf7, 0x99, 0x6d, 0x32, 0x53, 0x56, 0x4c, 0xfc, 0x56, 0xff, 0x51, 0xe0, 0xf2, 0xf6, 0x61, 0xe0,
-	0x12, 0x8b, 0xc4, 0xdb, 0xcf, 0xc0, 0xfb, 0xe8, 0x03, 0x28, 0x07, 0x21, 0xee, 0x1d, 0xf7, 0x9e,
-	0xf2, 0xb2, 0xde, 0x33, 0x80, 0xab, 0xcb, 0xa6, 0x53, 0xe1, 0x82, 0x30, 0x16, 0xb9, 0xf1, 0xfc,
-	0xe3, 0x26, 0x10, 0x88, 0xc2, 0xc3, 0xae, 0x8d, 0xde, 0x1f, 0xd9, 0xd9, 0x29, 0xeb, 0x75, 0x78,
-	0x35, 0xdf, 0x1d, 0x5f, 0xcd, 0x85, 0x14, 0xdb, 0x91, 0xf5, 0xcb, 0xb3, 0x5d, 0xd9, 0x0b, 0xb0,
-	0x15, 0xb9, 0x26, 0x23, 0x3d, 0x9c, 0xa4, 0xeb, 0x1e, 0xaf, 0xdb, 0x32, 0xcc, 0x45, 0x1e, 0x49,
-	0x54, 0xad, 0xc8, 0xc5, 0x5d, 0x1b, 0x6d, 0x40, 0x31, 0x12, 0xca, 0xb2, 0x8d, 0xae, 0x4d, 0x6a,
-	0xa3, 0x91, 0x76, 0x96, 0x2f, 0x52, 0x1a, 0xa2, 0x5d, 0x80, 0x8e, 0x49, 0xf1, 0x50, 0xc6, 0x6f,
-	0x4d, 0x82, 0x19, 0x2d, 0x87, 0xc4, 0x29, 0x71, 0xeb, 0x98, 0x85, 0xb7, 0xe1, 0xa2, 0x8d, 0x03,
-	0xec, 0xd9, 0xd8, 0xb3, 0xfa, 0x6d, 0x62, 0xd3, 0x6a, 0x61, 0x35, 0xdf, 0x2c, 0x19, 0x17, 0x4e,
-	0x4e, 0x77, 0x6d, 0xaa, 0x3e, 0x54, 0xe0, 0xc6, 0xf6, 0x21, 0xb6, 0x22, 0x86, 0xa7, 0x24, 0xbd,
-	0x69, 0x32, 0xab, 0x6b, 0xe0, 0xef, 0x23, 0x4c, 0x5f, 0xd2, 0xb4, 0xdb, 0x30, 0xcb, 0xa9, 0x88,
-	0xb7, 0x5d, 0x79, 0x5d, 0x9f, 0x14, 0x78, 0x0a, 0xb3, 0x46, 0x6c, 0xad, 0xfe, 0xa9, 0xc0, 0x5a,
-	0x8b, 0x3a, 0x19, 0xa2, 0x4a, 0x0e, 0x83, 0xaf, 0x86, 0x86, 0xc1, 0xc6, 0x64, 0xd2, 0x32, 0x22,
-	0x0e, 0xcd, 0x88, 0x6d, 0x28, 0xf0, 0xb8, 0x64, 0x51, 0x4f, 0x9b, 0x14, 0x87, 0xe1, 0xe6, 0x27,
-	0x23, 0xe1, 0x53, 0xb8, 0x75, 0xaa, 0x40, 0x52, 0x39, 0x57, 0x9f, 0x2a, 0xb0, 0xfc, 0x79, 0x87,
-	0xc7, 0x83, 0x6d, 0x51, 0xf8, 0x2f, 0x43, 0xd3, 0xa3, 0x84, 0x11, 0xdf, 0x7b, 0xfd, 0x4f, 0x74,
-	0x03, 0xca, 0x81, 0x4f, 0xd9, 0xb1, 0x83, 0x7c, 0xc6, 0xfd, 0x03, 0xdc, 0x28, 0xe1, 0x86, 0x43,
-	0x0c, 0xdc, 0x14, 0xa4, 0x1b, 0x9f, 0x32, 0xe9, 0x86, 0xef, 0xd2, 0xeb, 0x7b, 0x8c, 0x30, 0xab,
-	0x8b, 0xed, 0xb4, 0xfe, 0xc1, 0x34, 0x72, 0x19, 0x6a, 0xc1, 0x7c, 0x28, 0x57, 0x90, 0x4c, 0xf9,
-	0x66, 0x86, 0x87, 0x78, 0xbc, 0xb5, 0x64, 0x88, 0x03, 0x08, 0xd4, 0x81, 0x05, 0x5f, 0xf2, 0xdb,
-	0x66, 0x03, 0x6e, 0x65, 0x37, 0x4c, 0x44, 0x9e, 0x52, 0x0e, 0x89, 0x8c, 0x8e, 0xd1, 0x4e, 0x6e,
-	0xd4, 0x9f, 0x15, 0xb8, 0x99, 0xe9, 0x11, 0xca, 0x98, 0x52, 0x5f, 0xe1, 0xde, 0xf0, 0x2b, 0xbc,
-	0x3b, 0xb1, 0x61, 0xb3, 0xb2, 0x29, 0xdf, 0xe4, 0xfa, 0x7f, 0x73, 0x90, 0x6f, 0x51, 0x07, 0x3d,
-	0x80, 0xca, 0xd0, 0xb7, 0xd8, 0xb4, 0x19, 0x97, 0x54, 0xaa, 0xdd, 0xcc, 0xa0, 0x34, 0xc8, 0xed,
-	0x01, 0x54, 0x86, 0x3e, 0x3d, 0xb2, 0x4c, 0xd1, 0xda, 0x69, 0x2a, 0x8c, 0x28, 0xa0, 0xf1, 0x1d,
-	0x88, 0xb4, 0x0c, 0x10, 0x89, 0x79, 0x73, 0x2a, 0x97, 0x4d, 0x05, 0xfd, 0xa2, 0xc0, 0xb5, 0x0c,
-	0x25, 0x46, 0x1f, 0xbe, 0xe2, 0xe0, 0x92, 0x03, 0xba, 0xf6, 0xd1, 0x2b, 0xdb, 0x4b, 0x76, 0x7e,
-	0x55, 0xe0, 0x7a, 0xe6, 0xf9, 0x84, 0xb6, 0xa7, 0xb0, 0x70, 0xba, 0xe1, 0x7d, 0xe6, 0xa8, 0x9b,
-	0x0a, 0xf2, 0xe1, 0x8d, 0xf1, 0x4f, 0xb3, 0xe6, 0x94, 0xf0, 0xc6, 0x34, 0x6b, 0xef, 0x65, 0xd5,
-	0x1c, 0x10, 0xe5, 0xc2, 0xe5, 0xb1, 0x4f, 0xa6, 0x77, 0xa6, 0xa0, 0x8c, 0x2a, 0xd6, 0xf4, 0x8c,
-	0x8a, 0x03, 0x6f, 0x11, 0x2c, 0x4c, 0xfa, 0x96, 0xb8, 0x91, 0x8a, 0x33, 0xa4, 0x5b, 0x5b, 0xcf,
-	0xae, 0x3b, 0x98, 0x86, 0x9f, 0x3c, 0x7e, 0x5a, 0xcf, 0x3d, 0x7e, 0x56, 0x57, 0x9e, 0x3c, 0xab,
-	0x2b, 0x7f, 0x3d, 0xab, 0x2b, 0x0f, 0x9f, 0xd7, 0x73, 0x4f, 0x9e, 0xd7, 0x73, 0x7f, 0x3c, 0xaf,
-	0xe7, 0xbe, 0x69, 0x3a, 0x84, 0x75, 0xa3, 0x8e, 0x66, 0xf9, 0x07, 0x3a, 0xff, 0xa7, 0x68, 0x75,
-	0x4d, 0xe2, 0xb9, 0x66, 0x47, 0x77, 0xad, 0xe0, 0x96, 0xe3, 0xeb, 0x21, 0x76, 0xcd, 0xbe, 0x8e,
-	0x5d, 0xab, 0x53, 0x14, 0x7f, 0xb9, 0x6e, 0xff, 0x1f, 0x00, 0x00, 0xff, 0xff, 0xbf, 0xf3, 0xdb,
-	0x3a, 0x53, 0x12, 0x00, 0x00,
+	// 1343 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x57, 0x4d, 0x6f, 0xdb, 0x46,
+	0x13, 0x16, 0x25, 0x59, 0x96, 0x46, 0xca, 0xd7, 0xda, 0xb0, 0x15, 0x25, 0xaf, 0x64, 0x30, 0x6f,
+	0x5b, 0x35, 0x69, 0xc9, 0xda, 0x39, 0x14, 0x4d, 0x91, 0xb6, 0xb1, 0xe1, 0xc2, 0x3e, 0xa8, 0x09,
+	0xe8, 0x3a, 0x40, 0xdb, 0x83, 0x42, 0x91, 0x6b, 0x6a, 0x51, 0x9a, 0x24, 0xb8, 0x4b, 0xc1, 0xba,
+	0xf7, 0xd0, 0x4b, 0x81, 0x02, 0x05, 0x7a, 0x6d, 0x6e, 0xfd, 0x0d, 0xbd, 0xb4, 0xd7, 0x1c, 0x73,
+	0xec, 0xc9, 0x68, 0x92, 0x4b, 0x81, 0x9e, 0x9a, 0x5f, 0x50, 0x70, 0xb9, 0xa2, 0x49, 0x7d, 0xd0,
+	0x32, 0xec, 0xdc, 0x76, 0x76, 0x67, 0x9e, 0xd9, 0x7d, 0x66, 0x76, 0x66, 0x17, 0x6e, 0xd8, 0x86,
+	0xa7, 0x52, 0xec, 0x0f, 0x88, 0x81, 0x55, 0x6c, 0x1b, 0xea, 0x60, 0x5d, 0x65, 0x47, 0x8a, 0xe7,
+	0xbb, 0xcc, 0x45, 0xc8, 0x36, 0x3c, 0x45, 0x2c, 0x2a, 0xd8, 0x36, 0x94, 0xc1, 0x7a, 0x63, 0xd9,
+	0x72, 0x2d, 0x97, 0x2f, 0xab, 0xe1, 0x28, 0xd2, 0x6c, 0x5c, 0xb7, 0x5c, 0xd7, 0xb2, 0xb1, 0xca,
+	0xa5, 0x5e, 0x70, 0xa0, 0xea, 0xce, 0x50, 0x2c, 0xb5, 0x48, 0xcf, 0x50, 0x0d, 0xd7, 0xc7, 0xaa,
+	0x61, 0x13, 0xec, 0xb0, 0xd0, 0x43, 0x34, 0x8a, 0x14, 0xe4, 0x9f, 0xf2, 0x70, 0xa5, 0x43, 0xad,
+	0x2d, 0x1f, 0xeb, 0x0c, 0x6f, 0xf1, 0x15, 0xb4, 0x0e, 0x95, 0x48, 0xa7, 0x4b, 0xcc, 0xba, 0xb4,
+	0x26, 0xb5, 0x2b, 0x9b, 0xcb, 0xaf, 0x8f, 0x5b, 0x57, 0x87, 0xfa, 0xa1, 0x7d, 0x4f, 0x8e, 0x97,
+	0x64, 0xad, 0x1c, 0x8d, 0x77, 0x4d, 0xf4, 0x08, 0x6a, 0x62, 0x9e, 0x32, 0x9d, 0xe1, 0x7a, 0x7e,
+	0x4d, 0x6a, 0x57, 0x37, 0x96, 0x95, 0x68, 0x67, 0xca, 0x68, 0x67, 0xca, 0x03, 0x67, 0xb8, 0xb9,
+	0xfa, 0xfa, 0xb8, 0xb5, 0x94, 0xc2, 0xe2, 0x36, 0xb2, 0x56, 0x8d, 0xc4, 0xbd, 0x50, 0x42, 0x5f,
+	0xc1, 0x15, 0xc3, 0x75, 0x28, 0x76, 0x68, 0x40, 0x05, 0x68, 0x21, 0x03, 0xb4, 0xf1, 0xfa, 0xb8,
+	0xb5, 0x22, 0x40, 0xd3, 0x66, 0xb2, 0x76, 0x39, 0x9e, 0x89, 0xa0, 0x57, 0xa0, 0x44, 0x89, 0xe5,
+	0x60, 0xbf, 0x5e, 0x5c, 0x93, 0xda, 0x35, 0x4d, 0x48, 0xf7, 0xca, 0xdf, 0x3f, 0x6d, 0xe5, 0xfe,
+	0x7e, 0xda, 0xca, 0xc9, 0xdf, 0xc0, 0xea, 0x18, 0x29, 0x1a, 0xa6, 0x5e, 0x88, 0x82, 0xea, 0xb0,
+	0x78, 0x88, 0x29, 0xd5, 0x2d, 0xcc, 0xa9, 0xa9, 0x69, 0x23, 0x11, 0xdd, 0x84, 0x4a, 0x08, 0xa4,
+	0xb3, 0xc0, 0x8f, 0x08, 0xa8, 0x69, 0x27, 0x13, 0x09, 0xf0, 0xdf, 0x24, 0x4e, 0xf9, 0xbe, 0x67,
+	0x9e, 0x8b, 0xf2, 0xf7, 0xa0, 0xd4, 0xc7, 0xba, 0x89, 0xfd, 0x2c, 0xb2, 0x35, 0xa1, 0x83, 0x6e,
+	0xc1, 0x25, 0xe2, 0x18, 0x76, 0x60, 0xe2, 0x04, 0x99, 0x65, 0xad, 0x26, 0x26, 0xcf, 0x46, 0x4c,
+	0x72, 0xeb, 0x17, 0x48, 0x0c, 0x83, 0xe5, 0x0e, 0xb5, 0x1e, 0x58, 0x96, 0x8f, 0x2d, 0x9d, 0xe1,
+	0x4e, 0x64, 0x4e, 0x13, 0xdb, 0x92, 0x92, 0xdb, 0x42, 0x0d, 0x28, 0x0b, 0x17, 0xb4, 0x9e, 0x5f,
+	0x2b, 0xb4, 0x6b, 0x5a, 0x2c, 0xa3, 0x26, 0x40, 0xec, 0x82, 0xd6, 0x0b, 0x7c, 0x35, 0x31, 0x93,
+	0xf0, 0xfa, 0x04, 0x6e, 0x4e, 0xf3, 0x7a, 0x81, 0xe7, 0xfa, 0x57, 0x82, 0xa5, 0x0e, 0xb5, 0x1e,
+	0x63, 0x9f, 0x1c, 0x0c, 0x3b, 0xf8, 0xb0, 0x87, 0x7d, 0xda, 0x27, 0x1e, 0xba, 0x31, 0x11, 0xf4,
+	0x44, 0x78, 0x57, 0xa0, 0xe4, 0xf9, 0xf8, 0x80, 0x1c, 0x09, 0x64, 0x21, 0x21, 0x04, 0x45, 0x4f,
+	0x67, 0x7d, 0x1e, 0xbf, 0x8a, 0xc6, 0xc7, 0x68, 0x19, 0x16, 0x06, 0xba, 0x1d, 0x60, 0x11, 0xb6,
+	0x48, 0x40, 0x5b, 0x50, 0xf3, 0x7c, 0xd7, 0x3d, 0xe8, 0xf6, 0x31, 0xb1, 0xfa, 0xac, 0xbe, 0xc0,
+	0xd3, 0xa4, 0xa1, 0x90, 0x9e, 0xa1, 0x84, 0x25, 0x41, 0x11, 0x85, 0x60, 0xb0, 0xae, 0xec, 0x70,
+	0x8d, 0xcd, 0xe2, 0xb3, 0xe3, 0x56, 0x4e, 0xab, 0x72, 0xab, 0x68, 0x2a, 0x84, 0xe6, 0x62, 0xbd,
+	0x14, 0x41, 0x73, 0x21, 0x11, 0x91, 0xc5, 0x19, 0x89, 0xd2, 0x85, 0x1b, 0x53, 0x8e, 0x7c, 0x81,
+	0xa4, 0x1e, 0x4b, 0xb0, 0x12, 0x7b, 0xf8, 0xc2, 0x75, 0xde, 0x04, 0xaf, 0xe3, 0x0c, 0x16, 0xcf,
+	0xc5, 0xe0, 0xc2, 0x74, 0x06, 0x4b, 0x33, 0x18, 0xec, 0x41, 0x73, 0xfa, 0xf9, 0x2e, 0x90, 0xc4,
+	0x3f, 0x24, 0x68, 0x8c, 0xdd, 0xe7, 0x3d, 0xe6, 0x63, 0xfd, 0x70, 0xab, 0x1f, 0x38, 0xdf, 0xa2,
+	0xcf, 0xa0, 0x48, 0x1c, 0xc2, 0x38, 0x7a, 0x75, 0xe3, 0xb6, 0x32, 0xd9, 0x91, 0x94, 0x49, 0xd3,
+	0x5d, 0x87, 0xb0, 0x9d, 0x9c, 0xc6, 0x2d, 0xd1, 0x63, 0xa8, 0x45, 0x05, 0xa8, 0x6b, 0x84, 0x88,
+	0xa2, 0x54, 0xad, 0xcf, 0x87, 0xb4, 0xc3, 0x2d, 0xf9, 0x56, 0x76, 0x72, 0x5a, 0xb5, 0x7f, 0x22,
+	0x6e, 0x2e, 0xc2, 0x02, 0x07, 0x94, 0x7f, 0x90, 0x60, 0x65, 0xfa, 0x1e, 0xb2, 0xd3, 0x60, 0xa2,
+	0x1e, 0xe6, 0x33, 0xeb, 0x61, 0x21, 0x55, 0x78, 0xae, 0x43, 0x99, 0x0d, 0x3d, 0xdc, 0x0d, 0x7c,
+	0x9b, 0xe7, 0x44, 0x45, 0x5b, 0x0c, 0xe5, 0x7d, 0xdf, 0x96, 0xef, 0xc2, 0xff, 0x32, 0x0f, 0x12,
+	0xe6, 0x99, 0xa9, 0x33, 0x5d, 0x44, 0x8c, 0x8f, 0xe5, 0x7f, 0x24, 0xb8, 0xba, 0x7d, 0xe4, 0xd9,
+	0xc4, 0x20, 0x51, 0xf7, 0xd3, 0xf0, 0x01, 0xfa, 0x18, 0xaa, 0x9e, 0x8f, 0x07, 0xa3, 0xdc, 0x93,
+	0x4e, 0xcb, 0x3d, 0x0d, 0x42, 0x75, 0x91, 0x74, 0x32, 0x5c, 0xe2, 0xc6, 0xfc, 0x6c, 0xe1, 0xf9,
+	0xa3, 0x24, 0xe0, 0x88, 0xdc, 0xc3, 0xae, 0x89, 0x3e, 0x1c, 0xeb, 0xd9, 0x19, 0xed, 0x35, 0xdd,
+	0x9a, 0xef, 0x4f, 0xb6, 0xe6, 0x62, 0x86, 0xed, 0x58, 0xfb, 0x95, 0x7f, 0x2e, 0xc0, 0xed, 0x0e,
+	0xb5, 0xf6, 0x3c, 0x6c, 0x04, 0xb6, 0xce, 0xc8, 0x00, 0x27, 0x19, 0xdb, 0xd4, 0x99, 0xd1, 0x4f,
+	0x26, 0xe1, 0xa3, 0x54, 0x12, 0xde, 0x9b, 0x96, 0x3a, 0xa7, 0x43, 0xa5, 0x92, 0x52, 0x83, 0x4a,
+	0xe0, 0x10, 0xd6, 0xe5, 0xb0, 0x51, 0x46, 0xde, 0x3d, 0x03, 0xec, 0xbe, 0x43, 0x98, 0xc0, 0x2b,
+	0x07, 0x62, 0x8c, 0xfa, 0x70, 0x8d, 0x63, 0xa6, 0xb2, 0xbd, 0x70, 0xe6, 0x2d, 0x87, 0xd8, 0xe9,
+	0xb4, 0xbf, 0x12, 0xa4, 0xa7, 0xd0, 0x43, 0xe0, 0x5e, 0xbb, 0xd8, 0x31, 0x05, 0xed, 0x1b, 0x67,
+	0x74, 0xb0, 0xed, 0x98, 0x3b, 0x39, 0x6d, 0x31, 0x88, 0x86, 0x27, 0x77, 0x69, 0x1b, 0xde, 0x9e,
+	0x8f, 0xc9, 0xcc, 0xab, 0x25, 0x7f, 0x97, 0x87, 0xd6, 0x29, 0xd4, 0xa1, 0x55, 0x58, 0x8c, 0x42,
+	0x30, 0x32, 0x2f, 0x71, 0x26, 0xcd, 0xd4, 0xd5, 0xca, 0xa7, 0xae, 0xd6, 0xb9, 0x9e, 0x30, 0x68,
+	0x17, 0xa0, 0xa7, 0xd3, 0x91, 0x65, 0xd4, 0x0a, 0xff, 0x3f, 0x8d, 0xb7, 0xf1, 0x7b, 0x28, 0x4a,
+	0x7a, 0x25, 0xb4, 0x8e, 0x5c, 0xbc, 0x05, 0x97, 0x4d, 0xec, 0x61, 0xc7, 0xc4, 0x8e, 0x31, 0xec,
+	0x12, 0x93, 0xd6, 0x4b, 0x6b, 0x85, 0x76, 0x45, 0xbb, 0x74, 0x32, 0xbb, 0x6b, 0x52, 0x79, 0x7f,
+	0x26, 0x9b, 0x63, 0x41, 0x9e, 0x4d, 0xc6, 0xa8, 0x56, 0xe4, 0x13, 0xb5, 0xe2, 0x23, 0x68, 0x66,
+	0x87, 0x76, 0x26, 0x9c, 0xfc, 0x42, 0x82, 0xd5, 0x87, 0xbd, 0xf0, 0xbc, 0xd8, 0xe4, 0x47, 0xf9,
+	0xd2, 0xd7, 0x1d, 0x4a, 0x18, 0x71, 0x9d, 0x37, 0x5f, 0x6d, 0x1e, 0x40, 0xd5, 0x73, 0x29, 0x1b,
+	0x39, 0x28, 0xcc, 0xd9, 0x4a, 0x21, 0x34, 0x4a, 0xb8, 0x09, 0x21, 0x62, 0x37, 0x45, 0xe1, 0xc6,
+	0xa5, 0x4c, 0xb8, 0x09, 0x9f, 0x05, 0xef, 0xee, 0x31, 0xc2, 0x8c, 0x3e, 0x36, 0x33, 0x78, 0xd2,
+	0x30, 0x0d, 0x6c, 0x86, 0x3a, 0x50, 0xf6, 0x45, 0x37, 0x15, 0x47, 0xbe, 0x33, 0x2d, 0x27, 0x66,
+	0x3c, 0x79, 0xc5, 0x16, 0x63, 0x08, 0xd4, 0x83, 0x25, 0x57, 0xf0, 0xdb, 0x65, 0x31, 0xb7, 0xa2,
+	0xc4, 0x4c, 0x45, 0x9e, 0x11, 0x0e, 0x81, 0x8c, 0x46, 0x68, 0x27, 0x2b, 0xf2, 0x2f, 0x12, 0xdc,
+	0xd9, 0x3e, 0xc2, 0x46, 0xc0, 0x70, 0xd6, 0x65, 0x8d, 0x1f, 0x09, 0x99, 0x5d, 0x70, 0x0f, 0x16,
+	0xc2, 0xdc, 0x88, 0x9e, 0xcf, 0xd5, 0x8d, 0xfb, 0x53, 0x0b, 0xc9, 0xbc, 0x6c, 0x6a, 0x11, 0xd6,
+	0xc6, 0xef, 0x25, 0x28, 0x74, 0xa8, 0x85, 0x9e, 0x40, 0x2d, 0xf5, 0xad, 0xbc, 0x35, 0x83, 0xda,
+	0xa4, 0x52, 0xe3, 0xce, 0x1c, 0x4a, 0xf1, 0xd9, 0x9e, 0x40, 0x2d, 0xf5, 0x8b, 0xba, 0x35, 0x47,
+	0xf0, 0x1a, 0x67, 0x89, 0x30, 0xa2, 0x80, 0x26, 0xdb, 0x39, 0x52, 0xe6, 0x80, 0x48, 0xb4, 0xb0,
+	0x33, 0xb9, 0x6c, 0x4b, 0xe8, 0x57, 0x09, 0xe4, 0xd3, 0x0b, 0x31, 0xfa, 0x64, 0x06, 0xea, 0x9c,
+	0x8d, 0xb5, 0xf1, 0xe9, 0xf4, 0xf2, 0x37, 0x77, 0x6a, 0xb5, 0x25, 0xe4, 0xc2, 0xb5, 0xc9, 0xef,
+	0x5a, 0x7b, 0xc6, 0xbe, 0x26, 0x34, 0x1b, 0x1f, 0xcc, 0xab, 0x19, 0xc7, 0xc3, 0x86, 0xab, 0x13,
+	0xdf, 0xa8, 0x77, 0x66, 0xa0, 0x8c, 0x2b, 0x36, 0xd4, 0x39, 0x15, 0x63, 0x6f, 0x01, 0x2c, 0x4d,
+	0xfb, 0x5f, 0xdc, 0xce, 0xc4, 0x49, 0xe9, 0x36, 0x36, 0xe6, 0xd7, 0x8d, 0xcb, 0xca, 0xe7, 0xcf,
+	0x5e, 0x34, 0x73, 0xcf, 0x5e, 0x36, 0xa5, 0xe7, 0x2f, 0x9b, 0xd2, 0x5f, 0x2f, 0x9b, 0xd2, 0x8f,
+	0xaf, 0x9a, 0xb9, 0xe7, 0xaf, 0x9a, 0xb9, 0x3f, 0x5f, 0x35, 0x73, 0x5f, 0xb7, 0x2d, 0xc2, 0xfa,
+	0x41, 0x4f, 0x31, 0xdc, 0x43, 0x35, 0xec, 0x08, 0x46, 0x5f, 0x27, 0x8e, 0xad, 0xf7, 0x54, 0xdb,
+	0xf0, 0xde, 0xb7, 0x5c, 0xd5, 0xc7, 0xb6, 0x3e, 0x54, 0xb1, 0x6d, 0xf4, 0x4a, 0xfc, 0x19, 0x76,
+	0xf7, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x79, 0x64, 0xab, 0x79, 0x67, 0x12, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1110,9 +1175,6 @@ type MsgClient interface {
 	UpdateClient(ctx context.Context, in *MsgUpdateClient, opts ...grpc.CallOption) (*MsgUpdateClientResponse, error)
 	// UpdateClientStream defines a rpc handler method for MsgUpdateClient.
 	UpdateClientStream(ctx context.Context, opts ...grpc.CallOption) (Msg_UpdateClientStreamClient, error)
-	// ExecuteSpeculativeUpdateClientBatch defines a rpc handler method for
-	// explicit-state speculative UpdateClient batch execution.
-	ExecuteSpeculativeUpdateClientBatch(ctx context.Context, in *ExecuteSpeculativeUpdateClientBatchRequest, opts ...grpc.CallOption) (*ExecuteSpeculativeUpdateClientBatchResponse, error)
 	// SpeculativeUpdateClientBatchStream defines a client-streaming rpc
 	// handler method for explicit-state speculative UpdateClient batch execution.
 	SpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_SpeculativeUpdateClientBatchStreamClient, error)
@@ -1184,15 +1246,6 @@ func (x *msgUpdateClientStreamClient) CloseAndRecv() (*MsgUpdateClientResponse, 
 	return m, nil
 }
 
-func (c *msgClient) ExecuteSpeculativeUpdateClientBatch(ctx context.Context, in *ExecuteSpeculativeUpdateClientBatchRequest, opts ...grpc.CallOption) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	out := new(ExecuteSpeculativeUpdateClientBatchResponse)
-	err := c.cc.Invoke(ctx, "/lcp.service.elc.v1.Msg/ExecuteSpeculativeUpdateClientBatch", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *msgClient) SpeculativeUpdateClientBatchStream(ctx context.Context, opts ...grpc.CallOption) (Msg_SpeculativeUpdateClientBatchStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &_Msg_serviceDesc.Streams[1], "/lcp.service.elc.v1.Msg/SpeculativeUpdateClientBatchStream", opts...)
 	if err != nil {
@@ -1262,9 +1315,6 @@ type MsgServer interface {
 	UpdateClient(context.Context, *MsgUpdateClient) (*MsgUpdateClientResponse, error)
 	// UpdateClientStream defines a rpc handler method for MsgUpdateClient.
 	UpdateClientStream(Msg_UpdateClientStreamServer) error
-	// ExecuteSpeculativeUpdateClientBatch defines a rpc handler method for
-	// explicit-state speculative UpdateClient batch execution.
-	ExecuteSpeculativeUpdateClientBatch(context.Context, *ExecuteSpeculativeUpdateClientBatchRequest) (*ExecuteSpeculativeUpdateClientBatchResponse, error)
 	// SpeculativeUpdateClientBatchStream defines a client-streaming rpc
 	// handler method for explicit-state speculative UpdateClient batch execution.
 	SpeculativeUpdateClientBatchStream(Msg_SpeculativeUpdateClientBatchStreamServer) error
@@ -1288,9 +1338,6 @@ func (*UnimplementedMsgServer) UpdateClient(ctx context.Context, req *MsgUpdateC
 }
 func (*UnimplementedMsgServer) UpdateClientStream(srv Msg_UpdateClientStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method UpdateClientStream not implemented")
-}
-func (*UnimplementedMsgServer) ExecuteSpeculativeUpdateClientBatch(ctx context.Context, req *ExecuteSpeculativeUpdateClientBatchRequest) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ExecuteSpeculativeUpdateClientBatch not implemented")
 }
 func (*UnimplementedMsgServer) SpeculativeUpdateClientBatchStream(srv Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented")
@@ -1369,24 +1416,6 @@ func (x *msgUpdateClientStreamServer) Recv() (*MsgUpdateClientStreamChunk, error
 		return nil, err
 	}
 	return m, nil
-}
-
-func _Msg_ExecuteSpeculativeUpdateClientBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExecuteSpeculativeUpdateClientBatchRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MsgServer).ExecuteSpeculativeUpdateClientBatch(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/lcp.service.elc.v1.Msg/ExecuteSpeculativeUpdateClientBatch",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MsgServer).ExecuteSpeculativeUpdateClientBatch(ctx, req.(*ExecuteSpeculativeUpdateClientBatchRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Msg_SpeculativeUpdateClientBatchStream_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -1481,10 +1510,6 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateClient",
 			Handler:    _Msg_UpdateClient_Handler,
-		},
-		{
-			MethodName: "ExecuteSpeculativeUpdateClientBatch",
-			Handler:    _Msg_ExecuteSpeculativeUpdateClientBatch_Handler,
 		},
 		{
 			MethodName: "AggregateMessages",
@@ -2234,109 +2259,6 @@ func (m *ExplicitStateRef) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *SpeculativeUpdateClientUnit) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *SpeculativeUpdateClientUnit) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *SpeculativeUpdateClientUnit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.DependencyIds) > 0 {
-		for iNdEx := len(m.DependencyIds) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.DependencyIds[iNdEx])
-			copy(dAtA[i:], m.DependencyIds[iNdEx])
-			i = encodeVarintTx(dAtA, i, uint64(len(m.DependencyIds[iNdEx])))
-			i--
-			dAtA[i] = 0x22
-		}
-	}
-	{
-		size, err := m.BaseState.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintTx(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0x1a
-	{
-		size, err := m.Update.MarshalToSizedBuffer(dAtA[:i])
-		if err != nil {
-			return 0, err
-		}
-		i -= size
-		i = encodeVarintTx(dAtA, i, uint64(size))
-	}
-	i--
-	dAtA[i] = 0x12
-	if len(m.UnitId) > 0 {
-		i -= len(m.UnitId)
-		copy(dAtA[i:], m.UnitId)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.UnitId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Units) > 0 {
-		for iNdEx := len(m.Units) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Units[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintTx(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x12
-		}
-	}
-	if len(m.ClientId) > 0 {
-		i -= len(m.ClientId)
-		copy(dAtA[i:], m.ClientId)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.ClientId)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2390,16 +2312,16 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Init) MarshalToSizedBuffer(d
 	}
 	return len(dAtA) - i, nil
 }
-func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalTo(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
-	if m.Unit != nil {
+	if m.UnitInit != nil {
 		{
-			size, err := m.Unit.MarshalToSizedBuffer(dAtA[:i])
+			size, err := m.UnitInit.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -2408,6 +2330,48 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) MarshalToSizedBuffer(d
 		}
 		i--
 		dAtA[i] = 0x12
+	}
+	return len(dAtA) - i, nil
+}
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.UnitHeaderChunk != nil {
+		{
+			size, err := m.UnitHeaderChunk.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTx(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	return len(dAtA) - i, nil
+}
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.UnitEnd != nil {
+		{
+			size, err := m.UnitEnd.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTx(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
 	}
 	return len(dAtA) - i, nil
 }
@@ -2435,6 +2399,146 @@ func (m *SpeculativeUpdateClientBatchStreamInit) MarshalToSizedBuffer(dAtA []byt
 		i -= len(m.ClientId)
 		copy(dAtA[i:], m.ClientId)
 		i = encodeVarintTx(dAtA, i, uint64(len(m.ClientId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SpeculativeUpdateClientUnitInit) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SpeculativeUpdateClientUnitInit) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SpeculativeUpdateClientUnitInit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.DependencyIds) > 0 {
+		for iNdEx := len(m.DependencyIds) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.DependencyIds[iNdEx])
+			copy(dAtA[i:], m.DependencyIds[iNdEx])
+			i = encodeVarintTx(dAtA, i, uint64(len(m.DependencyIds[iNdEx])))
+			i--
+			dAtA[i] = 0x32
+		}
+	}
+	{
+		size, err := m.BaseState.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintTx(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x2a
+	if len(m.Signer) > 0 {
+		i -= len(m.Signer)
+		copy(dAtA[i:], m.Signer)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Signer)))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.IncludeState {
+		i--
+		if m.IncludeState {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x18
+	}
+	if len(m.TypeUrl) > 0 {
+		i -= len(m.TypeUrl)
+		copy(dAtA[i:], m.TypeUrl)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.TypeUrl)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.UnitId) > 0 {
+		i -= len(m.UnitId)
+		copy(dAtA[i:], m.UnitId)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.UnitId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SpeculativeUpdateClientUnitHeaderChunk) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SpeculativeUpdateClientUnitHeaderChunk) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SpeculativeUpdateClientUnitHeaderChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Data) > 0 {
+		i -= len(m.Data)
+		copy(dAtA[i:], m.Data)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.Data)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.UnitId) > 0 {
+		i -= len(m.UnitId)
+		copy(dAtA[i:], m.UnitId)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.UnitId)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SpeculativeUpdateClientUnitEnd) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SpeculativeUpdateClientUnitEnd) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SpeculativeUpdateClientUnitEnd) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.UnitId) > 0 {
+		i -= len(m.UnitId)
+		copy(dAtA[i:], m.UnitId)
+		i = encodeVarintTx(dAtA, i, uint64(len(m.UnitId)))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -2921,48 +3025,6 @@ func (m *ExplicitStateRef) Size() (n int) {
 	return n
 }
 
-func (m *SpeculativeUpdateClientUnit) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.UnitId)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
-	l = m.Update.Size()
-	n += 1 + l + sovTx(uint64(l))
-	l = m.BaseState.Size()
-	n += 1 + l + sovTx(uint64(l))
-	if len(m.DependencyIds) > 0 {
-		for _, s := range m.DependencyIds {
-			l = len(s)
-			n += 1 + l + sovTx(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.ClientId)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
-	if len(m.Units) > 0 {
-		for _, e := range m.Units {
-			l = e.Size()
-			n += 1 + l + sovTx(uint64(l))
-		}
-	}
-	return n
-}
-
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Size() (n int) {
 	if m == nil {
 		return 0
@@ -2987,14 +3049,38 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Init) Size() (n int) {
 	}
 	return n
 }
-func (m *MsgSpeculativeUpdateClientBatchStreamChunk_Unit) Size() (n int) {
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Unit != nil {
-		l = m.Unit.Size()
+	if m.UnitInit != nil {
+		l = m.UnitInit.Size()
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.UnitHeaderChunk != nil {
+		l = m.UnitHeaderChunk.Size()
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.UnitEnd != nil {
+		l = m.UnitEnd.Size()
 		n += 1 + l + sovTx(uint64(l))
 	}
 	return n
@@ -3006,6 +3092,68 @@ func (m *SpeculativeUpdateClientBatchStreamInit) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.ClientId)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+
+func (m *SpeculativeUpdateClientUnitInit) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.UnitId)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = len(m.TypeUrl)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	if m.IncludeState {
+		n += 2
+	}
+	l = len(m.Signer)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = m.BaseState.Size()
+	n += 1 + l + sovTx(uint64(l))
+	if len(m.DependencyIds) > 0 {
+		for _, s := range m.DependencyIds {
+			l = len(s)
+			n += 1 + l + sovTx(uint64(l))
+		}
+	}
+	return n
+}
+
+func (m *SpeculativeUpdateClientUnitHeaderChunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.UnitId)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	l = len(m.Data)
+	if l > 0 {
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
+
+func (m *SpeculativeUpdateClientUnitEnd) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.UnitId)
 	if l > 0 {
 		n += 1 + l + sovTx(uint64(l))
 	}
@@ -5267,302 +5415,6 @@ func (m *ExplicitStateRef) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *SpeculativeUpdateClientUnit) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTx
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SpeculativeUpdateClientUnit: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SpeculativeUpdateClientUnit: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UnitId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.UnitId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Update", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.Update.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BaseState", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if err := m.BaseState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DependencyIds", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.DependencyIds = append(m.DependencyIds, string(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTx(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTx
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ExecuteSpeculativeUpdateClientBatchRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTx
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ExecuteSpeculativeUpdateClientBatchRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ExecuteSpeculativeUpdateClientBatchRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ClientId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.ClientId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Units", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Units = append(m.Units, &SpeculativeUpdateClientUnit{})
-			if err := m.Units[len(m.Units)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTx(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTx
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5629,7 +5481,7 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) erro
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Unit", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitInit", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -5656,11 +5508,81 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) erro
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			v := &SpeculativeUpdateClientUnit{}
+			v := &SpeculativeUpdateClientUnitInit{}
 			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_Unit{v}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit{v}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitHeaderChunk", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &SpeculativeUpdateClientUnitHeaderChunk{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk{v}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitEnd", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &SpeculativeUpdateClientUnitEnd{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -5743,6 +5665,437 @@ func (m *SpeculativeUpdateClientBatchStreamInit) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			m.ClientId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SpeculativeUpdateClientUnitInit) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitInit: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitInit: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UnitId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TypeUrl", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.TypeUrl = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IncludeState", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IncludeState = bool(v != 0)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signer", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signer = append(m.Signer[:0], dAtA[iNdEx:postIndex]...)
+			if m.Signer == nil {
+				m.Signer = []byte{}
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BaseState", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.BaseState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DependencyIds", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DependencyIds = append(m.DependencyIds, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SpeculativeUpdateClientUnitHeaderChunk) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitHeaderChunk: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitHeaderChunk: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UnitId = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTx(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTx
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SpeculativeUpdateClientUnitEnd) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitEnd: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientUnitEnd: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnitId", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UnitId = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

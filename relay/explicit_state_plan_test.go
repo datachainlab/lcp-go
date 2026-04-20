@@ -264,33 +264,65 @@ func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBat
 	req := &ExecuteSpeculativeUpdateClientBatchRequest{
 		ClientId: init.ClientId,
 	}
+	var openUnit *SpeculativeUpdateClientUnit
 	for {
 		chunk, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
+				if openUnit != nil {
+					return nil, fmt.Errorf("unexpected EOF while unit %q is open", openUnit.UnitId)
+				}
 				break
 			}
 			return nil, err
 		}
-		unit := chunk.GetUnit()
-		if unit == nil {
+		switch c := chunk.GetChunk().(type) {
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit:
+			if openUnit != nil {
+				return nil, fmt.Errorf("received unit init while unit %q is open", openUnit.UnitId)
+			}
+			if c.UnitInit == nil {
+				return nil, fmt.Errorf("received nil unit init")
+			}
+			openUnit = &SpeculativeUpdateClientUnit{
+				UnitId: c.UnitInit.UnitId,
+				Update: &elc.MsgUpdateClient{
+					ClientId:     init.ClientId,
+					Header:       &codectypes.Any{TypeUrl: c.UnitInit.TypeUrl},
+					IncludeState: c.UnitInit.IncludeState,
+					Signer:       append([]byte(nil), c.UnitInit.Signer...),
+				},
+				BaseState:     decodeGeneratedExplicitStateRef(&c.UnitInit.BaseState),
+				DependencyIds: append([]string(nil), c.UnitInit.DependencyIds...),
+			}
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk:
+			if openUnit == nil {
+				return nil, fmt.Errorf("received unit header chunk without open unit")
+			}
+			if c.UnitHeaderChunk == nil {
+				return nil, fmt.Errorf("received nil unit header chunk")
+			}
+			if c.UnitHeaderChunk.UnitId != openUnit.UnitId {
+				return nil, fmt.Errorf("unit header chunk id mismatch: open=%q chunk=%q", openUnit.UnitId, c.UnitHeaderChunk.UnitId)
+			}
+			openUnit.Update.Header.Value = append(openUnit.Update.Header.Value, c.UnitHeaderChunk.Data...)
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd:
+			if openUnit == nil {
+				return nil, fmt.Errorf("received unit end without open unit")
+			}
+			if c.UnitEnd == nil {
+				return nil, fmt.Errorf("received nil unit end")
+			}
+			if c.UnitEnd.UnitId != openUnit.UnitId {
+				return nil, fmt.Errorf("unit end id mismatch: open=%q end=%q", openUnit.UnitId, c.UnitEnd.UnitId)
+			}
+			req.Units = append(req.Units, openUnit)
+			openUnit = nil
+		default:
 			return nil, fmt.Errorf("expected speculative batch unit chunk")
 		}
-		req.Units = append(req.Units, decodeGeneratedSpeculativeUnit(unit))
 	}
 	return req, nil
-}
-
-func decodeGeneratedSpeculativeUnit(unit *elc.SpeculativeUpdateClientUnit) *SpeculativeUpdateClientUnit {
-	if unit == nil {
-		return nil
-	}
-	return &SpeculativeUpdateClientUnit{
-		UnitId:        unit.UnitId,
-		Update:        &unit.Update,
-		BaseState:     decodeGeneratedExplicitStateRef(&unit.BaseState),
-		DependencyIds: append([]string(nil), unit.DependencyIds...),
-	}
 }
 
 func decodeGeneratedExplicitStateRef(ref *elc.ExplicitStateRef) *ExplicitStateRef {
@@ -351,6 +383,17 @@ func (p fakeOriginProver) ProveState(core.QueryContext, string, []byte) ([]byte,
 
 func (p fakeOriginProver) ProveHostConsensusState(core.QueryContext, ibcexported.Height, ibcexported.ConsensusState) ([]byte, error) {
 	return nil, nil
+}
+
+func makeSpeculativeBatchTestUpdate(clientID string, signer []byte, index int) *elc.MsgUpdateClient {
+	return &elc.MsgUpdateClient{
+		ClientId: clientID,
+		Header: &codectypes.Any{
+			TypeUrl: "/test.Header",
+			Value:   []byte(fmt.Sprintf("header-%d", index)),
+		},
+		Signer: signer,
+	}
 }
 
 func TestNewLinearExplicitStateUpdatePlan(t *testing.T) {
@@ -573,11 +616,11 @@ func TestExecuteExplicitStateUpdatePlanInvokesMultiLaneBatch(t *testing.T) {
 		"07-tendermint-11",
 		[][]*elc.MsgUpdateClient{
 			{
-				{ClientId: "07-tendermint-11", Signer: []byte("lane-0")},
-				{ClientId: "07-tendermint-11", Signer: []byte("lane-0")},
+				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-0"), 0),
+				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-0"), 1),
 			},
 			{
-				{ClientId: "07-tendermint-11", Signer: []byte("lane-1")},
+				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-1"), 2),
 			},
 		},
 		[][]*ExplicitStateRef{
@@ -842,10 +885,11 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	updates := make([]*elc.MsgUpdateClient, 0, maxSpeculativeBatchUnitsPerRequest+1)
 	baseStates := make([]*ExplicitStateRef, 0, maxSpeculativeBatchUnitsPerRequest+1)
 	for i := 0; i < maxSpeculativeBatchUnitsPerRequest+1; i++ {
-		updates = append(updates, &elc.MsgUpdateClient{
-			ClientId: "07-tendermint-11",
-			Signer:   []byte(fmt.Sprintf("s%02d", i)),
-		})
+		updates = append(updates, makeSpeculativeBatchTestUpdate(
+			"07-tendermint-11",
+			[]byte(fmt.Sprintf("s%02d", i)),
+			i,
+		))
 		baseStates = append(baseStates, &ExplicitStateRef{
 			PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + i)},
 			ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("c%d", i))},

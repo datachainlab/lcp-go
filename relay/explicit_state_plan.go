@@ -219,7 +219,12 @@ func (pr *Prover) executeExplicitStateUpdatePlan(
 			"batch_index", batchIndex,
 			"num_batches", len(batches),
 		)
-		resp, err := executeSpeculativeUpdateClientBatchStream(ctx, pr.lcpServiceClient, req)
+		resp, err := executeSpeculativeUpdateClientBatchStream(
+			ctx,
+			pr.lcpServiceClient,
+			req,
+			pr.config.GetMaxChunkSizeForUpdateClient(),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed explicit-state update client batch: %w", err)
 		}
