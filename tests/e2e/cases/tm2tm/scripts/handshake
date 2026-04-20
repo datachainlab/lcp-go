@@ -39,6 +39,46 @@ $RLY paths add $CHAINID_ONE $CHAINID_TWO $PATH_NAME --file=./configs/path.json
 
 retry 5 $RLY tx clients $PATH_NAME
 sleep 3
+
+# Start ELC updater services for both chains.
+# Each service polls its target chain and stores ELC update records in a local SQLite DB,
+# then serves them via gRPC so that activate-client can use them instead of querying
+# the LCP enclave directly.
+ELC_UPDATER_DB_0=/tmp/elc-updater-ibc0.sqlite
+ELC_UPDATER_DB_1=/tmp/elc-updater-ibc1.sqlite
+
+$RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_0
+$RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_1
+
+$RLY lcp elc-updater server \
+    --sqlite-path $ELC_UPDATER_DB_0 \
+    --grpc-addr :19090 \
+    --update-interval 10s \
+    ${PATH_NAME}:${CHAINID_ONE} &
+ELC_UPDATER_PID_0=$!
+
+$RLY lcp elc-updater server \
+    --sqlite-path $ELC_UPDATER_DB_1 \
+    --grpc-addr :19091 \
+    --update-interval 10s \
+    ${PATH_NAME}:${CHAINID_TWO} &
+ELC_UPDATER_PID_1=$!
+
+# Clean up ELC updater processes on exit
+cleanup_elc_updaters() {
+    echo "Stopping ELC updater services..."
+    kill $ELC_UPDATER_PID_0 $ELC_UPDATER_PID_1 2>/dev/null || true
+    wait $ELC_UPDATER_PID_0 $ELC_UPDATER_PID_1 2>/dev/null || true
+}
+trap cleanup_elc_updaters EXIT
+
+# Give ELC updater services time to start and produce initial records
+echo "Waiting for ELC updater services to produce records..."
+sleep 15
+
+# Enable ELC updater gRPC mode for activate-client and subsequent commands
+export YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=true
+
 retry 5 $RLY lcp activate-client $PATH_NAME --src=true
 retry 5 $RLY lcp activate-client $PATH_NAME --src=false
 sleep 3

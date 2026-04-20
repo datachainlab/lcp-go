@@ -27,6 +27,7 @@
     "key_expiration": $LCP_KEY_EXPIRATION,
     "key_update_buffer_time": 3600,
     "elc_client_id": "07-tendermint-1",
-    "is_debug_enclave": $IS_DEBUG_ENCLAVE
+    "is_debug_enclave": $IS_DEBUG_ENCLAVE,
+    "elc_updater_grpc_address": "localhost:19090"
   }
 }
