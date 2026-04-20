@@ -256,18 +256,29 @@ func (s *SqlxStorage) GetLatestForChain(ctx context.Context, chainID string, cou
 	return record, nil
 }
 
-// GetSequential retrieves sequential records starting from the specified height
-// If toHeight is not nil, stops when reaching a record with that ToHeight
+// GetSequential retrieves sequential records starting from the specified height.
+// The first record may have a fromHeight earlier than the requested fromHeight —
+// this handles the case where the requested height falls between record boundaries
+// (e.g., requesting from height 27 when records are {22→32, 32→42}).
+// If toHeight is not nil, stops when reaching a record with that ToHeight.
 func (s *SqlxStorage) GetSequential(ctx context.Context, chainID string, counterpartyChainID string, fromHeight ibcexported.Height, toHeight ibcexported.Height) ([]*Record, error) {
-	// Step 1: Get all records with fromHeight >= specified fromHeight
+	// Step 1: Get all candidate records.
+	// Include records whose range covers fromHeight (fromHeight <= requested AND toHeight > requested),
+	// as well as records that start at or after fromHeight.
 	query := selectClause + `
 		WHERE chain_id = :chain_id
 	`
 	if counterpartyChainID != "" {
 		query += " AND counterparty_chain_id = :counterparty_chain_id"
 	}
+	// A record is relevant if:
+	//   (a) it covers the requested fromHeight: fromHeight <= requested AND toHeight > requested, OR
+	//   (b) it starts at or after the requested fromHeight: fromHeight >= requested
+	// Since (b) is a subset of "toHeight > requested" when records don't overlap, we simplify to:
+	//   toHeight > requested fromHeight (any record whose range extends past the requested start)
 	query += `
-		AND (from_height_revision_number = :from_rev_num AND from_height_revision_height >= :from_rev_height)
+		AND from_height_revision_number = :from_rev_num
+		AND to_height_revision_height > :from_rev_height
 	`
 
 	namedArgs := map[string]interface{}{
@@ -315,9 +326,37 @@ func (s *SqlxStorage) GetSequential(ctx context.Context, chainID string, counter
 		return nil, errWithStack("error iterating rows: %w", err)
 	}
 
-	// Step 2-3: Build sequential chain starting from fromHeight
+	// Step 2: Find the starting record.
+	// First try an exact match on fromHeight. If none exists, find the record that
+	// covers fromHeight (i.e., record.fromHeight < fromHeight < record.toHeight).
+	startHeight := fromHeight
+	startKey := fmt.Sprintf("%d-%d", startHeight.GetRevisionNumber(), startHeight.GetRevisionHeight())
+	if _, exists := recordMap[startKey]; !exists {
+		// No exact match — find the covering record (the one with the largest
+		// fromHeight that is still less than the requested fromHeight).
+		var coveringFromKey string
+		for key := range recordMap {
+			for _, r := range recordMap[key] {
+				if r.FromHeight.RevisionNumber == fromHeight.GetRevisionNumber() &&
+					r.FromHeight.RevisionHeight < fromHeight.GetRevisionHeight() &&
+					r.ToHeight.RevisionHeight > fromHeight.GetRevisionHeight() {
+					if coveringFromKey == "" || r.FromHeight.RevisionHeight > recordMap[coveringFromKey][0].FromHeight.RevisionHeight {
+						coveringFromKey = key
+					}
+				}
+			}
+		}
+		if coveringFromKey != "" {
+			startHeight = clienttypes.NewHeight(
+				recordMap[coveringFromKey][0].FromHeight.RevisionNumber,
+				recordMap[coveringFromKey][0].FromHeight.RevisionHeight,
+			)
+		}
+	}
+
+	// Step 3: Build sequential chain starting from startHeight
 	var result []*Record
-	currentHeight := fromHeight
+	currentHeight := startHeight
 
 	for {
 		currentKey := fmt.Sprintf("%d-%d", currentHeight.GetRevisionNumber(), currentHeight.GetRevisionHeight())

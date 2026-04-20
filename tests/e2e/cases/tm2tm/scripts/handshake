@@ -28,6 +28,17 @@ RLYKEY=testkey
 CHAINID_TWO=ibc1
 PATH_NAME=ibc01
 
+# Helper to dump ELC updater DB contents for both chains
+dump_elc_records() {
+    echo "=== ELC updater records for $CHAINID_ONE ==="
+    $RLY lcp elc-updater dblist --sqlite-path $ELC_UPDATER_DB_0 2>/dev/null || true
+    echo "=== ELC updater records for $CHAINID_TWO ==="
+    $RLY lcp elc-updater dblist --sqlite-path $ELC_UPDATER_DB_1 2>/dev/null || true
+}
+
+ELC_UPDATER_DB_0=/tmp/elc-updater-ibc0.sqlite
+ELC_UPDATER_DB_1=/tmp/elc-updater-ibc1.sqlite
+
 $RLY tendermint keys show $CHAINID_ONE $RLYKEY
 $RLY tendermint keys show $CHAINID_TWO $RLYKEY
 
@@ -50,9 +61,6 @@ jq '.paths.ibc01.dst["client-id"]' < $RLY_CONFIG
 # Each service polls its target chain and stores ELC update records in a local SQLite DB,
 # then serves them via gRPC so that activate-client can use them instead of querying
 # the LCP enclave directly.
-ELC_UPDATER_DB_0=/tmp/elc-updater-ibc0.sqlite
-ELC_UPDATER_DB_1=/tmp/elc-updater-ibc1.sqlite
-
 $RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_0
 $RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_1
 
@@ -84,16 +92,25 @@ sleep 15
 # Enable ELC updater gRPC mode for activate-client and subsequent commands
 export YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=true
 
+dump_elc_records
+echo "=== Running activate-client (src) ==="
 retry 5 $RLY lcp activate-client $PATH_NAME --src=true
+
+dump_elc_records
+echo "=== Running activate-client (dst) ==="
 retry 5 $RLY lcp activate-client $PATH_NAME --src=false
 sleep 3
 
+dump_elc_records
+echo "=== Running tx connection ==="
 retry 5 $RLY tx connection $PATH_NAME
 
 echo "=== Connection IDs ==="
 jq '.paths.ibc01.src["connection-id"]' < $RLY_CONFIG
 jq '.paths.ibc01.dst["connection-id"]' < $RLY_CONFIG
 
+dump_elc_records
+echo "=== Running tx channel ==="
 retry 5 $RLY tx channel $PATH_NAME
 
 echo "=== Channel IDs ==="
