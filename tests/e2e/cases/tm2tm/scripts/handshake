@@ -21,6 +21,7 @@ retry() {
 }
 
 RLY="${RLY_BIN} --debug"
+RLY_CONFIG="$HOME/.yui-relayer/config/config.json"
 
 CHAINID_ONE=ibc0
 RLYKEY=testkey
@@ -36,9 +37,6 @@ retry 5 $RLY lcp-tendermint light init $CHAINID_TWO -f
 
 # add a path between chain0 and chain1
 $RLY paths add $CHAINID_ONE $CHAINID_TWO $PATH_NAME --file=./configs/path.json
-
-retry 5 $RLY tx clients $PATH_NAME
-sleep 3
 
 # Start ELC updater services for both chains.
 # Each service polls its target chain and stores ELC update records in a local SQLite DB,
@@ -72,15 +70,31 @@ cleanup_elc_updaters() {
 }
 trap cleanup_elc_updaters EXIT
 
-# Give ELC updater services time to start and produce initial records
-echo "Waiting for ELC updater services to produce records..."
-sleep 15
+# Give ELC updater services time to start
+sleep 5
 
-# Enable ELC updater gRPC mode for activate-client and subsequent commands
+# Enable ELC updater gRPC mode for all subsequent commands
 export YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=true
+
+retry 5 $RLY tx clients $PATH_NAME
+sleep 3
+
+echo "=== Client IDs ==="
+jq '.paths.ibc01.src["client-id"]' < $RLY_CONFIG
+jq '.paths.ibc01.dst["client-id"]' < $RLY_CONFIG
 
 retry 5 $RLY lcp activate-client $PATH_NAME --src=true
 retry 5 $RLY lcp activate-client $PATH_NAME --src=false
 sleep 3
+
 retry 5 $RLY tx connection $PATH_NAME
+
+echo "=== Connection IDs ==="
+jq '.paths.ibc01.src["connection-id"]' < $RLY_CONFIG
+jq '.paths.ibc01.dst["connection-id"]' < $RLY_CONFIG
+
 retry 5 $RLY tx channel $PATH_NAME
+
+echo "=== Channel IDs ==="
+jq '.paths.ibc01.src["channel-id"]' < $RLY_CONFIG
+jq '.paths.ibc01.dst["channel-id"]' < $RLY_CONFIG
