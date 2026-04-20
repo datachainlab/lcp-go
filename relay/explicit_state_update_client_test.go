@@ -174,7 +174,7 @@ func TestPlanExplicitStateHeaderLanesSingleHeader(t *testing.T) {
 	}
 }
 
-func TestPlanExplicitStateHeaderLanesAutoSelectsSingleHeaderForEmbeddedBaseState(t *testing.T) {
+func TestPlanExplicitStateHeaderLanesKeepsEmbeddedBaseStateUnitsOrderedByDefault(t *testing.T) {
 	units := []*ExplicitStateHeaderUnit{
 		{
 			Header:        &codectypes.Any{TypeUrl: "header-0"},
@@ -191,11 +191,46 @@ func TestPlanExplicitStateHeaderLanesAutoSelectsSingleHeaderForEmbeddedBaseState
 	if err != nil {
 		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
 	}
-	if len(lanes) != 2 {
+	if len(lanes) != 1 {
 		t.Fatalf("unexpected lane count: %d", len(lanes))
 	}
-	if len(lanes[0]) != 1 || len(lanes[1]) != 1 {
+	if len(lanes[0]) != 2 {
 		t.Fatalf("unexpected lane widths: %#v", lanes)
+	}
+}
+
+func TestBuildExplicitStateUpdatePlanKeepsEmbeddedBaseStateUnitsChainedByDefault(t *testing.T) {
+	units := []*ExplicitStateHeaderUnit{
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-0"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-1"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
+		},
+	}
+	pr := &Prover{}
+	plan, err := pr.buildExplicitStateUpdatePlanForHeaderUnits(
+		context.Background(),
+		units,
+		"07-tendermint-0",
+		false,
+		[]byte("signer"),
+	)
+	if err != nil {
+		t.Fatalf("buildExplicitStateUpdatePlanForHeaderUnits() error = %v", err)
+	}
+	if got := plan.LaneWidths; len(got) != 1 || got[0] != 2 {
+		t.Fatalf("unexpected lane widths: %v", got)
+	}
+	if len(plan.Units[0].DependencyIDs) != 0 {
+		t.Fatalf("unexpected first unit dependencies: %v", plan.Units[0].DependencyIDs)
+	}
+	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
+		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
 	}
 }
 

@@ -71,9 +71,6 @@ func planExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*
 	strategy := explicitStateLaneStrategy()
 	switch strategy {
 	case "":
-		if explicitStateHeaderUnitsHaveEmbeddedBaseState(headerUnits) {
-			return planSingleHeaderExplicitStateLanes(headerUnits)
-		}
 		return planConservativeExplicitStateHeaderLanes(headerUnits)
 	case "conservative":
 		return planConservativeExplicitStateHeaderLanes(headerUnits)
