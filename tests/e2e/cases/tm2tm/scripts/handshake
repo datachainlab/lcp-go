@@ -38,7 +38,15 @@ retry 5 $RLY lcp-tendermint light init $CHAINID_TWO -f
 # add a path between chain0 and chain1
 $RLY paths add $CHAINID_ONE $CHAINID_TWO $PATH_NAME --file=./configs/path.json
 
-# Start ELC updater services for both chains.
+# Create IBC clients first (without ELC updater — it needs client IDs in the config)
+retry 5 $RLY tx clients $PATH_NAME
+sleep 3
+
+echo "=== Client IDs ==="
+jq '.paths.ibc01.src["client-id"]' < $RLY_CONFIG
+jq '.paths.ibc01.dst["client-id"]' < $RLY_CONFIG
+
+# Start ELC updater services AFTER tx clients so they load the config with populated client IDs.
 # Each service polls its target chain and stores ELC update records in a local SQLite DB,
 # then serves them via gRPC so that activate-client can use them instead of querying
 # the LCP enclave directly.
@@ -70,18 +78,11 @@ cleanup_elc_updaters() {
 }
 trap cleanup_elc_updaters EXIT
 
-# Give ELC updater services time to start
-sleep 5
+# Give ELC updater services time to start and produce initial records
+sleep 15
 
-# Enable ELC updater gRPC mode for all subsequent commands
+# Enable ELC updater gRPC mode for activate-client and subsequent commands
 export YRLY_LCP_ELC_UPDATER_GRPC_ENABLE=true
-
-retry 5 $RLY tx clients $PATH_NAME
-sleep 3
-
-echo "=== Client IDs ==="
-jq '.paths.ibc01.src["client-id"]' < $RLY_CONFIG
-jq '.paths.ibc01.dst["client-id"]' < $RLY_CONFIG
 
 retry 5 $RLY lcp activate-client $PATH_NAME --src=true
 retry 5 $RLY lcp activate-client $PATH_NAME --src=false
