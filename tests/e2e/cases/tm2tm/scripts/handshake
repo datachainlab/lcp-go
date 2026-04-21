@@ -94,7 +94,6 @@ sleep 3
 # This is a known limitation to be addressed separately.
 unset YRLY_LCP_ELC_UPDATER_GRPC_ENABLE
 
-dump_elc_records
 echo "=== Running tx connection ==="
 retry 5 $RLY tx connection $PATH_NAME
 
