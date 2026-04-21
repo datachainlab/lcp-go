@@ -53,6 +53,7 @@ jq '.paths.ibc01.dst["client-id"]' < $RLY_CONFIG
 ELC_UPDATER_DB_0=/tmp/elc-updater-ibc0.sqlite
 ELC_UPDATER_DB_1=/tmp/elc-updater-ibc1.sqlite
 
+rm -f $ELC_UPDATER_DB_0 $ELC_UPDATER_DB_1
 $RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_0
 $RLY lcp elc-updater dbinit --sqlite-path $ELC_UPDATER_DB_1
 
