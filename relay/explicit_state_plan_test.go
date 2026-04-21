@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/std"
@@ -912,6 +913,94 @@ func TestUpdateELCForUpdateClientKeepsTendermintSharedTrustedHeightLinear(t *tes
 		if string(result.Signer) != string(wantSigner) {
 			t.Fatalf("unexpected result[%d] signer: %x", i, result.Signer)
 		}
+	}
+}
+
+func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+	t.Setenv(envExplicitStateUpdateClient, "true")
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	var captured *ExecuteSpeculativeUpdateClientBatchRequest
+	elc.RegisterQueryServer(server, &explicitStateIntegrationTestServer{captured: &captured})
+	elc.RegisterMsgServer(server, &explicitStateIntegrationTestServer{captured: &captured})
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	headers := []core.Header{
+		&tmclienttypes.Header{
+			TrustedHeight: clienttypes.Height{RevisionHeight: 10},
+			SignedHeader:  &tmproto.SignedHeader{Header: &tmproto.Header{Height: 11}},
+		},
+		&tmclienttypes.Header{
+			TrustedHeight: clienttypes.Height{RevisionHeight: 10},
+			SignedHeader:  &tmproto.SignedHeader{Header: &tmproto.Header{Height: 12}},
+		},
+	}
+	pr := &Prover{
+		config: ProverConfig{ElcClientId: "07-tendermint-11"},
+		codec:  coreCodec,
+		originProver: fakeOriginProver{
+			headers: headers,
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}
+
+	responses, err := pr.updateELC(context.Background(), "07-tendermint-11", true)
+	if err != nil {
+		t.Fatalf("updateELC() error = %v", err)
+	}
+	if captured == nil {
+		t.Fatal("expected speculative batch request to be captured")
+	}
+	if captured.ClientId != "07-tendermint-11" {
+		t.Fatalf("unexpected client id: %s", captured.ClientId)
+	}
+	if len(captured.Units) != 2 {
+		t.Fatalf("unexpected captured unit count: %d", len(captured.Units))
+	}
+	for i, unit := range captured.Units {
+		if unit.Update == nil {
+			t.Fatalf("unit[%d] update is nil", i)
+		}
+		if !unit.Update.IncludeState {
+			t.Fatalf("unit[%d] include_state is false", i)
+		}
+	}
+	if len(responses) != 2 {
+		t.Fatalf("unexpected response count: %d", len(responses))
 	}
 }
 

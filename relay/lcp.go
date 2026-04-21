@@ -401,23 +401,30 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 		return nil, err
 	}
 
-	// 3. send a request that contains a header from 2 to update the client in ELC
-	var responses []*elc.MsgUpdateClientResponse
-	i := 0
-	for h := range headerStream {
-		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
-		}
-		anyHeader, err := clienttypes.PackClientMessage(h.Header)
-		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
-		}
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
-		}
-		responses = append(responses, res)
-		i += 1
+	// Activation follows the existing header stream exactly; it does not run the
+	// multi-header/chunk expansion used by the normal update-client path.
+	sourceHeaderUnits, err := collectExplicitStateSourceHeaderUnits(headerStream)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := pr.executeELCUpdateHeaderUnits(
+		ctx,
+		sourceHeaderUnits,
+		elcClientID,
+		includeState,
+		pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		"enclave_key_update",
+	)
+	if err != nil {
+		return nil, err
+	}
+	responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
+	for _, result := range results {
+		responses = append(responses, &elc.MsgUpdateClientResponse{
+			Message:   result.Message,
+			Signature: result.Signature,
+		})
 	}
 
 	return responses, nil
