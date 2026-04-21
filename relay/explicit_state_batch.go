@@ -104,6 +104,88 @@ func executeSpeculativeUpdateClientBatchStream(
 	in *ExecuteSpeculativeUpdateClientBatchRequest,
 	chunkSize uint32,
 ) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	return executeSpeculativeUpdateClientUnitsStream(ctx, client, in.ClientId, speculativeUnitSlice(in.Units), chunkSize)
+}
+
+func executeSpeculativeUpdateClientPlannedUnitsStream(
+	ctx context.Context,
+	client LCPServiceClient,
+	clientID string,
+	units []*ExplicitStatePlannedUnit,
+	chunkSize uint32,
+) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	return executeSpeculativeUpdateClientUnitsStream(ctx, client, clientID, plannedSpeculativeUnitIterator(units), chunkSize)
+}
+
+type speculativeUnitIterator interface {
+	Len() int
+	At(index int) (*SpeculativeUpdateClientUnit, error)
+}
+
+type speculativeUnitSlice []*SpeculativeUpdateClientUnit
+
+func (s speculativeUnitSlice) Len() int {
+	return len(s)
+}
+
+func (s speculativeUnitSlice) At(index int) (*SpeculativeUpdateClientUnit, error) {
+	return s[index], nil
+}
+
+type plannedSpeculativeUnitIterator []*ExplicitStatePlannedUnit
+
+func (s plannedSpeculativeUnitIterator) Len() int {
+	return len(s)
+}
+
+func (s plannedSpeculativeUnitIterator) At(index int) (*SpeculativeUpdateClientUnit, error) {
+	unit := s[index]
+	if unit == nil {
+		return nil, fmt.Errorf("planned unit must not be nil")
+	}
+	return &SpeculativeUpdateClientUnit{
+		UnitId:        unit.UnitID,
+		Update:        unit.Update,
+		BaseState:     unit.BaseState,
+		DependencyIds: append([]string(nil), unit.DependencyIDs...),
+	}, nil
+}
+
+func executeSpeculativeUpdateClientUnitsStream(
+	ctx context.Context,
+	client LCPServiceClient,
+	clientID string,
+	units speculativeUnitIterator,
+	chunkSize uint32,
+) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	sender, err := openSpeculativeUpdateClientBatchStream(ctx, client, clientID, chunkSize)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < units.Len(); i++ {
+		unit, err := units.At(i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare speculative batch unit: index=%d, %w", i, err)
+		}
+		if err := sender.Send(unit); err != nil {
+			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", i, unitIDForError(unit), err)
+		}
+	}
+	return sender.CloseAndRecv()
+}
+
+type speculativeBatchStreamSender struct {
+	stream    elc.Msg_SpeculativeUpdateClientBatchStreamClient
+	chunkSize uint32
+	count     int
+}
+
+func openSpeculativeUpdateClientBatchStream(
+	ctx context.Context,
+	client LCPServiceClient,
+	clientID string,
+	chunkSize uint32,
+) (*speculativeBatchStreamSender, error) {
 	stream, err := client.SpeculativeUpdateClientBatchStream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call SpeculativeUpdateClientBatchStream: %w", err)
@@ -111,18 +193,34 @@ func executeSpeculativeUpdateClientBatchStream(
 	if err := stream.Send(&elc.MsgSpeculativeUpdateClientBatchStreamChunk{
 		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_Init{
 			Init: &elc.SpeculativeUpdateClientBatchStreamInit{
-				ClientId: in.ClientId,
+				ClientId: clientID,
 			},
 		},
 	}); err != nil {
 		return nil, fmt.Errorf("failed to send speculative batch init: %w", err)
 	}
-	for i, unit := range in.Units {
-		if err := sendSpeculativeUpdateClientUnit(stream, unit, chunkSize); err != nil {
-			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", i, unitIDForError(unit), err)
-		}
+	return &speculativeBatchStreamSender{
+		stream:    stream,
+		chunkSize: chunkSize,
+	}, nil
+}
+
+func (s *speculativeBatchStreamSender) Send(unit *SpeculativeUpdateClientUnit) error {
+	if s == nil || s.stream == nil {
+		return fmt.Errorf("speculative batch stream is not open")
 	}
-	resp, err := stream.CloseAndRecv()
+	if err := sendSpeculativeUpdateClientUnit(s.stream, unit, s.chunkSize); err != nil {
+		return err
+	}
+	s.count++
+	return nil
+}
+
+func (s *speculativeBatchStreamSender) CloseAndRecv() (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	if s == nil || s.stream == nil {
+		return nil, fmt.Errorf("speculative batch stream is not open")
+	}
+	resp, err := s.stream.CloseAndRecv()
 	if err != nil {
 		return nil, err
 	}

@@ -13,6 +13,7 @@ import (
 	tmclienttypes "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
 const envExplicitStateUpdateClient = "YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT"
@@ -84,6 +85,22 @@ func planExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*
 			strategy,
 		)
 	}
+}
+
+func explicitStateHeaderLaneWidths(headerLanes [][]*ExplicitStateHeaderUnit) []int {
+	laneWidths := make([]int, 0, len(headerLanes))
+	for _, lane := range headerLanes {
+		laneWidths = append(laneWidths, len(lane))
+	}
+	return laneWidths
+}
+
+func countExplicitStateHeaderLaneUnits(headerLanes [][]*ExplicitStateHeaderUnit) int {
+	var count int
+	for _, lane := range headerLanes {
+		count += len(lane)
+	}
+	return count
 }
 
 func explicitStateLaneStrategy() string {
@@ -237,6 +254,184 @@ func (pr *Prover) buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
 		baseStateLanes = append(baseStateLanes, baseStateLane)
 	}
 	return newLaneExplicitStateUpdatePlan(elcClientID, updateLanes, baseStateLanes)
+}
+
+func (pr *Prover) executeExplicitStateHeaderLanesStream(
+	ctx context.Context,
+	headerLanes [][]*ExplicitStateHeaderUnit,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	return pr.executeExplicitStateHeaderLanesStreamWithResolver(
+		ctx,
+		headerLanes,
+		elcClientID,
+		includeState,
+		signer,
+		func(ctx context.Context, elcClientID string, anyHeader *codectypes.Any) (*ExplicitStateRef, error) {
+			return pr.queryExplicitStateRef(ctx, elcClientID, anyHeader)
+		},
+	)
+}
+
+func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
+	ctx context.Context,
+	headerLanes [][]*ExplicitStateHeaderUnit,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	resolveBaseState func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error),
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	totalUnits := countExplicitStateHeaderLaneUnits(headerLanes)
+	results := make([]*elcupdater_storage.UpdateClientResult, 0, totalUnits)
+	if totalUnits == 0 {
+		return results, nil
+	}
+
+	numBatches := (totalUnits + maxSpeculativeBatchUnitsPerRequest - 1) / maxSpeculativeBatchUnitsPerRequest
+	if numBatches > 1 {
+		pr.getLogger().InfoContext(
+			ctx,
+			"split speculative update client batch",
+			"client_id", elcClientID,
+			"num_units", totalUnits,
+			"num_batches", numBatches,
+			"batch_limit", maxSpeculativeBatchUnitsPerRequest,
+		)
+	}
+
+	var sender *speculativeBatchStreamSender
+	batchSigners := make([][]byte, 0, maxSpeculativeBatchUnitsPerRequest)
+	batchUnitIDs := make(map[string]struct{}, maxSpeculativeBatchUnitsPerRequest)
+	batchIndex := 0
+	unitIndex := 0
+
+	openBatch := func() error {
+		if sender != nil {
+			return nil
+		}
+		numUnits := min(maxSpeculativeBatchUnitsPerRequest, totalUnits-unitIndex)
+		pr.getLogger().InfoContext(
+			ctx,
+			"invoke speculative update client batch",
+			"client_id", elcClientID,
+			"num_units", numUnits,
+			"batch_index", batchIndex,
+			"num_batches", numBatches,
+		)
+		nextSender, err := openSpeculativeUpdateClientBatchStream(
+			ctx,
+			pr.lcpServiceClient,
+			elcClientID,
+			pr.config.GetMaxChunkSizeForUpdateClient(),
+		)
+		if err != nil {
+			return err
+		}
+		sender = nextSender
+		return nil
+	}
+
+	flushBatch := func() error {
+		if sender == nil {
+			return nil
+		}
+		resp, err := sender.CloseAndRecv()
+		if err != nil {
+			return fmt.Errorf("failed explicit-state update client batch: %w", err)
+		}
+		if len(resp.Units) != len(batchSigners) {
+			return fmt.Errorf("unexpected speculative batch response shape: units=%d plan=%d", len(resp.Units), len(batchSigners))
+		}
+		for i, unit := range resp.Units {
+			if unit == nil || unit.Response == nil {
+				return fmt.Errorf("unexpected speculative batch response unit at index %d", i)
+			}
+			results = append(results, &elcupdater_storage.UpdateClientResult{
+				Message:   unit.Response.Message,
+				Signature: unit.Response.Signature,
+				Signer:    batchSigners[i],
+			})
+		}
+		sender = nil
+		batchSigners = batchSigners[:0]
+		clear(batchUnitIDs)
+		batchIndex++
+		return nil
+	}
+
+	for laneIndex, lane := range headerLanes {
+		var prevUnitID string
+		for unitIndexInLane, unitHeader := range lane {
+			if unitHeader == nil || unitHeader.Header == nil {
+				return nil, fmt.Errorf("header lane %d contains nil header unit", laneIndex)
+			}
+			var baseState *ExplicitStateRef
+			if unitHeader.BaseState != nil {
+				baseState = cloneExplicitStateRef(unitHeader.BaseState)
+			} else if unitIndexInLane == 0 {
+				var err error
+				baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				var err error
+				baseState, err = buildDeferredExplicitStateRef(unitHeader.Header, pr.codec)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			unit := &ExplicitStatePlannedUnit{
+				UnitID: buildSpeculativeUnitID(unitIndex),
+				Update: &elc.MsgUpdateClient{
+					ClientId:     elcClientID,
+					Header:       unitHeader.Header,
+					IncludeState: includeState,
+					Signer:       signer,
+				},
+				BaseState: baseState,
+			}
+			if prevUnitID != "" {
+				if _, ok := batchUnitIDs[prevUnitID]; ok {
+					unit.DependencyIDs = []string{prevUnitID}
+				} else if !canStartIndependentExplicitStateBatch(unit) {
+					return nil, fmt.Errorf(
+						"cannot split explicit-state plan at unit %s: missing base state payload",
+						unit.UnitID,
+					)
+				}
+			}
+
+			if err := openBatch(); err != nil {
+				return nil, err
+			}
+			if err := sender.Send(&SpeculativeUpdateClientUnit{
+				UnitId:        unit.UnitID,
+				Update:        unit.Update,
+				BaseState:     unit.BaseState,
+				DependencyIds: append([]string(nil), unit.DependencyIDs...),
+			}); err != nil {
+				return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unit.UnitID, err)
+			}
+			batchSigners = append(batchSigners, unit.Update.Signer)
+			batchUnitIDs[unit.UnitID] = struct{}{}
+			prevUnitID = unit.UnitID
+			unitIndex++
+
+			if len(batchSigners) == maxSpeculativeBatchUnitsPerRequest {
+				if err := flushBatch(); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	if err := flushBatch(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 func buildDeferredExplicitStateRef(

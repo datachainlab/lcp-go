@@ -330,27 +330,29 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		return serialResults, nil
 	}
 	if useExplicitStateUpdateClient() {
-		plan, err := pr.buildExplicitStateUpdatePlanForHeaderUnits(
-			ctx,
-			extractExplicitStateHeaderUnits(sourceHeaderUnits),
-			pr.config.ElcClientId,
-			false,
-			signer,
-		)
+		headerUnits := extractExplicitStateHeaderUnits(sourceHeaderUnits)
+		headerLanes, err := planExplicitStateHeaderLanes(headerUnits)
 		if err != nil {
 			return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", pr.config.ElcClientId, err)
 		}
+		laneWidths := explicitStateHeaderLaneWidths(headerLanes)
 		pr.getLogger().InfoContext(
 			ctx,
 			"explicit-state update plan",
 			"strategy", explicitStateLaneStrategy(),
 			"num_source_headers", len(sourceHeaderUnits),
-			"num_units", len(plan.Units),
-			"num_lanes", len(plan.LaneWidths),
-			"lane_widths", plan.LaneWidths,
-			"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, plan.LaneWidths),
+			"num_units", countExplicitStateHeaderLaneUnits(headerLanes),
+			"num_lanes", len(laneWidths),
+			"lane_widths", laneWidths,
+			"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, laneWidths),
 		)
-		results, err = pr.executeExplicitStateUpdatePlan(ctx, plan)
+		results, err = pr.executeExplicitStateHeaderLanesStream(
+			ctx,
+			headerLanes,
+			pr.config.ElcClientId,
+			false,
+			signer,
+		)
 		if err != nil {
 			if !shouldFallbackToSerialUpdateClient(err) {
 				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)

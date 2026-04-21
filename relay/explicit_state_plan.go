@@ -210,19 +210,19 @@ func (pr *Prover) executeExplicitStateUpdatePlan(
 
 	results := make([]*elcupdater_storage.UpdateClientResult, 0, len(plan.Units))
 	for batchIndex, batch := range batches {
-		req := batch.buildRequest()
 		pr.getLogger().InfoContext(
 			ctx,
 			"invoke speculative update client batch",
-			"client_id", req.ClientId,
-			"num_units", len(req.Units),
+			"client_id", batch.ClientID,
+			"num_units", len(batch.Units),
 			"batch_index", batchIndex,
 			"num_batches", len(batches),
 		)
-		resp, err := executeSpeculativeUpdateClientBatchStream(
+		resp, err := executeSpeculativeUpdateClientPlannedUnitsStream(
 			ctx,
 			pr.lcpServiceClient,
-			req,
+			batch.ClientID,
+			batch.Units,
 			pr.config.GetMaxChunkSizeForUpdateClient(),
 		)
 		if err != nil {
