@@ -162,6 +162,12 @@ func executeSpeculativeUpdateClientUnitsStream(
 	if err != nil {
 		return nil, err
 	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = sender.CloseSend()
+		}
+	}()
 	for i := 0; i < units.Len(); i++ {
 		unit, err := units.At(i)
 		if err != nil {
@@ -171,7 +177,9 @@ func executeSpeculativeUpdateClientUnitsStream(
 			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", i, unitIDForError(unit), err)
 		}
 	}
-	return sender.CloseAndRecv()
+	resp, err := sender.CloseAndRecv()
+	closed = true
+	return resp, err
 }
 
 type speculativeBatchStreamSender struct {
@@ -186,6 +194,9 @@ func openSpeculativeUpdateClientBatchStream(
 	clientID string,
 	chunkSize uint32,
 ) (*speculativeBatchStreamSender, error) {
+	if err := validateSpeculativeBatchStreamChunkSize(chunkSize); err != nil {
+		return nil, err
+	}
 	stream, err := client.SpeculativeUpdateClientBatchStream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call SpeculativeUpdateClientBatchStream: %w", err)
@@ -197,6 +208,7 @@ func openSpeculativeUpdateClientBatchStream(
 			},
 		},
 	}); err != nil {
+		_ = stream.CloseSend()
 		return nil, fmt.Errorf("failed to send speculative batch init: %w", err)
 	}
 	return &speculativeBatchStreamSender{
@@ -227,6 +239,13 @@ func (s *speculativeBatchStreamSender) CloseAndRecv() (*ExecuteSpeculativeUpdate
 	return decodeSpeculativeUpdateClientBatchResponse(resp), nil
 }
 
+func (s *speculativeBatchStreamSender) CloseSend() error {
+	if s == nil || s.stream == nil {
+		return nil
+	}
+	return s.stream.CloseSend()
+}
+
 func sendSpeculativeUpdateClientUnit(
 	stream elc.Msg_SpeculativeUpdateClientBatchStreamClient,
 	unit *SpeculativeUpdateClientUnit,
@@ -244,15 +263,15 @@ func sendSpeculativeUpdateClientUnit(
 	if len(unit.Update.Header.Value) == 0 {
 		return fmt.Errorf("unit update header value must not be empty")
 	}
-	if chunkSize > MaxSpeculativeBatchHeaderChunkSize {
-		return fmt.Errorf("chunk size must be less than or equal to %d", MaxSpeculativeBatchHeaderChunkSize)
+	if err := validateSpeculativeBatchStreamChunkSize(chunkSize); err != nil {
+		return err
 	}
 	baseState := encodeExplicitStateRef(unit.BaseState)
 	if baseState == nil {
 		return fmt.Errorf("unit base_state must not be nil")
 	}
 
-	if err := stream.Send(&elc.MsgSpeculativeUpdateClientBatchStreamChunk{
+	unitInitChunk := &elc.MsgSpeculativeUpdateClientBatchStreamChunk{
 		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit{
 			UnitInit: &elc.SpeculativeUpdateClientUnitInit{
 				UnitId:        unit.UnitId,
@@ -263,7 +282,16 @@ func sendSpeculativeUpdateClientUnit(
 				DependencyIds: append([]string(nil), unit.DependencyIds...),
 			},
 		},
-	}); err != nil {
+	}
+	if size := proto.Size(unitInitChunk); size > MaxSpeculativeBatchHeaderChunkSize {
+		return fmt.Errorf(
+			"unit init chunk exceeds max speculative batch stream chunk size: unit_id=%q size=%d max=%d",
+			unit.UnitId,
+			size,
+			MaxSpeculativeBatchHeaderChunkSize,
+		)
+	}
+	if err := stream.Send(unitInitChunk); err != nil {
 		return fmt.Errorf("failed to send unit init: %w", err)
 	}
 
@@ -292,6 +320,16 @@ func sendSpeculativeUpdateClientUnit(
 		},
 	}); err != nil {
 		return fmt.Errorf("failed to send unit end: %w", err)
+	}
+	return nil
+}
+
+func validateSpeculativeBatchStreamChunkSize(chunkSize uint32) error {
+	if chunkSize == 0 {
+		return fmt.Errorf("chunk size must be greater than 0")
+	}
+	if chunkSize > MaxSpeculativeBatchHeaderChunkSize {
+		return fmt.Errorf("chunk size must be less than or equal to %d", MaxSpeculativeBatchHeaderChunkSize)
 	}
 	return nil
 }

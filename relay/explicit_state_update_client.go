@@ -288,6 +288,9 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 	if totalUnits == 0 {
 		return results, nil
 	}
+	if err := validateExplicitStateHeaderLaneBatchBoundaries(headerLanes, maxSpeculativeBatchUnitsPerRequest); err != nil {
+		return nil, err
+	}
 
 	numBatches := (totalUnits + maxSpeculativeBatchUnitsPerRequest - 1) / maxSpeculativeBatchUnitsPerRequest
 	if numBatches > 1 {
@@ -432,6 +435,41 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 		return nil, err
 	}
 	return results, nil
+}
+
+func validateExplicitStateHeaderLaneBatchBoundaries(
+	headerLanes [][]*ExplicitStateHeaderUnit,
+	maxUnits int,
+) error {
+	if maxUnits <= 0 {
+		return nil
+	}
+	unitIndex := 0
+	for laneIndex, lane := range headerLanes {
+		for unitIndexInLane, unitHeader := range lane {
+			if unitIndex > 0 && unitIndex%maxUnits == 0 {
+				if !canHeaderUnitStartIndependentExplicitStateBatch(unitIndexInLane, unitHeader) {
+					return fmt.Errorf(
+						"cannot split explicit-state plan at lane %d unit %d: batch boundary requires canonical base state payload",
+						laneIndex,
+						unitIndexInLane,
+					)
+				}
+			}
+			unitIndex++
+		}
+	}
+	return nil
+}
+
+func canHeaderUnitStartIndependentExplicitStateBatch(unitIndexInLane int, unitHeader *ExplicitStateHeaderUnit) bool {
+	if unitHeader == nil {
+		return false
+	}
+	if unitHeader.BaseState == nil {
+		return unitIndexInLane == 0
+	}
+	return unitHeader.BaseState.ClientState != nil && unitHeader.BaseState.ConsensusState != nil
 }
 
 func buildDeferredExplicitStateRef(

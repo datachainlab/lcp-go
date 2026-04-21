@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -1042,6 +1043,41 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	wantLast := fmt.Sprintf("msg-unit-%04d", lastIndex)
 	if string(results[lastIndex].Message) != wantLast {
 		t.Fatalf("unexpected last result message: %s", string(results[lastIndex].Message))
+	}
+}
+
+func TestExecuteExplicitStateHeaderLanesStreamRejectsDeferredBatchBoundaryBeforeOpeningStream(t *testing.T) {
+	lane := make([]*ExplicitStateHeaderUnit, 0, maxSpeculativeBatchUnitsPerRequest+1)
+	for i := 0; i < maxSpeculativeBatchUnitsPerRequest+1; i++ {
+		lane = append(lane, &ExplicitStateHeaderUnit{
+			Header: &codectypes.Any{TypeUrl: "header", Value: []byte{byte(i)}},
+		})
+	}
+
+	resolveCalls := 0
+	pr := &Prover{}
+	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+		context.Background(),
+		[][]*ExplicitStateHeaderUnit{lane},
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
+			resolveCalls++
+			return &ExplicitStateRef{
+				ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
+				ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
+			}, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected deferred batch boundary error")
+	}
+	if !strings.Contains(err.Error(), "batch boundary requires canonical base state payload") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolveCalls != 0 {
+		t.Fatalf("expected validation before resolving base states, got %d resolver calls", resolveCalls)
 	}
 }
 
