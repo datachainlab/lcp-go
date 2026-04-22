@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/datachainlab/lcp-go/relay/enclave"
@@ -19,5 +20,30 @@ func TestEnclaveKeyInfoSerDe(t *testing.T) {
 	}
 	if string(bz) != s {
 		t.Fatalf("unexpected result: %v", string(bz))
+	}
+}
+
+func TestEnclaveKeyInfoDirsIncludesLegacyFallback(t *testing.T) {
+	basePath := filepath.Join("home", "relay", "lcp", "chain-a")
+	dirs := enclaveKeyInfoDirs(basePath, "07-tendermint-0")
+	if len(dirs) != 2 {
+		t.Fatalf("expected 2 candidate dirs, got %d", len(dirs))
+	}
+	if dirs[0] != filepath.Join(basePath, "07-tendermint-0") {
+		t.Fatalf("unexpected client dir: %s", dirs[0])
+	}
+	if dirs[1] != basePath {
+		t.Fatalf("unexpected legacy dir: %s", dirs[1])
+	}
+}
+
+func TestEnclaveKeyInfoDirsDeduplicatesLegacyPath(t *testing.T) {
+	basePath := filepath.Join("home", "relay", "lcp", "chain-a")
+	dirs := enclaveKeyInfoDirs(basePath, "")
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 candidate dir for empty client id, got %d", len(dirs))
+	}
+	if dirs[0] != basePath {
+		t.Fatalf("unexpected legacy dir: %s", dirs[0])
 	}
 }

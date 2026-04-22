@@ -86,13 +86,13 @@ func (pr *Prover) UpdateEKIIfNeeded(ctx context.Context, counterparty core.Final
 	if finalized {
 		// this path is for chans have instant finality
 		// if the msg is finalized, save the enclave key info as finalized
-		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, eki); err != nil {
+		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, counterparty, eki); err != nil {
 			return err
 		}
 		pr.activeEnclaveKey = eki
 	} else {
 		// if the msg is not finalized, save the enclave key info as unfinalized
-		if err := pr.saveUnfinalizedEnclaveKeyInfo(ctx, eki, msgID); err != nil {
+		if err := pr.saveUnfinalizedEnclaveKeyInfo(ctx, counterparty, eki, msgID); err != nil {
 			return err
 		}
 		pr.activeEnclaveKey = eki
@@ -169,13 +169,13 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 
 		pr.getLogger().InfoContext(ctx, "no active enclave key in memory")
 
-		if eki, msgID, err := pr.loadLastUnfinalizedEnclaveKey(ctx); err == nil {
+		if eki, msgID, err := pr.loadLastUnfinalizedEnclaveKey(ctx, counterparty); err == nil {
 			pr.getLogger().InfoContext(ctx, "load last unfinalized enclave key into memory")
 			pr.activeEnclaveKey = eki
 			pr.unfinalizedMsgID = msgID
 		} else if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
 			pr.getLogger().InfoContext(ctx, "no unfinalized enclave key info found")
-			eki, err := pr.loadLastFinalizedEnclaveKey(ctx)
+			eki, err := pr.loadLastFinalizedEnclaveKey(ctx, counterparty)
 			if err != nil {
 				if errors.Is(err, ErrEnclaveKeyInfoNotFound) {
 					pr.getLogger().InfoContext(ctx, "no enclave key info found")
@@ -205,7 +205,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 	if _, err := counterparty.GetMsgResult(ctx, pr.unfinalizedMsgID); err != nil {
 		// err means that the msg is not included in the latest block
 		pr.getLogger().InfoContext(ctx, "the msg is not included in the latest block", "msg_id", pr.unfinalizedMsgID.String(), "error", err)
-		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx, counterparty.Path().ClientID); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -218,7 +218,7 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 	} else if !success {
 		// tx is failed, so remove the unfinalized enclave key info
 		pr.getLogger().WarnContext(ctx, "the msg execution failed", "msg_id", pr.unfinalizedMsgID.String())
-		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx, counterparty.Path().ClientID); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -229,11 +229,11 @@ func (pr *Prover) loadEKIAndCheckUpdateNeeded(ctx context.Context, counterparty 
 			return true, nil
 		}
 		pr.getLogger().InfoContext(ctx, "save enclave key info as finalized", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
-		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, pr.activeEnclaveKey); err != nil {
+		if err := pr.saveFinalizedEnclaveKeyInfo(ctx, counterparty, pr.activeEnclaveKey); err != nil {
 			return false, err
 		}
 		pr.getLogger().InfoContext(ctx, "remove old unfinalized enclave key info", "enclave_key", pr.activeEnclaveKey.GetEnclaveKeyAddress().String())
-		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx); err != nil {
+		if err := pr.removeUnfinalizedEnclaveKeyInfo(ctx, counterparty.Path().ClientID); err != nil {
 			return false, err
 		}
 		pr.unfinalizedMsgID = nil
