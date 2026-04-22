@@ -9,7 +9,7 @@ import (
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
-const maxSpeculativeBatchUnitsPerRequest = 64
+const maxSpeculativeBatchUnitsPerRequest = 256
 
 type ExplicitStatePlannedUnit struct {
 	UnitID        string
