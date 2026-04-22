@@ -2,7 +2,9 @@ package relay
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/gogoproto/proto"
@@ -174,6 +176,11 @@ func executeSpeculativeUpdateClientUnitsStream(
 			return nil, fmt.Errorf("failed to prepare speculative batch unit: index=%d, %w", i, err)
 		}
 		if err := sender.Send(unit); err != nil {
+			var closedByRecv bool
+			err, closedByRecv = sender.enrichSendError(err)
+			if closedByRecv {
+				closed = true
+			}
 			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", i, unitIDForError(unit), err)
 		}
 	}
@@ -237,6 +244,17 @@ func (s *speculativeBatchStreamSender) CloseAndRecv() (*ExecuteSpeculativeUpdate
 		return nil, err
 	}
 	return decodeSpeculativeUpdateClientBatchResponse(resp), nil
+}
+
+func (s *speculativeBatchStreamSender) enrichSendError(sendErr error) (error, bool) {
+	if !errors.Is(sendErr, io.EOF) {
+		return sendErr, false
+	}
+	_, closeErr := s.CloseAndRecv()
+	if closeErr == nil {
+		return sendErr, true
+	}
+	return fmt.Errorf("%w; server status after send failure: %v", sendErr, closeErr), true
 }
 
 func (s *speculativeBatchStreamSender) CloseSend() error {

@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -8,6 +9,8 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestBuildLinearSpeculativeUpdateClientBatch(t *testing.T) {
@@ -131,9 +134,28 @@ func TestSendSpeculativeUpdateClientUnitRejectsOversizedUnitInit(t *testing.T) {
 	}
 }
 
+func TestSpeculativeBatchStreamSenderEnrichesEOFWithServerStatus(t *testing.T) {
+	stream := &recordingSpeculativeBatchStream{
+		closeErr: status.Error(codes.ResourceExhausted, "speculative unit header payload too large"),
+	}
+	sender := &speculativeBatchStreamSender{stream: stream}
+
+	err, closed := sender.enrichSendError(io.EOF)
+	if !closed {
+		t.Fatal("expected EOF enrichment to close the stream with CloseAndRecv")
+	}
+	if !strings.Contains(err.Error(), "server status after send failure") {
+		t.Fatalf("expected enriched server status, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "speculative unit header payload too large") {
+		t.Fatalf("expected server detail in error, got %v", err)
+	}
+}
+
 type recordingSpeculativeBatchStream struct {
 	grpc.ClientStream
-	sent []*elc.MsgSpeculativeUpdateClientBatchStreamChunk
+	sent     []*elc.MsgSpeculativeUpdateClientBatchStreamChunk
+	closeErr error
 }
 
 func (s *recordingSpeculativeBatchStream) Send(m *elc.MsgSpeculativeUpdateClientBatchStreamChunk) error {
@@ -142,5 +164,8 @@ func (s *recordingSpeculativeBatchStream) Send(m *elc.MsgSpeculativeUpdateClient
 }
 
 func (s *recordingSpeculativeBatchStream) CloseAndRecv() (*elc.ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	if s.closeErr != nil {
+		return nil, s.closeErr
+	}
 	return &elc.ExecuteSpeculativeUpdateClientBatchResponse{}, nil
 }
