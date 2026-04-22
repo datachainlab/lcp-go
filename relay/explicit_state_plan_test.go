@@ -27,7 +27,9 @@ import (
 	"github.com/hyperledger-labs/yui-relayer/core"
 	ylog "github.com/hyperledger-labs/yui-relayer/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -1327,6 +1329,31 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 	}
 	if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(results[0].Message); err != nil {
 		t.Fatalf("result message decode error = %v", err)
+	}
+}
+
+func TestShouldLogSerialUpdateClientFallbackSuppressesUnimplemented(t *testing.T) {
+	err := fmt.Errorf(
+		"failed explicit-state update client batch: %w",
+		status.Error(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented"),
+	)
+
+	if !shouldFallbackToSerialUpdateClient(err) {
+		t.Fatal("expected Unimplemented to trigger serial fallback")
+	}
+	if shouldLogSerialUpdateClientFallback(err) {
+		t.Fatal("expected Unimplemented fallback log to be suppressed")
+	}
+}
+
+func TestShouldLogSerialUpdateClientFallbackKeepsEOF(t *testing.T) {
+	err := fmt.Errorf("send failed: %w", io.EOF)
+
+	if !shouldFallbackToSerialUpdateClient(err) {
+		t.Fatal("expected EOF to trigger serial fallback")
+	}
+	if !shouldLogSerialUpdateClientFallback(err) {
+		t.Fatal("expected EOF fallback log to be kept")
 	}
 }
 

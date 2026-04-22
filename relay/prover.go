@@ -393,13 +393,15 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 			if !shouldFallbackToSerialUpdateClient(err) {
 				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 			}
-			pr.getLogger().InfoContext(
-				ctx,
-				"fall back to serial update client after explicit-state batch failure",
-				"operation", operation,
-				"client_id", elcClientID,
-				"error", err.Error(),
-			)
+			if shouldLogSerialUpdateClientFallback(err) {
+				pr.getLogger().InfoContext(
+					ctx,
+					"fall back to serial update client after explicit-state batch failure",
+					"operation", operation,
+					"client_id", elcClientID,
+					"error", err.Error(),
+				)
+			}
 			results, err = runSerialUpdate()
 			if err != nil {
 				return nil, err
@@ -425,6 +427,15 @@ func shouldFallbackToSerialUpdateClient(err error) bool {
 		}
 	}
 	return false
+}
+
+func shouldLogSerialUpdateClientFallback(err error) bool {
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if grpcstatus.Code(current) == codes.Unimplemented {
+			return false
+		}
+	}
+	return true
 }
 
 func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(
