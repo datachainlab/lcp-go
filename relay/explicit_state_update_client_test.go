@@ -632,6 +632,18 @@ func TestBuildExplicitStateTMTargetHeights(t *testing.T) {
 	}
 }
 
+func TestExtractAnyHeadersFromSourceUnitsRejectsMissingPackedHeader(t *testing.T) {
+	_, err := extractAnyHeadersFromSourceUnits([]*ExplicitStateSourceHeaderUnit{{
+		Header: &tmclienttypes.Header{},
+	}})
+	if err == nil {
+		t.Fatal("expected missing packed header error")
+	}
+	if !strings.Contains(err.Error(), "missing packed header") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func mustPackTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) *codectypes.Any {
 	t.Helper()
 	anyHeader, err := codectypes.NewAnyWithValue(&tmclienttypes.Header{

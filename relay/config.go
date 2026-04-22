@@ -21,7 +21,7 @@ const (
 	DefaultMessageAggregationBatchSize = 8
 	// It is necessary to subtract from 4 MB to account for metadata size.
 	DefaultMaxChunkSize                = 4*1024*1024 - 1024
-	MaxSpeculativeBatchHeaderChunkSize = 4 * 1024 * 1024
+	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
 	DefaultMaxSpeculativeBatchUnits    = 256
 )
 

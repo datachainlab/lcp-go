@@ -94,15 +94,18 @@ func collectExplicitStateSourceHeaderUnits(
 
 func extractAnyHeadersFromSourceUnits(
 	units []*ExplicitStateSourceHeaderUnit,
-) []*codectypes.Any {
+) ([]*codectypes.Any, error) {
 	anyHeaders := make([]*codectypes.Any, 0, len(units))
-	for _, unit := range units {
-		if unit == nil || unit.AnyHeader == nil {
-			continue
+	for i, unit := range units {
+		if unit == nil {
+			return nil, fmt.Errorf("source header unit must not be nil: i=%v", i)
+		}
+		if unit.AnyHeader == nil {
+			return nil, fmt.Errorf("source header unit missing packed header: i=%v", i)
 		}
 		anyHeaders = append(anyHeaders, unit.AnyHeader)
 	}
-	return anyHeaders
+	return anyHeaders, nil
 }
 
 func extractExplicitStateHeaderUnits(
@@ -250,7 +253,7 @@ func buildExplicitStateTMTargetHeights(trustedHeight, latestHeight uint64, maxHe
 	}
 	total := latestHeight - trustedHeight
 	if maxHeaders <= 0 || total <= uint64(maxHeaders) {
-		targets := make([]uint64, 0, total)
+		targets := make([]uint64, 0, uint64SliceCapacity(total))
 		for h := trustedHeight + 1; h <= latestHeight; h++ {
 			targets = append(targets, h)
 		}
@@ -271,4 +274,12 @@ func buildExplicitStateTMTargetHeights(trustedHeight, latestHeight uint64, maxHe
 		targets = append(targets, latestHeight)
 	}
 	return targets
+}
+
+func uint64SliceCapacity(n uint64) int {
+	maxInt := int(^uint(0) >> 1)
+	if n > uint64(maxInt) {
+		return 0
+	}
+	return int(n)
 }

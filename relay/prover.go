@@ -343,7 +343,10 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 	signer []byte,
 	operation string,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
-	anyHeaders := extractAnyHeadersFromSourceUnits(sourceHeaderUnits)
+	anyHeaders, err := extractAnyHeadersFromSourceUnits(sourceHeaderUnits)
+	if err != nil {
+		return nil, err
+	}
 	if len(anyHeaders) == 0 {
 		return nil, nil
 	}
