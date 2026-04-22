@@ -332,8 +332,7 @@ func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBat
 					IncludeState: c.UnitInit.IncludeState,
 					Signer:       append([]byte(nil), c.UnitInit.Signer...),
 				},
-				BaseState:     decodeGeneratedExplicitStateRef(&c.UnitInit.BaseState),
-				DependencyIds: append([]string(nil), c.UnitInit.DependencyIds...),
+				BaseState: decodeGeneratedExplicitStateRef(&c.UnitInit.BaseState),
 			}
 		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk:
 			if openUnit == nil {
@@ -358,6 +357,11 @@ func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBat
 			}
 			req.Units = append(req.Units, openUnit)
 			openUnit = nil
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd:
+			if openUnit != nil {
+				return nil, fmt.Errorf("received batch end while unit %q is open", openUnit.UnitId)
+			}
+			return req, nil
 		default:
 			return nil, fmt.Errorf("expected speculative batch unit chunk")
 		}
@@ -457,14 +461,8 @@ func TestNewLinearExplicitStateUpdatePlan(t *testing.T) {
 	if got := plan.Units[0].UnitID; got != "unit-0000" {
 		t.Fatalf("unexpected first unit id: %s", got)
 	}
-	if len(plan.Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected first unit dependencies: %v", plan.Units[0].DependencyIDs)
-	}
 	if got := plan.Units[1].UnitID; got != "unit-0001" {
 		t.Fatalf("unexpected second unit id: %s", got)
-	}
-	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
 	}
 	if len(plan.LaneWidths) != 1 || plan.LaneWidths[0] != 2 {
 		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
@@ -509,10 +507,9 @@ func TestNewExplicitStateUpdatePlan(t *testing.T) {
 				BaseState: &ExplicitStateRef{},
 			},
 			{
-				UnitID:        "unit-b",
-				Update:        &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState:     &ExplicitStateRef{},
-				DependencyIDs: []string{"unit-a"},
+				UnitID:    "unit-b",
+				Update:    &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
+				BaseState: &ExplicitStateRef{},
 			},
 		},
 	)
@@ -545,23 +542,6 @@ func TestNewExplicitStateUpdatePlanRejectsDuplicateUnitID(t *testing.T) {
 	}
 }
 
-func TestNewExplicitStateUpdatePlanRejectsUnknownDependency(t *testing.T) {
-	_, err := newExplicitStateUpdatePlan(
-		"07-tendermint-2",
-		[]*ExplicitStatePlannedUnit{
-			{
-				UnitID:        "unit-a",
-				Update:        &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState:     &ExplicitStateRef{},
-				DependencyIDs: []string{"unit-missing"},
-			},
-		},
-	)
-	if err == nil {
-		t.Fatal("expected unknown dependency error, got nil")
-	}
-}
-
 func TestNewLaneExplicitStateUpdatePlan(t *testing.T) {
 	plan, err := newLaneExplicitStateUpdatePlan(
 		"07-tendermint-9",
@@ -589,15 +569,6 @@ func TestNewLaneExplicitStateUpdatePlan(t *testing.T) {
 	}
 	if len(plan.Units) != 3 {
 		t.Fatalf("unexpected plan units: %d", len(plan.Units))
-	}
-	if len(plan.Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected first lane root dependencies: %v", plan.Units[0].DependencyIDs)
-	}
-	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected first lane second dependencies: %v", plan.Units[1].DependencyIDs)
-	}
-	if len(plan.Units[2].DependencyIDs) != 0 {
-		t.Fatalf("unexpected second lane root dependencies: %v", plan.Units[2].DependencyIDs)
 	}
 	if len(plan.LaneWidths) != 2 || plan.LaneWidths[0] != 2 || plan.LaneWidths[1] != 1 {
 		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
@@ -633,15 +604,6 @@ func TestNewLaneExplicitStateUpdatePlanBuildRequestPreservesLaneRoots(t *testing
 	req := plan.buildRequest()
 	if len(req.Units) != 3 {
 		t.Fatalf("unexpected request units: %d", len(req.Units))
-	}
-	if len(req.Units[0].DependencyIds) != 0 {
-		t.Fatalf("unexpected first lane root deps: %v", req.Units[0].DependencyIds)
-	}
-	if len(req.Units[1].DependencyIds) != 1 || req.Units[1].DependencyIds[0] != "unit-0000" {
-		t.Fatalf("unexpected first lane chained deps: %v", req.Units[1].DependencyIds)
-	}
-	if len(req.Units[2].DependencyIds) != 0 {
-		t.Fatalf("unexpected second lane root deps: %v", req.Units[2].DependencyIds)
 	}
 	if len(plan.LaneWidths) != 2 || plan.LaneWidths[0] != 2 || plan.LaneWidths[1] != 1 {
 		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
@@ -713,15 +675,6 @@ func TestExecuteExplicitStateUpdatePlanInvokesMultiLaneBatch(t *testing.T) {
 	}
 	if len(captured.Units) != 3 {
 		t.Fatalf("unexpected request unit count: %d", len(captured.Units))
-	}
-	if len(captured.Units[0].DependencyIds) != 0 {
-		t.Fatalf("unexpected first lane root deps: %v", captured.Units[0].DependencyIds)
-	}
-	if len(captured.Units[1].DependencyIds) != 1 || captured.Units[1].DependencyIds[0] != "unit-0000" {
-		t.Fatalf("unexpected first lane chained deps: %v", captured.Units[1].DependencyIds)
-	}
-	if len(captured.Units[2].DependencyIds) != 0 {
-		t.Fatalf("unexpected second lane root deps: %v", captured.Units[2].DependencyIds)
 	}
 	if len(results) != 3 {
 		t.Fatalf("unexpected results count: %d", len(results))
@@ -880,12 +833,6 @@ func TestUpdateELCForUpdateClientKeepsTendermintSharedTrustedHeightLinear(t *tes
 	}
 	if captured.ClientId != "07-tendermint-11" {
 		t.Fatalf("unexpected client id: %s", captured.ClientId)
-	}
-	if len(captured.Units[0].DependencyIds) != 0 {
-		t.Fatalf("unexpected first unit dependencies: %v", captured.Units[0].DependencyIds)
-	}
-	if len(captured.Units[1].DependencyIds) != 1 || captured.Units[1].DependencyIds[0] != "unit-0000" {
-		t.Fatalf("unexpected second unit dependencies: %v", captured.Units[1].DependencyIds)
 	}
 	if captured.Units[0].BaseState == nil || captured.Units[0].BaseState.PrevHeight == nil || captured.Units[0].BaseState.PrevHeight.RevisionHeight != 10 {
 		t.Fatalf("unexpected first base state: %#v", captured.Units[0].BaseState)
@@ -1076,12 +1023,6 @@ func TestExplicitStateUpdatePlanSplitIntoExecutableBatches(t *testing.T) {
 	if got := len(batches[1].Units); got != 1 {
 		t.Fatalf("unexpected second batch size: %d", got)
 	}
-	if len(batches[0].Units[1].DependencyIDs) != 1 || batches[0].Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected first batch dependencies: %v", batches[0].Units[1].DependencyIDs)
-	}
-	if len(batches[1].Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected second batch root dependencies: %v", batches[1].Units[0].DependencyIDs)
-	}
 	if batches[1].Units[0].BaseState == nil || batches[1].Units[0].BaseState.ClientState == nil || batches[1].Units[0].BaseState.ConsensusState == nil {
 		t.Fatalf("expected second batch root to retain explicit base state payload: %#v", batches[1].Units[0].BaseState)
 	}
@@ -1128,9 +1069,9 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	updates := make([]*elc.MsgUpdateClient, 0, maxSpeculativeBatchUnitsPerRequest+1)
-	baseStates := make([]*ExplicitStateRef, 0, maxSpeculativeBatchUnitsPerRequest+1)
-	for i := 0; i < maxSpeculativeBatchUnitsPerRequest+1; i++ {
+	updates := make([]*elc.MsgUpdateClient, 0, DefaultMaxSpeculativeBatchUnits+1)
+	baseStates := make([]*ExplicitStateRef, 0, DefaultMaxSpeculativeBatchUnits+1)
+	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
 		updates = append(updates, makeSpeculativeBatchTestUpdate(
 			"07-tendermint-11",
 			[]byte(fmt.Sprintf("s%02d", i)),
@@ -1160,22 +1101,19 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	if len(captured) != 2 {
 		t.Fatalf("unexpected request count: %d", len(captured))
 	}
-	if got := len(captured[0].Units); got != maxSpeculativeBatchUnitsPerRequest {
+	if got := len(captured[0].Units); got != DefaultMaxSpeculativeBatchUnits {
 		t.Fatalf("unexpected first request size: %d", got)
 	}
 	if got := len(captured[1].Units); got != 1 {
 		t.Fatalf("unexpected second request size: %d", got)
 	}
-	if len(captured[1].Units[0].DependencyIds) != 0 {
-		t.Fatalf("unexpected split root dependencies: %v", captured[1].Units[0].DependencyIds)
-	}
-	if len(results) != maxSpeculativeBatchUnitsPerRequest+1 {
+	if len(results) != DefaultMaxSpeculativeBatchUnits+1 {
 		t.Fatalf("unexpected result count: %d", len(results))
 	}
 	if string(results[0].Message) != "msg-unit-0000" {
 		t.Fatalf("unexpected first result message: %s", string(results[0].Message))
 	}
-	lastIndex := maxSpeculativeBatchUnitsPerRequest
+	lastIndex := DefaultMaxSpeculativeBatchUnits
 	wantLast := fmt.Sprintf("msg-unit-%04d", lastIndex)
 	if string(results[lastIndex].Message) != wantLast {
 		t.Fatalf("unexpected last result message: %s", string(results[lastIndex].Message))
@@ -1183,8 +1121,8 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 }
 
 func TestExecuteExplicitStateHeaderLanesStreamRejectsDeferredBatchBoundaryBeforeOpeningStream(t *testing.T) {
-	lane := make([]*ExplicitStateHeaderUnit, 0, maxSpeculativeBatchUnitsPerRequest+1)
-	for i := 0; i < maxSpeculativeBatchUnitsPerRequest+1; i++ {
+	lane := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
+	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
 		lane = append(lane, &ExplicitStateHeaderUnit{
 			Header: &codectypes.Any{TypeUrl: "header", Value: []byte{byte(i)}},
 		})
@@ -1286,9 +1224,6 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleLane(t *testing.T) {
 	}
 	if len(captured.Units) != 1 {
 		t.Fatalf("unexpected captured unit count: %d", len(captured.Units))
-	}
-	if len(captured.Units[0].DependencyIds) != 0 {
-		t.Fatalf("unexpected single-lane dependency ids: %v", captured.Units[0].DependencyIds)
 	}
 	if len(results) != 1 {
 		t.Fatalf("unexpected result count: %d", len(results))

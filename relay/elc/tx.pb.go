@@ -647,6 +647,7 @@ type MsgSpeculativeUpdateClientBatchStreamChunk struct {
 	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit
 	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk
 	//	*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd
+	//	*MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd
 	Chunk isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk `protobuf_oneof:"chunk"`
 }
 
@@ -705,6 +706,9 @@ type MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk struct {
 type MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd struct {
 	UnitEnd *SpeculativeUpdateClientUnitEnd `protobuf:"bytes,4,opt,name=unit_end,json=unitEnd,proto3,oneof" json:"unit_end,omitempty"`
 }
+type MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd struct {
+	BatchEnd *SpeculativeUpdateClientBatchEnd `protobuf:"bytes,5,opt,name=batch_end,json=batchEnd,proto3,oneof" json:"batch_end,omitempty"`
+}
 
 func (*MsgSpeculativeUpdateClientBatchStreamChunk_Init) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
@@ -713,6 +717,8 @@ func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit) isMsgSpeculativeUpda
 func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
 func (*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
+}
+func (*MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd) isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk() {
 }
 
 func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetChunk() isMsgSpeculativeUpdateClientBatchStreamChunk_Chunk {
@@ -750,6 +756,13 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetUnitEnd() *SpeculativeUp
 	return nil
 }
 
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk) GetBatchEnd() *SpeculativeUpdateClientBatchEnd {
+	if x, ok := m.GetChunk().(*MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd); ok {
+		return x.BatchEnd
+	}
+	return nil
+}
+
 // XXX_OneofWrappers is for the internal use of the proto package.
 func (*MsgSpeculativeUpdateClientBatchStreamChunk) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
@@ -757,6 +770,7 @@ func (*MsgSpeculativeUpdateClientBatchStreamChunk) XXX_OneofWrappers() []interfa
 		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit)(nil),
 		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitHeaderChunk)(nil),
 		(*MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd)(nil),
+		(*MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd)(nil),
 	}
 }
 
@@ -800,12 +814,11 @@ func (m *SpeculativeUpdateClientBatchStreamInit) XXX_DiscardUnknown() {
 var xxx_messageInfo_SpeculativeUpdateClientBatchStreamInit proto.InternalMessageInfo
 
 type SpeculativeUpdateClientUnitInit struct {
-	UnitId        string           `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
-	TypeUrl       string           `protobuf:"bytes,2,opt,name=type_url,json=typeUrl,proto3" json:"type_url,omitempty"`
-	IncludeState  bool             `protobuf:"varint,3,opt,name=include_state,json=includeState,proto3" json:"include_state,omitempty"`
-	Signer        []byte           `protobuf:"bytes,4,opt,name=signer,proto3" json:"signer,omitempty"`
-	BaseState     ExplicitStateRef `protobuf:"bytes,5,opt,name=base_state,json=baseState,proto3" json:"base_state"`
-	DependencyIds []string         `protobuf:"bytes,6,rep,name=dependency_ids,json=dependencyIds,proto3" json:"dependency_ids,omitempty"`
+	UnitId       string           `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	TypeUrl      string           `protobuf:"bytes,2,opt,name=type_url,json=typeUrl,proto3" json:"type_url,omitempty"`
+	IncludeState bool             `protobuf:"varint,3,opt,name=include_state,json=includeState,proto3" json:"include_state,omitempty"`
+	Signer       []byte           `protobuf:"bytes,4,opt,name=signer,proto3" json:"signer,omitempty"`
+	BaseState    ExplicitStateRef `protobuf:"bytes,5,opt,name=base_state,json=baseState,proto3" json:"base_state"`
 }
 
 func (m *SpeculativeUpdateClientUnitInit) Reset()         { *m = SpeculativeUpdateClientUnitInit{} }
@@ -917,6 +930,42 @@ func (m *SpeculativeUpdateClientUnitEnd) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_SpeculativeUpdateClientUnitEnd proto.InternalMessageInfo
+
+type SpeculativeUpdateClientBatchEnd struct {
+}
+
+func (m *SpeculativeUpdateClientBatchEnd) Reset()         { *m = SpeculativeUpdateClientBatchEnd{} }
+func (m *SpeculativeUpdateClientBatchEnd) String() string { return proto.CompactTextString(m) }
+func (*SpeculativeUpdateClientBatchEnd) ProtoMessage()    {}
+func (*SpeculativeUpdateClientBatchEnd) Descriptor() ([]byte, []int) {
+	return fileDescriptor_28db3542707b11e8, []int{19}
+}
+func (m *SpeculativeUpdateClientBatchEnd) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SpeculativeUpdateClientBatchEnd) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SpeculativeUpdateClientBatchEnd.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SpeculativeUpdateClientBatchEnd) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SpeculativeUpdateClientBatchEnd.Merge(m, src)
+}
+func (m *SpeculativeUpdateClientBatchEnd) XXX_Size() int {
+	return m.Size()
+}
+func (m *SpeculativeUpdateClientBatchEnd) XXX_DiscardUnknown() {
+	xxx_messageInfo_SpeculativeUpdateClientBatchEnd.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SpeculativeUpdateClientBatchEnd proto.InternalMessageInfo
 
 type ObservedStateTransition struct {
 	PrevHeight  *types1.Height `protobuf:"bytes,1,opt,name=prev_height,json=prevHeight,proto3" json:"prev_height,omitempty"`
@@ -1062,6 +1111,7 @@ func init() {
 	proto.RegisterType((*SpeculativeUpdateClientUnitInit)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitInit")
 	proto.RegisterType((*SpeculativeUpdateClientUnitHeaderChunk)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitHeaderChunk")
 	proto.RegisterType((*SpeculativeUpdateClientUnitEnd)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientUnitEnd")
+	proto.RegisterType((*SpeculativeUpdateClientBatchEnd)(nil), "lcp.service.elc.v1.SpeculativeUpdateClientBatchEnd")
 	proto.RegisterType((*ObservedStateTransition)(nil), "lcp.service.elc.v1.ObservedStateTransition")
 	proto.RegisterType((*StitchedSpeculativeUpdateClientUnitResult)(nil), "lcp.service.elc.v1.StitchedSpeculativeUpdateClientUnitResult")
 	proto.RegisterType((*ExecuteSpeculativeUpdateClientBatchResponse)(nil), "lcp.service.elc.v1.ExecuteSpeculativeUpdateClientBatchResponse")
@@ -2375,6 +2425,27 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) MarshalToSizedBuffe
 	}
 	return len(dAtA) - i, nil
 }
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.BatchEnd != nil {
+		{
+			size, err := m.BatchEnd.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTx(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	return len(dAtA) - i, nil
+}
 func (m *SpeculativeUpdateClientBatchStreamInit) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2425,15 +2496,6 @@ func (m *SpeculativeUpdateClientUnitInit) MarshalToSizedBuffer(dAtA []byte) (int
 	_ = i
 	var l int
 	_ = l
-	if len(m.DependencyIds) > 0 {
-		for iNdEx := len(m.DependencyIds) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.DependencyIds[iNdEx])
-			copy(dAtA[i:], m.DependencyIds[iNdEx])
-			i = encodeVarintTx(dAtA, i, uint64(len(m.DependencyIds[iNdEx])))
-			i--
-			dAtA[i] = 0x32
-		}
-	}
 	{
 		size, err := m.BaseState.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
@@ -2543,6 +2605,25 @@ func (m *SpeculativeUpdateClientUnitEnd) MarshalToSizedBuffer(dAtA []byte) (int,
 		dAtA[i] = 0xa
 	}
 	return len(dAtA) - i, nil
+}
+
+func (m *SpeculativeUpdateClientBatchEnd) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SpeculativeUpdateClientBatchEnd) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SpeculativeUpdateClientBatchEnd) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	return 0, nil
 }
 
 func (m *ObservedStateTransition) Marshal() (dAtA []byte, err error) {
@@ -3085,6 +3166,18 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd) Size() (n int) {
 	}
 	return n
 }
+func (m *MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.BatchEnd != nil {
+		l = m.BatchEnd.Size()
+		n += 1 + l + sovTx(uint64(l))
+	}
+	return n
+}
 func (m *SpeculativeUpdateClientBatchStreamInit) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3121,12 +3214,6 @@ func (m *SpeculativeUpdateClientUnitInit) Size() (n int) {
 	}
 	l = m.BaseState.Size()
 	n += 1 + l + sovTx(uint64(l))
-	if len(m.DependencyIds) > 0 {
-		for _, s := range m.DependencyIds {
-			l = len(s)
-			n += 1 + l + sovTx(uint64(l))
-		}
-	}
 	return n
 }
 
@@ -3158,6 +3245,13 @@ func (m *SpeculativeUpdateClientUnitEnd) Size() (n int) {
 		n += 1 + l + sovTx(uint64(l))
 	}
 	return n
+}
+
+func (m *SpeculativeUpdateClientBatchEnd) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	return 0
 }
 
 func (m *ObservedStateTransition) Size() (n int) {
@@ -5584,6 +5678,41 @@ func (m *MsgSpeculativeUpdateClientBatchStreamChunk) Unmarshal(dAtA []byte) erro
 			}
 			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd{v}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BatchEnd", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTx
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTx
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTx
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &SpeculativeUpdateClientBatchEnd{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Chunk = &MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd{v}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])
@@ -5867,38 +5996,6 @@ func (m *SpeculativeUpdateClientUnitInit) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DependencyIds", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.DependencyIds = append(m.DependencyIds, string(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTx(dAtA[iNdEx:])
@@ -6113,6 +6210,48 @@ func (m *SpeculativeUpdateClientUnitEnd) Unmarshal(dAtA []byte) error {
 		}
 	}
 
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SpeculativeUpdateClientBatchEnd) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTx
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SpeculativeUpdateClientBatchEnd: wiretype end group for non-group")
+		}
+		iNdEx = preIndex
+		skippy, err := skipTx(dAtA[iNdEx:])
+		if err != nil {
+			return err
+		}
+		if (skippy < 0) || (iNdEx+skippy) < 0 {
+			return ErrInvalidLengthTx
+		}
+		if (iNdEx + skippy) > l {
+			return io.ErrUnexpectedEOF
+		}
+		iNdEx += skippy
+	}
 	if iNdEx > l {
 		return io.ErrUnexpectedEOF
 	}

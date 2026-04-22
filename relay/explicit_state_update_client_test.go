@@ -2,7 +2,9 @@ package relay
 
 import (
 	"context"
+	"io"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +15,11 @@ import (
 	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	tmclienttypes "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
+	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/hyperledger-labs/yui-relayer/core"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type fakeExplicitStateCounterpartyQuerier struct {
@@ -50,6 +56,18 @@ func (fakeExplicitStateTMValsetQuerier) QueryValsetAtHeight(_ context.Context, _
 	return &tmproto.ValidatorSet{}, nil
 }
 
+type eofingSpeculativeMsgClient struct {
+	elc.MsgClient
+	stream *recordingSpeculativeBatchStream
+}
+
+func (c eofingSpeculativeMsgClient) SpeculativeUpdateClientBatchStream(
+	context.Context,
+	...grpc.CallOption,
+) (elc.Msg_SpeculativeUpdateClientBatchStreamClient, error) {
+	return c.stream, nil
+}
+
 func TestBuildExplicitStateRefFromCanonicalState(t *testing.T) {
 	ref, err := buildExplicitStateRefFromCanonicalState(
 		&lcptypes.ClientState{LatestHeight: clienttypes.Height{RevisionNumber: 0, RevisionHeight: 11}},
@@ -63,6 +81,50 @@ func TestBuildExplicitStateRefFromCanonicalState(t *testing.T) {
 	}
 	if string(ref.PrevStateId) != "post-0" {
 		t.Fatalf("unexpected prev state id: %q", string(ref.PrevStateId))
+	}
+}
+
+func TestExecuteExplicitStateHeaderLanesStreamClosesOpenStreamAndEnrichesEOF(t *testing.T) {
+	stream := &recordingSpeculativeBatchStream{
+		sendErrAfter: 2,
+		sendErr:      io.EOF,
+		closeErr:     status.Error(codes.ResourceExhausted, "speculative unit header payload too large"),
+	}
+	pr := &Prover{
+		lcpServiceClient: LCPServiceClient{
+			ELCMsgClient: eofingSpeculativeMsgClient{stream: stream},
+		},
+	}
+
+	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+		context.Background(),
+		[][]*ExplicitStateHeaderUnit{{
+			{Header: &codectypes.Any{TypeUrl: "header", Value: []byte("header")}},
+		}},
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
+			return &ExplicitStateRef{
+				ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("client")},
+				ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("consensus")},
+			}, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected send error")
+	}
+	if !strings.Contains(err.Error(), "server status after send failure") {
+		t.Fatalf("expected enriched EOF status, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "speculative unit header payload too large") {
+		t.Fatalf("expected server status detail, got %v", err)
+	}
+	if !stream.closeAndRecvCalled {
+		t.Fatal("expected EOF enrichment to call CloseAndRecv")
+	}
+	if !stream.closeSendCalled {
+		t.Fatal("expected deferred CloseSend for open speculative stream")
 	}
 }
 
@@ -272,12 +334,6 @@ func TestBuildExplicitStateUpdatePlanKeepsEmbeddedBaseStateUnitsChainedByDefault
 	if got := plan.LaneWidths; len(got) != 1 || got[0] != 2 {
 		t.Fatalf("unexpected lane widths: %v", got)
 	}
-	if len(plan.Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected first unit dependencies: %v", plan.Units[0].DependencyIDs)
-	}
-	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
-	}
 }
 
 func TestBuildExplicitStateUpdatePlanSingleHeaderChainsIncompleteBaseState(t *testing.T) {
@@ -322,15 +378,6 @@ func TestBuildExplicitStateUpdatePlanSingleHeaderChainsIncompleteBaseState(t *te
 	}
 	if got := plan.LaneWidths; len(got) != 2 || got[0] != 2 || got[1] != 1 {
 		t.Fatalf("unexpected lane widths: %v", got)
-	}
-	if len(plan.Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected first unit dependencies: %v", plan.Units[0].DependencyIDs)
-	}
-	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
-	}
-	if len(plan.Units[2].DependencyIDs) != 0 {
-		t.Fatalf("unexpected third unit dependencies: %v", plan.Units[2].DependencyIDs)
 	}
 }
 
@@ -448,12 +495,6 @@ func TestBuildExplicitStateUpdatePlanForHeaderLanesSharedTrustedHeight(t *testin
 	}
 	if len(plan.Units) != 2 {
 		t.Fatalf("unexpected plan unit count: %d", len(plan.Units))
-	}
-	if len(plan.Units[0].DependencyIDs) != 0 {
-		t.Fatalf("unexpected dependencies: %v", plan.Units[0].DependencyIDs)
-	}
-	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
-		t.Fatalf("unexpected chained dependencies: %v", plan.Units[1].DependencyIDs)
 	}
 	if plan.Units[0].BaseState == nil || plan.Units[0].BaseState.PrevHeight == nil || plan.Units[0].BaseState.PrevHeight.RevisionHeight != 10 {
 		t.Fatalf("unexpected first base state: %#v", plan.Units[0].BaseState)

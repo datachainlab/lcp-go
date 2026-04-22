@@ -27,10 +27,9 @@ func (m *ExplicitStateRef) String() string { return proto.CompactTextString(m) }
 func (*ExplicitStateRef) ProtoMessage()    {}
 
 type SpeculativeUpdateClientUnit struct {
-	UnitId        string               `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
-	Update        *elc.MsgUpdateClient `protobuf:"bytes,2,opt,name=update,proto3" json:"update,omitempty"`
-	BaseState     *ExplicitStateRef    `protobuf:"bytes,3,opt,name=base_state,json=baseState,proto3" json:"base_state,omitempty"`
-	DependencyIds []string             `protobuf:"bytes,4,rep,name=dependency_ids,json=dependencyIds,proto3" json:"dependency_ids,omitempty"`
+	UnitId    string               `protobuf:"bytes,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
+	Update    *elc.MsgUpdateClient `protobuf:"bytes,2,opt,name=update,proto3" json:"update,omitempty"`
+	BaseState *ExplicitStateRef    `protobuf:"bytes,3,opt,name=base_state,json=baseState,proto3" json:"base_state,omitempty"`
 }
 
 func (m *SpeculativeUpdateClientUnit) Reset()         { *m = SpeculativeUpdateClientUnit{} }
@@ -146,10 +145,9 @@ func (s plannedSpeculativeUnitIterator) At(index int) (*SpeculativeUpdateClientU
 		return nil, fmt.Errorf("planned unit must not be nil")
 	}
 	return &SpeculativeUpdateClientUnit{
-		UnitId:        unit.UnitID,
-		Update:        unit.Update,
-		BaseState:     unit.BaseState,
-		DependencyIds: append([]string(nil), unit.DependencyIDs...),
+		UnitId:    unit.UnitID,
+		Update:    unit.Update,
+		BaseState: unit.BaseState,
 	}, nil
 }
 
@@ -239,6 +237,21 @@ func (s *speculativeBatchStreamSender) CloseAndRecv() (*ExecuteSpeculativeUpdate
 	if s == nil || s.stream == nil {
 		return nil, fmt.Errorf("speculative batch stream is not open")
 	}
+	if err := s.stream.Send(&elc.MsgSpeculativeUpdateClientBatchStreamChunk{
+		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd{
+			BatchEnd: &elc.SpeculativeUpdateClientBatchEnd{},
+		},
+	}); err != nil {
+		err, _ = s.enrichSendError(err)
+		return nil, fmt.Errorf("failed to send speculative batch end: %w", err)
+	}
+	return s.recvCloseStatus()
+}
+
+func (s *speculativeBatchStreamSender) recvCloseStatus() (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
+	if s == nil || s.stream == nil {
+		return nil, fmt.Errorf("speculative batch stream is not open")
+	}
 	resp, err := s.stream.CloseAndRecv()
 	if err != nil {
 		return nil, err
@@ -250,7 +263,7 @@ func (s *speculativeBatchStreamSender) enrichSendError(sendErr error) (error, bo
 	if !errors.Is(sendErr, io.EOF) {
 		return sendErr, false
 	}
-	_, closeErr := s.CloseAndRecv()
+	_, closeErr := s.recvCloseStatus()
 	if closeErr == nil {
 		return sendErr, true
 	}
@@ -292,12 +305,11 @@ func sendSpeculativeUpdateClientUnit(
 	unitInitChunk := &elc.MsgSpeculativeUpdateClientBatchStreamChunk{
 		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit{
 			UnitInit: &elc.SpeculativeUpdateClientUnitInit{
-				UnitId:        unit.UnitId,
-				TypeUrl:       unit.Update.Header.TypeUrl,
-				IncludeState:  unit.Update.IncludeState,
-				Signer:        append([]byte(nil), unit.Update.Signer...),
-				BaseState:     *baseState,
-				DependencyIds: append([]string(nil), unit.DependencyIds...),
+				UnitId:       unit.UnitId,
+				TypeUrl:      unit.Update.Header.TypeUrl,
+				IncludeState: unit.Update.IncludeState,
+				Signer:       append([]byte(nil), unit.Update.Signer...),
+				BaseState:    *baseState,
 			},
 		},
 	}

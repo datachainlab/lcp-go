@@ -13,13 +13,10 @@ import (
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
-const maxSpeculativeBatchUnitsPerRequest = 256
-
 type ExplicitStatePlannedUnit struct {
-	UnitID        string
-	Update        *elc.MsgUpdateClient
-	BaseState     *ExplicitStateRef
-	DependencyIDs []string
+	UnitID    string
+	Update    *elc.MsgUpdateClient
+	BaseState *ExplicitStateRef
 }
 
 type ExplicitStateUpdatePlan struct {
@@ -51,11 +48,6 @@ func newExplicitStateUpdatePlan(
 		}
 		if _, ok := seen[unit.UnitID]; ok {
 			return nil, fmt.Errorf("duplicate unit_id in explicit-state plan: %s", unit.UnitID)
-		}
-		for _, dep := range unit.DependencyIDs {
-			if _, ok := seen[dep]; !ok {
-				return nil, fmt.Errorf("unit[%d] depends on unknown or non-preceding unit: %s", i, dep)
-			}
 		}
 		seen[unit.UnitID] = struct{}{}
 	}
@@ -94,7 +86,6 @@ func newLaneExplicitStateUpdatePlan(
 				len(baseStates),
 			)
 		}
-		var prevUnitID string
 		for i, update := range updates {
 			baseState := baseStates[i]
 			if baseState == nil {
@@ -105,11 +96,7 @@ func newLaneExplicitStateUpdatePlan(
 				Update:    update,
 				BaseState: baseState,
 			}
-			if prevUnitID != "" {
-				unit.DependencyIDs = []string{prevUnitID}
-			}
 			units = append(units, unit)
-			prevUnitID = unit.UnitID
 			unitIndex++
 		}
 	}
@@ -131,10 +118,9 @@ func (p *ExplicitStateUpdatePlan) buildRequest() *ExecuteSpeculativeUpdateClient
 	}
 	for _, unit := range p.Units {
 		req.Units = append(req.Units, &SpeculativeUpdateClientUnit{
-			UnitId:        unit.UnitID,
-			Update:        unit.Update,
-			BaseState:     unit.BaseState,
-			DependencyIds: append([]string(nil), unit.DependencyIDs...),
+			UnitId:    unit.UnitID,
+			Update:    unit.Update,
+			BaseState: unit.BaseState,
 		})
 	}
 	return req
@@ -155,24 +141,12 @@ func (p *ExplicitStateUpdatePlan) splitIntoExecutableBatches(maxUnits int) ([]*E
 			)
 		}
 
-		batchUnitIDs := make(map[string]struct{}, end-start)
-		for _, unit := range p.Units[start:end] {
-			batchUnitIDs[unit.UnitID] = struct{}{}
-		}
-
 		units := make([]*ExplicitStatePlannedUnit, 0, end-start)
 		for _, unit := range p.Units[start:end] {
-			deps := make([]string, 0, len(unit.DependencyIDs))
-			for _, dep := range unit.DependencyIDs {
-				if _, ok := batchUnitIDs[dep]; ok {
-					deps = append(deps, dep)
-				}
-			}
 			units = append(units, &ExplicitStatePlannedUnit{
-				UnitID:        unit.UnitID,
-				Update:        unit.Update,
-				BaseState:     cloneExplicitStateRef(unit.BaseState),
-				DependencyIDs: deps,
+				UnitID:    unit.UnitID,
+				Update:    unit.Update,
+				BaseState: cloneExplicitStateRef(unit.BaseState),
 			})
 		}
 
@@ -203,7 +177,8 @@ func (pr *Prover) executeExplicitStateUpdatePlan(
 	ctx context.Context,
 	plan *ExplicitStateUpdatePlan,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
-	batches, err := plan.splitIntoExecutableBatches(maxSpeculativeBatchUnitsPerRequest)
+	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
+	batches, err := plan.splitIntoExecutableBatches(maxUnits)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +190,7 @@ func (pr *Prover) executeExplicitStateUpdatePlan(
 			"client_id", plan.ClientID,
 			"num_units", len(plan.Units),
 			"num_batches", len(batches),
-			"batch_limit", maxSpeculativeBatchUnitsPerRequest,
+			"batch_limit", maxUnits,
 		)
 	}
 
@@ -281,7 +256,6 @@ func logExplicitStateUnitInput(
 		"unit_index", unitIndex,
 		"batch_index", batchIndex,
 		"num_batches", numBatches,
-		"dependency_ids", unit.DependencyIDs,
 		"input_prev_height", explicitStateHeightLogValue(explicitStateRefPrevHeight(baseState)),
 		"input_prev_state_id", hexBytes(baseStatePrevStateID(baseState)),
 		"input_has_complete_base_state", hasCanonicalExplicitStatePayload(baseState),

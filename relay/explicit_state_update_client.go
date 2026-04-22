@@ -322,11 +322,12 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 	if totalUnits == 0 {
 		return results, nil
 	}
-	if err := validateExplicitStateHeaderLaneBatchBoundaries(headerLanes, maxSpeculativeBatchUnitsPerRequest); err != nil {
+	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
+	if err := validateExplicitStateHeaderLaneBatchBoundaries(headerLanes, maxUnits); err != nil {
 		return nil, err
 	}
 
-	numBatches := (totalUnits + maxSpeculativeBatchUnitsPerRequest - 1) / maxSpeculativeBatchUnitsPerRequest
+	numBatches := (totalUnits + maxUnits - 1) / maxUnits
 	if numBatches > 1 {
 		pr.getLogger().InfoContext(
 			ctx,
@@ -334,21 +335,26 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			"client_id", elcClientID,
 			"num_units", totalUnits,
 			"num_batches", numBatches,
-			"batch_limit", maxSpeculativeBatchUnitsPerRequest,
+			"batch_limit", maxUnits,
 		)
 	}
 
 	var sender *speculativeBatchStreamSender
-	batchSigners := make([][]byte, 0, maxSpeculativeBatchUnitsPerRequest)
-	batchUnitIDs := make(map[string]struct{}, maxSpeculativeBatchUnitsPerRequest)
+	closed := true
+	batchSigners := make([][]byte, 0, maxUnits)
 	batchIndex := 0
 	unitIndex := 0
+	defer func() {
+		if !closed && sender != nil {
+			_ = sender.CloseSend()
+		}
+	}()
 
 	openBatch := func() error {
 		if sender != nil {
 			return nil
 		}
-		numUnits := min(maxSpeculativeBatchUnitsPerRequest, totalUnits-unitIndex)
+		numUnits := min(maxUnits, totalUnits-unitIndex)
 		pr.getLogger().InfoContext(
 			ctx,
 			"invoke speculative update client batch",
@@ -367,6 +373,7 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			return err
 		}
 		sender = nextSender
+		closed = false
 		return nil
 	}
 
@@ -375,6 +382,7 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			return nil
 		}
 		resp, err := sender.CloseAndRecv()
+		closed = true
 		if err != nil {
 			return fmt.Errorf("failed explicit-state update client batch: %w", err)
 		}
@@ -393,13 +401,11 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 		}
 		sender = nil
 		batchSigners = batchSigners[:0]
-		clear(batchUnitIDs)
 		batchIndex++
 		return nil
 	}
 
 	for laneIndex, lane := range headerLanes {
-		var prevUnitID string
 		for unitIndexInLane, unitHeader := range lane {
 			if unitHeader == nil || unitHeader.Header == nil {
 				return nil, fmt.Errorf("header lane %d contains nil header unit", laneIndex)
@@ -434,34 +440,28 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 				},
 				BaseState: baseState,
 			}
-			if prevUnitID != "" {
-				if _, ok := batchUnitIDs[prevUnitID]; ok {
-					unit.DependencyIDs = []string{prevUnitID}
-				} else if !canStartIndependentExplicitStateBatch(unit) {
-					return nil, fmt.Errorf(
-						"cannot split explicit-state plan at unit %s: missing base state payload",
-						unit.UnitID,
-					)
-				}
+			if sender == nil && unitIndex > 0 && !canStartIndependentExplicitStateBatch(unit) {
+				return nil, fmt.Errorf(
+					"cannot split explicit-state plan at unit %s: missing base state payload",
+					unit.UnitID,
+				)
 			}
 
 			if err := openBatch(); err != nil {
 				return nil, err
 			}
 			if err := sender.Send(&SpeculativeUpdateClientUnit{
-				UnitId:        unit.UnitID,
-				Update:        unit.Update,
-				BaseState:     unit.BaseState,
-				DependencyIds: append([]string(nil), unit.DependencyIDs...),
+				UnitId:    unit.UnitID,
+				Update:    unit.Update,
+				BaseState: unit.BaseState,
 			}); err != nil {
+				err, _ = sender.enrichSendError(err)
 				return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unit.UnitID, err)
 			}
 			batchSigners = append(batchSigners, unit.Update.Signer)
-			batchUnitIDs[unit.UnitID] = struct{}{}
-			prevUnitID = unit.UnitID
 			unitIndex++
 
-			if len(batchSigners) == maxSpeculativeBatchUnitsPerRequest {
+			if len(batchSigners) == maxUnits {
 				if err := flushBatch(); err != nil {
 					return nil, err
 				}
