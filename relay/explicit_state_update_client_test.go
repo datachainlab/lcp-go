@@ -166,11 +166,57 @@ func TestPlanExplicitStateHeaderLanesSingleHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
 	}
-	if len(lanes) != 2 {
+	if len(lanes) != 1 {
 		t.Fatalf("unexpected lane count: %d", len(lanes))
 	}
-	if len(lanes[0]) != 1 || len(lanes[1]) != 1 {
+	if len(lanes[0]) != 2 {
 		t.Fatalf("unexpected lane widths: %#v", lanes)
+	}
+}
+
+func TestPlanExplicitStateHeaderLanesSingleHeaderSplitsOnlyCompleteBaseState(t *testing.T) {
+	t.Setenv(envExplicitStateLaneStrategy, "single_header")
+	completeBaseState := func(height uint64) *ExplicitStateRef {
+		return &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: height},
+			ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("client")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("consensus")},
+		}
+	}
+	units := []*ExplicitStateHeaderUnit{
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-0"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+			BaseState:     completeBaseState(10),
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-1"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+			BaseState: &ExplicitStateRef{
+				PrevHeight: &clienttypes.Height{RevisionHeight: 11},
+			},
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-2"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
+			BaseState:     completeBaseState(12),
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-3"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 13},
+			BaseState:     completeBaseState(99),
+		},
+	}
+
+	lanes, err := planExplicitStateHeaderLanes(units)
+	if err != nil {
+		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
+	}
+	if got := explicitStateHeaderLaneWidths(lanes); len(got) != 2 || got[0] != 2 || got[1] != 2 {
+		t.Fatalf("unexpected lane widths: %v", got)
+	}
+	if lanes[0][0] != units[0] || lanes[0][1] != units[1] || lanes[1][0] != units[2] || lanes[1][1] != units[3] {
+		t.Fatalf("unexpected lane contents: %#v", lanes)
 	}
 }
 
@@ -231,6 +277,60 @@ func TestBuildExplicitStateUpdatePlanKeepsEmbeddedBaseStateUnitsChainedByDefault
 	}
 	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
 		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
+	}
+}
+
+func TestBuildExplicitStateUpdatePlanSingleHeaderChainsIncompleteBaseState(t *testing.T) {
+	t.Setenv(envExplicitStateLaneStrategy, "single_header")
+	completeBaseState := func(height uint64) *ExplicitStateRef {
+		return &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: height},
+			ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("client")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("consensus")},
+		}
+	}
+	units := []*ExplicitStateHeaderUnit{
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-0"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+			BaseState:     completeBaseState(10),
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-1"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+			BaseState: &ExplicitStateRef{
+				PrevHeight: &clienttypes.Height{RevisionHeight: 11},
+			},
+		},
+		{
+			Header:        &codectypes.Any{TypeUrl: "header-2"},
+			TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
+			BaseState:     completeBaseState(12),
+		},
+	}
+
+	pr := &Prover{}
+	plan, err := pr.buildExplicitStateUpdatePlanForHeaderUnits(
+		context.Background(),
+		units,
+		"07-tendermint-0",
+		false,
+		[]byte("signer"),
+	)
+	if err != nil {
+		t.Fatalf("buildExplicitStateUpdatePlanForHeaderUnits() error = %v", err)
+	}
+	if got := plan.LaneWidths; len(got) != 2 || got[0] != 2 || got[1] != 1 {
+		t.Fatalf("unexpected lane widths: %v", got)
+	}
+	if len(plan.Units[0].DependencyIDs) != 0 {
+		t.Fatalf("unexpected first unit dependencies: %v", plan.Units[0].DependencyIDs)
+	}
+	if len(plan.Units[1].DependencyIDs) != 1 || plan.Units[1].DependencyIDs[0] != "unit-0000" {
+		t.Fatalf("unexpected second unit dependencies: %v", plan.Units[1].DependencyIDs)
+	}
+	if len(plan.Units[2].DependencyIDs) != 0 {
+		t.Fatalf("unexpected third unit dependencies: %v", plan.Units[2].DependencyIDs)
 	}
 }
 

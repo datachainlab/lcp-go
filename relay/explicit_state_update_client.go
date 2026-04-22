@@ -119,6 +119,16 @@ func explicitStateHeaderUnitsHaveEmbeddedBaseState(headerUnits []*ExplicitStateH
 	return true
 }
 
+func countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits []*ExplicitStateHeaderUnit) int {
+	count := 0
+	for _, unit := range headerUnits {
+		if canHeaderUnitStartIndependentLane(unit) {
+			count++
+		}
+	}
+	return count
+}
+
 func planConservativeExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*ExplicitStateHeaderUnit, error) {
 	if len(headerUnits) == 0 {
 		return nil, nil
@@ -136,14 +146,35 @@ func planSingleHeaderExplicitStateLanes(headerUnits []*ExplicitStateHeaderUnit) 
 	if len(headerUnits) == 0 {
 		return nil, nil
 	}
-	lanes := make([][]*ExplicitStateHeaderUnit, 0, len(headerUnits))
+	var lanes [][]*ExplicitStateHeaderUnit
+	var currentLane []*ExplicitStateHeaderUnit
 	for i, unit := range headerUnits {
 		if unit == nil || unit.Header == nil {
 			return nil, fmt.Errorf("explicit-state header unit[%d] must not be nil", i)
 		}
-		lanes = append(lanes, []*ExplicitStateHeaderUnit{unit})
+		if i == 0 || canHeaderUnitStartIndependentLane(unit) {
+			if len(currentLane) > 0 {
+				lanes = append(lanes, currentLane)
+			}
+			currentLane = []*ExplicitStateHeaderUnit{unit}
+			continue
+		}
+		currentLane = append(currentLane, unit)
+	}
+	if len(currentLane) > 0 {
+		lanes = append(lanes, currentLane)
 	}
 	return lanes, nil
+}
+
+func canHeaderUnitStartIndependentLane(unit *ExplicitStateHeaderUnit) bool {
+	if unit == nil || unit.TrustedHeight == nil {
+		return false
+	}
+	if !hasCanonicalExplicitStatePayload(unit.BaseState) {
+		return false
+	}
+	return unit.BaseState.PrevHeight.EQ(*unit.TrustedHeight)
 }
 
 func planSharedTrustedHeightExplicitStateLanes(

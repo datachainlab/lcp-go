@@ -379,6 +379,7 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 			"num_source_headers", len(sourceHeaderUnits),
 			"num_units", countExplicitStateHeaderLaneUnits(headerLanes),
 			"num_lanes", len(laneWidths),
+			"num_complete_base_states", countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits),
 			"lane_widths", laneWidths,
 			"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, laneWidths),
 		)
