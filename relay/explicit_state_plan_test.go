@@ -964,11 +964,35 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 			SignedHeader:  &tmproto.SignedHeader{Header: &tmproto.Header{Height: 12}},
 		},
 	}
+	baseStates := []*ExplicitStateRef{
+		{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
+			ClientState:    &codectypes.Any{TypeUrl: "client/10", Value: []byte("client-10")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/10", Value: []byte("consensus-10")},
+		},
+		{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
+			ClientState:    &codectypes.Any{TypeUrl: "client/10b", Value: []byte("client-10b")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/10b", Value: []byte("consensus-10b")},
+		},
+	}
 	pr := &Prover{
 		config: ProverConfig{ElcClientId: "07-tendermint-11"},
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
 			headers: headers,
+			explicitStateChunks: []*ExplicitStateSourceHeaderUnit{
+				{
+					AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 10),
+					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+					BaseState:     baseStates[0],
+				},
+				{
+					AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 10),
+					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+					BaseState:     baseStates[1],
+				},
+			},
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{
@@ -999,6 +1023,9 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 		}
 		if !unit.Update.IncludeState {
 			t.Fatalf("unit[%d] include_state is false", i)
+		}
+		if unit.BaseState == nil || unit.BaseState.ClientState == nil || unit.BaseState.ConsensusState == nil {
+			t.Fatalf("unit[%d] missing embedded base state: %#v", i, unit.BaseState)
 		}
 	}
 	if len(responses) != 2 {

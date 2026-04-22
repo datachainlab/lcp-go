@@ -394,16 +394,13 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	pr.getLogger().InfoContext(ctx, "try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 
-	// 2. query the header from the upstream chain
-
-	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
-	if err != nil {
-		return nil, err
-	}
-
-	// Activation follows the existing header stream exactly; it does not run the
-	// multi-header/chunk expansion used by the normal update-client path.
-	sourceHeaderUnits, err := collectExplicitStateSourceHeaderUnits(headerStream)
+	// 2. query the header from the upstream chain. Use the explicit-state
+	// collector here too so activation can carry chunk-local base states.
+	sourceHeaderUnits, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(
+		ctx,
+		NewLCPQuerier(pr.lcpServiceClient, elcClientID),
+		latestHeader,
+	)
 	if err != nil {
 		return nil, err
 	}
