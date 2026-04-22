@@ -182,10 +182,17 @@ func (p *ExplicitStateUpdatePlan) splitIntoExecutableBatches(maxUnits int) ([]*E
 }
 
 func canStartIndependentExplicitStateBatch(unit *ExplicitStatePlannedUnit) bool {
-	if unit == nil || unit.BaseState == nil {
+	if unit == nil {
 		return false
 	}
-	return unit.BaseState.ClientState != nil && unit.BaseState.ConsensusState != nil
+	return hasCanonicalExplicitStatePayload(unit.BaseState)
+}
+
+func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
+	return baseState != nil &&
+		baseState.PrevHeight != nil &&
+		baseState.ClientState != nil &&
+		baseState.ConsensusState != nil
 }
 
 func (pr *Prover) executeExplicitStateUpdatePlan(

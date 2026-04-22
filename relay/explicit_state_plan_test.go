@@ -1060,6 +1060,24 @@ func TestExplicitStateUpdatePlanSplitIntoExecutableBatches(t *testing.T) {
 	}
 }
 
+func TestCanStartIndependentExplicitStateBatchRequiresPrevHeight(t *testing.T) {
+	unit := &ExplicitStatePlannedUnit{
+		BaseState: &ExplicitStateRef{
+			ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
+		},
+	}
+
+	if canStartIndependentExplicitStateBatch(unit) {
+		t.Fatal("base state without prev_height must not start an independent batch")
+	}
+
+	unit.BaseState.PrevHeight = &clienttypes.Height{RevisionHeight: 10}
+	if !canStartIndependentExplicitStateBatch(unit) {
+		t.Fatal("complete base state should start an independent batch")
+	}
+}
+
 func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -1453,7 +1471,7 @@ func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesChunkProvider(t *test
 func TestBuildExplicitStateUpdatePlanForHeaderLanesUsesEmbeddedBaseState(t *testing.T) {
 	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
 	embedded := &ExplicitStateRef{
-		PrevHeight:  &clienttypes.Height{RevisionHeight: 44},
+		PrevHeight:  &clienttypes.Height{RevisionHeight: 10},
 		PrevStateId: []byte("embedded"),
 	}
 	pr := &Prover{}
@@ -1487,7 +1505,7 @@ func TestBuildExplicitStateUpdatePlanForHeaderLanesUsesEmbeddedBaseState(t *test
 	if len(plan.Units) != 1 {
 		t.Fatalf("unexpected plan units: %d", len(plan.Units))
 	}
-	if plan.Units[0].BaseState == nil || plan.Units[0].BaseState.PrevHeight == nil || plan.Units[0].BaseState.PrevHeight.RevisionHeight != 44 {
+	if plan.Units[0].BaseState == nil || plan.Units[0].BaseState.PrevHeight == nil || plan.Units[0].BaseState.PrevHeight.RevisionHeight != 10 {
 		t.Fatalf("unexpected embedded base state: %#v", plan.Units[0].BaseState)
 	}
 	if string(plan.Units[0].BaseState.PrevStateId) != "embedded" {
@@ -1495,5 +1513,40 @@ func TestBuildExplicitStateUpdatePlanForHeaderLanesUsesEmbeddedBaseState(t *test
 	}
 	if plan.Units[0].BaseState == embedded {
 		t.Fatal("expected embedded base state to be cloned")
+	}
+}
+
+func TestBuildExplicitStateUpdatePlanForHeaderLanesRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
+	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
+	pr := &Prover{}
+
+	_, err := pr.buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
+		context.Background(),
+		[][]*ExplicitStateHeaderUnit{
+			{
+				{
+					Header:        anyHeader,
+					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+					BaseState: &ExplicitStateRef{
+						PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
+						ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
+						ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
+					},
+				},
+			},
+		},
+		"07-tendermint-0",
+		false,
+		[]byte("signer"),
+		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
+			t.Fatal("resolver should not be called for embedded base state")
+			return nil, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected embedded base state height mismatch error")
+	}
+	if !strings.Contains(err.Error(), "base_state prev_height mismatch") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

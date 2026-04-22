@@ -229,6 +229,9 @@ func (pr *Prover) buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
 			var baseState *ExplicitStateRef
 			if unitHeader.BaseState != nil {
 				baseState = cloneExplicitStateRef(unitHeader.BaseState)
+				if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
+					return nil, err
+				}
 			} else if unitIndex == 0 {
 				var err error
 				baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
@@ -373,6 +376,9 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			var baseState *ExplicitStateRef
 			if unitHeader.BaseState != nil {
 				baseState = cloneExplicitStateRef(unitHeader.BaseState)
+				if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
+					return nil, err
+				}
 			} else if unitIndexInLane == 0 {
 				var err error
 				baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
@@ -469,7 +475,21 @@ func canHeaderUnitStartIndependentExplicitStateBatch(unitIndexInLane int, unitHe
 	if unitHeader.BaseState == nil {
 		return unitIndexInLane == 0
 	}
-	return unitHeader.BaseState.ClientState != nil && unitHeader.BaseState.ConsensusState != nil
+	return hasCanonicalExplicitStatePayload(unitHeader.BaseState)
+}
+
+func validateExplicitStateBaseStateHeight(unitHeader *ExplicitStateHeaderUnit, baseState *ExplicitStateRef) error {
+	if unitHeader == nil || baseState == nil || baseState.PrevHeight == nil || unitHeader.TrustedHeight == nil {
+		return nil
+	}
+	if !baseState.PrevHeight.EQ(*unitHeader.TrustedHeight) {
+		return fmt.Errorf(
+			"explicit-state base_state prev_height mismatch: trusted_height=%s base_state_prev_height=%s",
+			unitHeader.TrustedHeight.String(),
+			baseState.PrevHeight.String(),
+		)
+	}
+	return nil
 }
 
 func buildDeferredExplicitStateRef(
