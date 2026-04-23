@@ -149,20 +149,3 @@ func extractAnyHeadersFromSourceUnits(
 	}
 	return anyHeaders, nil
 }
-
-func extractExplicitStateHeaderUnits(
-	units []*ExplicitStateSourceHeaderUnit,
-) []*ExplicitStateHeaderUnit {
-	headerUnits := make([]*ExplicitStateHeaderUnit, 0, len(units))
-	for _, unit := range units {
-		if unit == nil {
-			continue
-		}
-		headerUnits = append(headerUnits, &ExplicitStateHeaderUnit{
-			Header:        unit.AnyHeader,
-			TrustedHeight: unit.TrustedHeight,
-			BaseState:     cloneExplicitStateRef(unit.BaseState),
-		})
-	}
-	return headerUnits
-}

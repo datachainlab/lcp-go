@@ -7,7 +7,6 @@ import (
 	"io"
 	"math/big"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -474,6 +473,17 @@ func mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t *testing.T, headers
 	return units
 }
 
+func mustPackTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) *codectypes.Any {
+	t.Helper()
+	anyHeader, err := codectypes.NewAnyWithValue(&tmclienttypes.Header{
+		TrustedHeight: clienttypes.Height{RevisionHeight: trustedHeight},
+	})
+	if err != nil {
+		t.Fatalf("failed to pack tendermint header: %v", err)
+	}
+	return anyHeader
+}
+
 func (p fakeOriginProver) CheckRefreshRequired(context.Context, core.ChainInfoICS02Querier) (bool, error) {
 	return false, nil
 }
@@ -889,119 +899,6 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 	}
 }
 
-func TestExecuteExplicitStateHeaderUnitsStreamSplitsLargeRequests(t *testing.T) {
-	listener := bufconn.Listen(1024 * 1024)
-	server := grpc.NewServer()
-	t.Cleanup(server.Stop)
-
-	var captured []*ExecuteSpeculativeUpdateClientBatchRequest
-	elc.RegisterMsgServer(server, &explicitStateBatchMultiRequestServer{captured: &captured})
-	go func() {
-		_ = server.Serve(listener)
-	}()
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return listener.Dial()
-		}),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient() error = %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	headerUnits := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
-	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
-		headerUnits = append(headerUnits, &ExplicitStateHeaderUnit{
-			Header: makeSpeculativeBatchTestUpdate(
-				"07-tendermint-11",
-				[]byte(fmt.Sprintf("s%02d", i)),
-				i,
-			).Header,
-			TrustedHeight: &clienttypes.Height{RevisionHeight: uint64(10 + i)},
-			BaseState: &ExplicitStateRef{
-				PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + i)},
-				ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("c%d", i))},
-				ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", i), Value: []byte(fmt.Sprintf("s%d", i))},
-			},
-		})
-	}
-
-	pr := &Prover{lcpServiceClient: NewLCPServiceClient(conn)}
-	results, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
-		context.Background(),
-		headerUnits,
-		"07-tendermint-11",
-		false,
-		[]byte("signer"),
-		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
-			t.Fatal("resolver should not be called for embedded base states")
-			return nil, nil
-		},
-	)
-	if err != nil {
-		t.Fatalf("executeExplicitStateHeaderUnitsStreamWithResolver() error = %v", err)
-	}
-
-	if len(captured) != 2 {
-		t.Fatalf("unexpected request count: %d", len(captured))
-	}
-	if got := len(captured[0].Units); got != DefaultMaxSpeculativeBatchUnits {
-		t.Fatalf("unexpected first request size: %d", got)
-	}
-	if got := len(captured[1].Units); got != 1 {
-		t.Fatalf("unexpected second request size: %d", got)
-	}
-	if len(results) != DefaultMaxSpeculativeBatchUnits+1 {
-		t.Fatalf("unexpected result count: %d", len(results))
-	}
-	if string(results[0].Message) != "msg-unit-0000" {
-		t.Fatalf("unexpected first result message: %s", string(results[0].Message))
-	}
-	lastIndex := DefaultMaxSpeculativeBatchUnits
-	wantLast := fmt.Sprintf("msg-unit-%04d", lastIndex)
-	if string(results[lastIndex].Message) != wantLast {
-		t.Fatalf("unexpected last result message: %s", string(results[lastIndex].Message))
-	}
-}
-
-func TestExecuteExplicitStateHeaderUnitsStreamRejectsDeferredBatchBoundaryBeforeOpeningStream(t *testing.T) {
-	headerUnits := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
-	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
-		headerUnits = append(headerUnits, &ExplicitStateHeaderUnit{
-			Header: &codectypes.Any{TypeUrl: "header", Value: []byte{byte(i)}},
-		})
-	}
-
-	resolveCalls := 0
-	pr := &Prover{}
-	_, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
-		context.Background(),
-		headerUnits,
-		"07-tendermint-11",
-		false,
-		[]byte("signer"),
-		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
-			resolveCalls++
-			return &ExplicitStateRef{
-				ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
-				ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
-			}, nil
-		},
-	)
-	if err == nil {
-		t.Fatal("expected deferred batch boundary error")
-	}
-	if !strings.Contains(err.Error(), "batch boundary requires canonical base state payload") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resolveCalls != 0 {
-		t.Fatalf("expected validation before resolving base states, got %d resolver calls", resolveCalls)
-	}
-}
-
 func TestUpdateELCForUpdateClientSingleHeaderStaysSingleUnitBatch(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
@@ -1328,38 +1225,5 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 	}
 	if units[0] != expected[0] {
 		t.Fatalf("expected chunk provider result to be used directly: %#v", units[0])
-	}
-}
-
-func TestExecuteExplicitStateHeaderUnitsStreamRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
-	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
-	pr := &Prover{}
-
-	_, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
-		context.Background(),
-		[]*ExplicitStateHeaderUnit{
-			{
-				Header:        anyHeader,
-				TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-				BaseState: &ExplicitStateRef{
-					PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
-					ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
-					ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
-				},
-			},
-		},
-		"07-tendermint-0",
-		false,
-		[]byte("signer"),
-		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
-			t.Fatal("resolver should not be called for embedded base state")
-			return nil, nil
-		},
-	)
-	if err == nil {
-		t.Fatal("expected embedded base state height mismatch error")
-	}
-	if !strings.Contains(err.Error(), "base_state prev_height mismatch") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }

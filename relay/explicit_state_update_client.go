@@ -17,7 +17,6 @@ import (
 )
 
 const envExplicitStateUpdateClient = "YRLY_LCP_USE_EXPLICIT_STATE_UPDATE_CLIENT"
-const queryClientMethod = "/lcp.service.elc.v1.Query/Client"
 
 func disableExplicitStateUpdateClient() bool {
 	v, ok := os.LookupEnv(envExplicitStateUpdateClient)
@@ -32,227 +31,11 @@ func disableExplicitStateUpdateClient() bool {
 	}
 }
 
-func explicitStateHeaderUnitsHaveEmbeddedBaseState(headerUnits []*ExplicitStateHeaderUnit) bool {
-	if len(headerUnits) == 0 {
-		return false
-	}
-	for _, unit := range headerUnits {
-		if unit == nil || unit.Header == nil || unit.BaseState == nil {
-			return false
-		}
-	}
-	return true
-}
-
-func countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits []*ExplicitStateHeaderUnit) int {
-	count := 0
-	for _, unit := range headerUnits {
-		if unit != nil && hasCanonicalExplicitStatePayload(unit.BaseState) {
-			count++
-		}
-	}
-	return count
-}
-
-func validateExplicitStateHeaderUnits(headerUnits []*ExplicitStateHeaderUnit) error {
-	for i, unit := range headerUnits {
-		if err := validateExplicitStateHeaderUnit(i, unit); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateExplicitStateHeaderUnit(i int, unit *ExplicitStateHeaderUnit) error {
-	if unit == nil || unit.Header == nil {
-		return fmt.Errorf("explicit-state header unit[%d] must not be nil", i)
-	}
-	return nil
-}
-
 func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
 	return baseState != nil &&
 		baseState.PrevHeight != nil &&
 		baseState.ClientState != nil &&
 		baseState.ConsensusState != nil
-}
-
-func (pr *Prover) executeExplicitStateHeaderUnitsStream(
-	ctx context.Context,
-	headerUnits []*ExplicitStateHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-) ([]*elcupdater_storage.UpdateClientResult, error) {
-	return pr.executeExplicitStateHeaderUnitsStreamWithResolver(
-		ctx,
-		headerUnits,
-		elcClientID,
-		includeState,
-		signer,
-		func(ctx context.Context, elcClientID string, anyHeader *codectypes.Any) (*ExplicitStateRef, error) {
-			return pr.queryExplicitStateRef(ctx, elcClientID, anyHeader)
-		},
-	)
-}
-
-func (pr *Prover) executeExplicitStateHeaderUnitsStreamWithResolver(
-	ctx context.Context,
-	headerUnits []*ExplicitStateHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-	resolveBaseState func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error),
-) ([]*elcupdater_storage.UpdateClientResult, error) {
-	totalUnits := len(headerUnits)
-	results := make([]*elcupdater_storage.UpdateClientResult, 0, totalUnits)
-	if totalUnits == 0 {
-		return results, nil
-	}
-	if err := validateExplicitStateHeaderUnits(headerUnits); err != nil {
-		return nil, err
-	}
-	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
-	if err := validateExplicitStateHeaderUnitBatchBoundaries(headerUnits, maxUnits); err != nil {
-		return nil, err
-	}
-
-	numBatches := (totalUnits + maxUnits - 1) / maxUnits
-	if numBatches > 1 {
-		pr.getLogger().InfoContext(
-			ctx,
-			"split speculative update client batch",
-			"client_id", elcClientID,
-			"num_units", totalUnits,
-			"num_batches", numBatches,
-			"batch_limit", maxUnits,
-		)
-	}
-
-	var sender *speculativeBatchStreamSender
-	closed := true
-	batchSigners := make([][]byte, 0, maxUnits)
-	batchIndex := 0
-	defer func() {
-		if !closed && sender != nil {
-			_ = sender.CloseSend()
-		}
-	}()
-
-	openBatch := func(unitIndex int) error {
-		if sender != nil {
-			return nil
-		}
-		numUnits := min(maxUnits, totalUnits-unitIndex)
-		pr.getLogger().InfoContext(
-			ctx,
-			"invoke speculative update client batch",
-			"client_id", elcClientID,
-			"num_units", numUnits,
-			"batch_index", batchIndex,
-			"num_batches", numBatches,
-		)
-		nextSender, err := openSpeculativeUpdateClientBatchStream(
-			ctx,
-			pr.lcpServiceClient,
-			elcClientID,
-			pr.config.GetMaxChunkSizeForUpdateClient(),
-		)
-		if err != nil {
-			return err
-		}
-		sender = nextSender
-		closed = false
-		return nil
-	}
-
-	flushBatch := func() error {
-		if sender == nil {
-			return nil
-		}
-		resp, err := sender.CloseAndRecv()
-		closed = true
-		if err != nil {
-			return fmt.Errorf("failed explicit-state update client batch: %w", err)
-		}
-		if len(resp.Units) != len(batchSigners) {
-			return fmt.Errorf("unexpected speculative batch response shape: units=%d sent=%d", len(resp.Units), len(batchSigners))
-		}
-		for i, unit := range resp.Units {
-			if unit == nil {
-				return fmt.Errorf("unexpected speculative batch response unit at index %d", i)
-			}
-			results = append(results, &elcupdater_storage.UpdateClientResult{
-				Message:   unit.Response.Message,
-				Signature: unit.Response.Signature,
-				Signer:    batchSigners[i],
-			})
-		}
-		sender = nil
-		batchSigners = batchSigners[:0]
-		batchIndex++
-		return nil
-	}
-
-	for unitIndex, unitHeader := range headerUnits {
-		var baseState *ExplicitStateRef
-		if unitHeader.BaseState != nil {
-			baseState = cloneExplicitStateRef(unitHeader.BaseState)
-			if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
-				return nil, err
-			}
-		} else if unitIndex == 0 {
-			var err error
-			baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			var err error
-			baseState, err = buildDeferredExplicitStateRef(unitHeader.Header, pr.codec)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		unitID := buildSpeculativeUnitID(unitIndex)
-		update := &elc.MsgUpdateClient{
-			ClientId:     elcClientID,
-			Header:       unitHeader.Header,
-			IncludeState: includeState,
-			Signer:       signer,
-		}
-		if sender == nil && unitIndex > 0 && !hasCanonicalExplicitStatePayload(baseState) {
-			return nil, fmt.Errorf(
-				"cannot split explicit-state batch at unit %s: missing base state payload",
-				unitID,
-			)
-		}
-
-		if err := openBatch(unitIndex); err != nil {
-			return nil, err
-		}
-		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
-		if err := sender.Send(&SpeculativeUpdateClientUnit{
-			UnitId:    unitID,
-			Update:    update,
-			BaseState: baseState,
-		}); err != nil {
-			err, _ = sender.enrichSendError(err)
-			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
-		}
-		batchSigners = append(batchSigners, update.Signer)
-
-		if len(batchSigners) == maxUnits {
-			if err := flushBatch(); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if err := flushBatch(); err != nil {
-		return nil, err
-	}
-	return results, nil
 }
 
 func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
@@ -349,25 +132,22 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			}
 		}
 		sourceHeaderUnits = append(sourceHeaderUnits, sourceUnit)
-		unitHeader := &ExplicitStateHeaderUnit{
-			Header:        sourceUnit.AnyHeader,
-			TrustedHeight: sourceUnit.TrustedHeight,
-			BaseState:     cloneExplicitStateRef(sourceUnit.BaseState),
+		if sourceUnit.AnyHeader == nil {
+			return nil, sourceHeaderUnits, fmt.Errorf("explicit-state source header unit[%d] missing packed header", unitIndex)
 		}
-		if err := validateExplicitStateHeaderUnit(unitIndex, unitHeader); err != nil {
+		if sourceUnit.BaseState == nil {
+			return nil, sourceHeaderUnits, fmt.Errorf("explicit-state source header unit[%d] missing base state", unitIndex)
+		}
+		if err := validateExplicitStateBaseStateHeight(sourceUnit); err != nil {
 			return nil, sourceHeaderUnits, err
 		}
 
-		var baseState *ExplicitStateRef
-		baseState = cloneExplicitStateRef(unitHeader.BaseState)
-		if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
-			return nil, sourceHeaderUnits, err
-		}
+		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
 		unitID := buildSpeculativeUnitID(unitIndex)
 		update := &elc.MsgUpdateClient{
 			ClientId:     elcClientID,
-			Header:       unitHeader.Header,
+			Header:       sourceUnit.AnyHeader,
 			IncludeState: includeState,
 			Signer:       signer,
 		}
@@ -437,121 +217,18 @@ func logExplicitStateUnitSend(
 	)
 }
 
-func validateExplicitStateHeaderUnitBatchBoundaries(
-	headerUnits []*ExplicitStateHeaderUnit,
-	maxUnits int,
-) error {
-	if maxUnits <= 0 {
+func validateExplicitStateBaseStateHeight(sourceUnit *ExplicitStateSourceHeaderUnit) error {
+	if sourceUnit == nil || sourceUnit.BaseState == nil || sourceUnit.BaseState.PrevHeight == nil || sourceUnit.TrustedHeight == nil {
 		return nil
 	}
-	for unitIndex, unitHeader := range headerUnits {
-		if unitIndex > 0 && unitIndex%maxUnits == 0 {
-			if unitHeader == nil || !hasCanonicalExplicitStatePayload(unitHeader.BaseState) {
-				return fmt.Errorf(
-					"cannot split explicit-state batch at unit %d: batch boundary requires canonical base state payload",
-					unitIndex,
-				)
-			}
-		}
-	}
-	return nil
-}
-
-func validateExplicitStateBaseStateHeight(unitHeader *ExplicitStateHeaderUnit, baseState *ExplicitStateRef) error {
-	if unitHeader == nil || baseState == nil || baseState.PrevHeight == nil || unitHeader.TrustedHeight == nil {
-		return nil
-	}
-	if !baseState.PrevHeight.EQ(*unitHeader.TrustedHeight) {
+	if !sourceUnit.BaseState.PrevHeight.EQ(*sourceUnit.TrustedHeight) {
 		return fmt.Errorf(
 			"explicit-state base_state prev_height mismatch: trusted_height=%s base_state_prev_height=%s",
-			unitHeader.TrustedHeight.String(),
-			baseState.PrevHeight.String(),
+			sourceUnit.TrustedHeight.String(),
+			sourceUnit.BaseState.PrevHeight.String(),
 		)
 	}
 	return nil
-}
-
-func buildDeferredExplicitStateRef(
-	anyHeader *codectypes.Any,
-	cdc codectypes.AnyUnpacker,
-) (*ExplicitStateRef, error) {
-	trustedHeight, err := trustedHeightForExplicitState(anyHeader, cdc)
-	if err != nil {
-		return nil, err
-	}
-	ref := &ExplicitStateRef{}
-	if trustedHeight != nil && !trustedHeight.IsZero() {
-		h := *trustedHeight
-		ref.PrevHeight = &h
-	}
-	return ref, nil
-}
-
-func (pr *Prover) queryExplicitStateRef(
-	ctx context.Context,
-	elcClientID string,
-	anyHeader *codectypes.Any,
-) (*ExplicitStateRef, error) {
-	req := &explicitStateQueryClientRequest{ClientId: elcClientID}
-	trustedHeight, err := trustedHeightForExplicitState(anyHeader, pr.codec)
-	if err != nil {
-		return nil, err
-	}
-	if trustedHeight != nil {
-		req.Height = trustedHeight
-	}
-
-	pr.explicitStateQueryMu.Lock()
-	defer pr.explicitStateQueryMu.Unlock()
-
-	res, err := queryClientWithExplicitState(ctx, pr.lcpServiceClient, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query ELC client state: %w", err)
-	}
-	if !res.Found {
-		return nil, fmt.Errorf("client not found: client_id=%s", elcClientID)
-	}
-
-	var clientState ibcexported.ClientState
-	if err := pr.codec.UnpackAny(res.ClientState, &clientState); err != nil {
-		return nil, fmt.Errorf("failed to unpack ELC client state: %w", err)
-	}
-
-	var consensusState ibcexported.ConsensusState
-	if err := pr.codec.UnpackAny(res.ConsensusState, &consensusState); err != nil {
-		return nil, fmt.Errorf("failed to unpack ELC consensus state: %w", err)
-	}
-
-	ref, err := buildExplicitStateRefFromCanonicalState(clientState, consensusState)
-	if err != nil {
-		return nil, err
-	}
-	if trustedHeight != nil && !trustedHeight.IsZero() {
-		h := *trustedHeight
-		ref.PrevHeight = &h
-	}
-	return ref, nil
-}
-
-type explicitStateQueryClientRequest struct {
-	ClientId string              `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	Height   *clienttypes.Height `protobuf:"bytes,2,opt,name=height,proto3" json:"height,omitempty"`
-}
-
-func (m *explicitStateQueryClientRequest) Reset()         { *m = explicitStateQueryClientRequest{} }
-func (m *explicitStateQueryClientRequest) String() string { return gogoproto.CompactTextString(m) }
-func (*explicitStateQueryClientRequest) ProtoMessage()    {}
-
-func queryClientWithExplicitState(
-	ctx context.Context,
-	client LCPServiceClient,
-	req *explicitStateQueryClientRequest,
-) (*elc.QueryClientResponse, error) {
-	out := new(elc.QueryClientResponse)
-	if err := client.conn.Invoke(ctx, queryClientMethod, req, out); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func trustedHeightForExplicitState(

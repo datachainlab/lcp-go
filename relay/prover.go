@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -42,8 +41,7 @@ type Prover struct {
 	path             *core.PathEnd
 	counterpartyPath *core.PathEnd
 
-	lcpServiceClient     LCPServiceClient
-	explicitStateQueryMu sync.Mutex
+	lcpServiceClient LCPServiceClient
 
 	eip712Signer *EIP712Signer
 
@@ -417,48 +415,6 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 			Signature: res.Signature,
 			Signer:    signer,
 		})
-	}
-	return results, nil
-}
-
-func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
-	ctx context.Context,
-	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-	operation string,
-) ([]*elcupdater_storage.UpdateClientResult, error) {
-	headerUnits := extractExplicitStateHeaderUnits(sourceHeaderUnits)
-	pr.getLogger().InfoContext(
-		ctx,
-		"explicit-state ordered update units",
-		"operation", operation,
-		"num_source_headers", len(sourceHeaderUnits),
-		"num_units", len(headerUnits),
-		"num_complete_base_states", countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits),
-	)
-	results, err := pr.executeExplicitStateHeaderUnitsStream(
-		ctx,
-		headerUnits,
-		elcClientID,
-		includeState,
-		signer,
-	)
-	if err != nil {
-		if !shouldFallbackToSerialUpdateClient(err) {
-			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
-		}
-		if shouldLogSerialUpdateClientFallback(err) {
-			pr.getLogger().InfoContext(
-				ctx,
-				"fall back to serial update client after explicit-state batch failure",
-				"operation", operation,
-				"client_id", elcClientID,
-				"error", err.Error(),
-			)
-		}
-		return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
 	}
 	return results, nil
 }
