@@ -450,6 +450,27 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			if err := openBatch(); err != nil {
 				return nil, err
 			}
+			headerBytes := 0
+			headerSHA256 := ""
+			if unit.Update != nil && unit.Update.Header != nil {
+				headerBytes = len(unit.Update.Header.Value)
+				headerHash := sha256.Sum256(unit.Update.Header.Value)
+				headerSHA256 = fmt.Sprintf("%x", headerHash)
+			}
+			pr.getLogger().InfoContext(
+				ctx,
+				"send speculative update client unit",
+				"client_id", elcClientID,
+				"unit_id", unit.UnitID,
+				"batch_index", batchIndex,
+				"batch_unit_index", len(batchSigners),
+				"global_unit_index", unitIndex,
+				"lane_index", laneIndex,
+				"lane_unit_index", unitIndexInLane,
+				"include_state", includeState,
+				"header_bytes", headerBytes,
+				"header_sha256", headerSHA256,
+			)
 			if err := sender.Send(&SpeculativeUpdateClientUnit{
 				UnitId:    unit.UnitID,
 				Update:    unit.Update,
