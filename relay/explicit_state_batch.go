@@ -19,39 +19,6 @@ func executeSpeculativeUpdateClientPlannedUnitsStream(
 	units []*ExplicitStatePlannedUnit,
 	chunkSize uint32,
 ) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	return executeSpeculativeUpdateClientUnitsStream(ctx, client, clientID, plannedSpeculativeUnitIterator(units), chunkSize)
-}
-
-type speculativeUnitIterator interface {
-	Len() int
-	At(index int) (*SpeculativeUpdateClientUnit, error)
-}
-
-type plannedSpeculativeUnitIterator []*ExplicitStatePlannedUnit
-
-func (s plannedSpeculativeUnitIterator) Len() int {
-	return len(s)
-}
-
-func (s plannedSpeculativeUnitIterator) At(index int) (*SpeculativeUpdateClientUnit, error) {
-	unit := s[index]
-	if unit == nil {
-		return nil, fmt.Errorf("planned unit must not be nil")
-	}
-	return &SpeculativeUpdateClientUnit{
-		UnitId:    unit.UnitID,
-		Update:    unit.Update,
-		BaseState: unit.BaseState,
-	}, nil
-}
-
-func executeSpeculativeUpdateClientUnitsStream(
-	ctx context.Context,
-	client LCPServiceClient,
-	clientID string,
-	units speculativeUnitIterator,
-	chunkSize uint32,
-) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
 	sender, err := openSpeculativeUpdateClientBatchStream(ctx, client, clientID, chunkSize)
 	if err != nil {
 		return nil, err
@@ -62,10 +29,14 @@ func executeSpeculativeUpdateClientUnitsStream(
 			_ = sender.CloseSend()
 		}
 	}()
-	for i := 0; i < units.Len(); i++ {
-		unit, err := units.At(i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare speculative batch unit: index=%d, %w", i, err)
+	for i, plannedUnit := range units {
+		if plannedUnit == nil {
+			return nil, fmt.Errorf("failed to prepare speculative batch unit: index=%d, planned unit must not be nil", i)
+		}
+		unit := &SpeculativeUpdateClientUnit{
+			UnitId:    plannedUnit.UnitID,
+			Update:    plannedUnit.Update,
+			BaseState: plannedUnit.BaseState,
 		}
 		if err := sender.Send(unit); err != nil {
 			var closedByRecv bool
