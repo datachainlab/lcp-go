@@ -21,13 +21,13 @@ const envExplicitStateLaneStrategy = "YRLY_LCP_EXPLICIT_STATE_LANE_STRATEGY"
 const queryClientMethod = "/lcp.service.elc.v1.Query/Client"
 const tendermintHeaderTypeURL = "/ibc.lightclients.tendermint.v1.Header"
 
-func useExplicitStateUpdateClient() bool {
+func disableExplicitStateUpdateClient() bool {
 	v, ok := os.LookupEnv(envExplicitStateUpdateClient)
 	if !ok {
 		return false
 	}
 	switch v {
-	case "1", "true", "TRUE", "True":
+	case "0", "false", "FALSE", "False":
 		return true
 	default:
 		return false

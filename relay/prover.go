@@ -297,7 +297,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	if useExplicitStateUpdateClient() {
+	if !disableExplicitStateUpdateClient() {
 		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
 		if err != nil {
 			return nil, err

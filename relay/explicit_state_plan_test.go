@@ -40,7 +40,13 @@ type explicitStateBatchTestService interface {
 type explicitStateFallbackTestServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
+	batchCalls  int
 	updateCalls int
+}
+
+func (s *explicitStateFallbackTestServer) SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	s.batchCalls++
+	return status.Error(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented")
 }
 
 func (s *explicitStateFallbackTestServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
@@ -773,7 +779,6 @@ func TestUpdateELCForUpdateClientKeepsTendermintSharedTrustedHeightLinear(t *tes
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-	t.Setenv(envExplicitStateUpdateClient, "true")
 	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
 
 	lis := bufconn.Listen(1024 * 1024)
@@ -879,7 +884,6 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-	t.Setenv(envExplicitStateUpdateClient, "true")
 
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -1169,7 +1173,6 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleLane(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-	t.Setenv(envExplicitStateUpdateClient, "true")
 	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
 
 	lis := bufconn.Listen(1024 * 1024)
@@ -1245,7 +1248,6 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-	t.Setenv(envExplicitStateUpdateClient, "true")
 
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -1312,6 +1314,9 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 	if err != nil {
 		t.Fatalf("updateELCForUpdateClient() error = %v", err)
 	}
+	if fallbackServer.batchCalls != 1 {
+		t.Fatalf("expected speculative batch to be attempted once, got %d", fallbackServer.batchCalls)
+	}
 	if fallbackServer.updateCalls != 1 {
 		t.Fatalf("expected serial update-client fallback to be used once, got %d", fallbackServer.updateCalls)
 	}
@@ -1320,6 +1325,79 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 	}
 	if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(results[0].Message); err != nil {
 		t.Fatalf("result message decode error = %v", err)
+	}
+}
+
+func TestUpdateELCForUpdateClientDisablesExplicitStateWhenEnvFalse(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+	t.Setenv(envExplicitStateUpdateClient, "false")
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	fallbackServer := &explicitStateFallbackTestServer{}
+	elc.RegisterQueryServer(server, fallbackServer)
+	elc.RegisterMsgServer(server, fallbackServer)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	header := &tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}}
+	pr := &Prover{
+		config: ProverConfig{ElcClientId: "07-tendermint-11"},
+		codec:  coreCodec,
+		originProver: fakeOriginProver{
+			headers:             []core.Header{header},
+			explicitStateChunks: mustExplicitStateSourceUnitsFromHeaders(t, header),
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}
+
+	results, err := pr.updateELCForUpdateClient(
+		context.Background(),
+		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
+		header,
+	)
+	if err != nil {
+		t.Fatalf("updateELCForUpdateClient() error = %v", err)
+	}
+	if fallbackServer.batchCalls != 0 {
+		t.Fatalf("expected speculative batch to be disabled, got %d calls", fallbackServer.batchCalls)
+	}
+	if fallbackServer.updateCalls != 1 {
+		t.Fatalf("expected serial update-client to be used once, got %d", fallbackServer.updateCalls)
+	}
+	if len(results) != 1 {
+		t.Fatalf("unexpected result count: %d", len(results))
 	}
 }
 
