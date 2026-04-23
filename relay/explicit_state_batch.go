@@ -12,46 +12,6 @@ import (
 	"github.com/datachainlab/lcp-go/relay/elc"
 )
 
-func executeSpeculativeUpdateClientPlannedUnitsStream(
-	ctx context.Context,
-	client LCPServiceClient,
-	clientID string,
-	units []*ExplicitStatePlannedUnit,
-	chunkSize uint32,
-) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	sender, err := openSpeculativeUpdateClientBatchStream(ctx, client, clientID, chunkSize)
-	if err != nil {
-		return nil, err
-	}
-	closed := false
-	defer func() {
-		if !closed {
-			_ = sender.CloseSend()
-		}
-	}()
-	for i, plannedUnit := range units {
-		if plannedUnit == nil {
-			return nil, fmt.Errorf("failed to prepare speculative batch unit: index=%d, planned unit must not be nil", i)
-		}
-		unit := &SpeculativeUpdateClientUnit{
-			UnitId:    plannedUnit.UnitID,
-			Update:    plannedUnit.Update,
-			BaseState: plannedUnit.BaseState,
-		}
-		if err := sender.Send(unit); err != nil {
-			var closedByRecv bool
-			err, closedByRecv = sender.enrichSendError(err)
-			if closedByRecv {
-				closed = true
-			}
-			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", i, unitIDForError(unit), err)
-		}
-	}
-	resp, err := sender.CloseAndRecv()
-	closed = true
-	return resp, err
-}
-
 type speculativeBatchStreamSender struct {
 	stream    elc.Msg_SpeculativeUpdateClientBatchStreamClient
 	chunkSize uint32
@@ -261,30 +221,6 @@ func cloneAny(any *codectypes.Any) *codectypes.Any {
 		TypeUrl: any.TypeUrl,
 		Value:   append([]byte(nil), any.Value...),
 	}
-}
-
-func buildLinearSpeculativeUpdateClientBatch(
-	clientID string,
-	updates []*elc.MsgUpdateClient,
-	baseStates []*ExplicitStateRef,
-) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
-	plan, err := newLinearExplicitStateUpdatePlan(clientID, updates, baseStates)
-	if err != nil {
-		return nil, err
-	}
-	return plan.buildRequest(), nil
-}
-
-func buildLaneSpeculativeUpdateClientBatch(
-	clientID string,
-	updateLanes [][]*elc.MsgUpdateClient,
-	baseStateLanes [][]*ExplicitStateRef,
-) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
-	plan, err := newLaneExplicitStateUpdatePlan(clientID, updateLanes, baseStateLanes)
-	if err != nil {
-		return nil, err
-	}
-	return plan.buildRequest(), nil
 }
 
 func buildSpeculativeUnitID(i int) string {

@@ -34,40 +34,6 @@ func disableExplicitStateUpdateClient() bool {
 	}
 }
 
-func (pr *Prover) buildExplicitStateUpdatePlanForHeaders(
-	ctx context.Context,
-	anyHeaders []*codectypes.Any,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-) (*ExplicitStateUpdatePlan, error) {
-	headerUnits, err := buildExplicitStateHeaderUnits(anyHeaders)
-	if err != nil {
-		return nil, err
-	}
-	return pr.buildExplicitStateUpdatePlanForHeaderUnits(ctx, headerUnits, elcClientID, includeState, signer)
-}
-
-func (pr *Prover) buildExplicitStateUpdatePlanForHeaderUnits(
-	ctx context.Context,
-	headerUnits []*ExplicitStateHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-) (*ExplicitStateUpdatePlan, error) {
-	headerLanes, err := planExplicitStateHeaderLanes(headerUnits)
-	if err != nil {
-		return nil, err
-	}
-	return pr.buildExplicitStateUpdatePlanForHeaderLanes(
-		ctx,
-		headerLanes,
-		elcClientID,
-		includeState,
-		signer,
-	)
-}
-
 func planExplicitStateHeaderLanes(headerUnits []*ExplicitStateHeaderUnit) ([][]*ExplicitStateHeaderUnit, error) {
 	strategy := explicitStateLaneStrategy()
 	switch strategy {
@@ -177,6 +143,13 @@ func canHeaderUnitStartIndependentLane(unit *ExplicitStateHeaderUnit) bool {
 	return unit.BaseState.PrevHeight.EQ(*unit.TrustedHeight)
 }
 
+func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
+	return baseState != nil &&
+		baseState.PrevHeight != nil &&
+		baseState.ClientState != nil &&
+		baseState.ConsensusState != nil
+}
+
 func planSharedTrustedHeightExplicitStateLanes(
 	headerUnits []*ExplicitStateHeaderUnit,
 ) ([][]*ExplicitStateHeaderUnit, error) {
@@ -219,75 +192,6 @@ func explicitStateHeadersShareSingleWriteDomain(headerUnits []*ExplicitStateHead
 		}
 	}
 	return true
-}
-
-func (pr *Prover) buildExplicitStateUpdatePlanForHeaderLanes(
-	ctx context.Context,
-	headerLanes [][]*ExplicitStateHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-) (*ExplicitStateUpdatePlan, error) {
-	return pr.buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
-		ctx,
-		headerLanes,
-		elcClientID,
-		includeState,
-		signer,
-		func(ctx context.Context, elcClientID string, anyHeader *codectypes.Any) (*ExplicitStateRef, error) {
-			return pr.queryExplicitStateRef(ctx, elcClientID, anyHeader)
-		},
-	)
-}
-
-func (pr *Prover) buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
-	ctx context.Context,
-	headerLanes [][]*ExplicitStateHeaderUnit,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-	resolveBaseState func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error),
-) (*ExplicitStateUpdatePlan, error) {
-	updateLanes := make([][]*elc.MsgUpdateClient, 0, len(headerLanes))
-	baseStateLanes := make([][]*ExplicitStateRef, 0, len(headerLanes))
-	for laneIndex, lane := range headerLanes {
-		updateLane := make([]*elc.MsgUpdateClient, 0, len(lane))
-		baseStateLane := make([]*ExplicitStateRef, 0, len(lane))
-		for unitIndex, unitHeader := range lane {
-			if unitHeader == nil || unitHeader.Header == nil {
-				return nil, fmt.Errorf("header lane %d contains nil header unit", laneIndex)
-			}
-			var baseState *ExplicitStateRef
-			if unitHeader.BaseState != nil {
-				baseState = cloneExplicitStateRef(unitHeader.BaseState)
-				if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
-					return nil, err
-				}
-			} else if unitIndex == 0 {
-				var err error
-				baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				var err error
-				baseState, err = buildDeferredExplicitStateRef(unitHeader.Header, pr.codec)
-				if err != nil {
-					return nil, err
-				}
-			}
-			updateLane = append(updateLane, &elc.MsgUpdateClient{
-				ClientId:     elcClientID,
-				Header:       unitHeader.Header,
-				IncludeState: includeState,
-				Signer:       signer,
-			})
-			baseStateLane = append(baseStateLane, baseState)
-		}
-		updateLanes = append(updateLanes, updateLane)
-		baseStateLanes = append(baseStateLanes, baseStateLane)
-	}
-	return newLaneExplicitStateUpdatePlan(elcClientID, updateLanes, baseStateLanes)
 }
 
 func (pr *Prover) executeExplicitStateHeaderLanesStream(
@@ -387,7 +291,7 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			return fmt.Errorf("failed explicit-state update client batch: %w", err)
 		}
 		if len(resp.Units) != len(batchSigners) {
-			return fmt.Errorf("unexpected speculative batch response shape: units=%d plan=%d", len(resp.Units), len(batchSigners))
+			return fmt.Errorf("unexpected speculative batch response shape: units=%d sent=%d", len(resp.Units), len(batchSigners))
 		}
 		for i, unit := range resp.Units {
 			if unit == nil {
@@ -430,20 +334,17 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 				}
 			}
 
-			unit := &ExplicitStatePlannedUnit{
-				UnitID: buildSpeculativeUnitID(unitIndex),
-				Update: &elc.MsgUpdateClient{
-					ClientId:     elcClientID,
-					Header:       unitHeader.Header,
-					IncludeState: includeState,
-					Signer:       signer,
-				},
-				BaseState: baseState,
+			unitID := buildSpeculativeUnitID(unitIndex)
+			update := &elc.MsgUpdateClient{
+				ClientId:     elcClientID,
+				Header:       unitHeader.Header,
+				IncludeState: includeState,
+				Signer:       signer,
 			}
-			if sender == nil && unitIndex > 0 && !canStartIndependentExplicitStateBatch(unit) {
+			if sender == nil && unitIndex > 0 && !hasCanonicalExplicitStatePayload(baseState) {
 				return nil, fmt.Errorf(
-					"cannot split explicit-state plan at unit %s: missing base state payload",
-					unit.UnitID,
+					"cannot split explicit-state batch at unit %s: missing base state payload",
+					unitID,
 				)
 			}
 
@@ -452,16 +353,16 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			}
 			headerBytes := 0
 			headerSHA256 := ""
-			if unit.Update != nil && unit.Update.Header != nil {
-				headerBytes = len(unit.Update.Header.Value)
-				headerHash := sha256.Sum256(unit.Update.Header.Value)
+			if update.Header != nil {
+				headerBytes = len(update.Header.Value)
+				headerHash := sha256.Sum256(update.Header.Value)
 				headerSHA256 = fmt.Sprintf("%x", headerHash)
 			}
 			pr.getLogger().InfoContext(
 				ctx,
 				"send speculative update client unit",
 				"client_id", elcClientID,
-				"unit_id", unit.UnitID,
+				"unit_id", unitID,
 				"batch_index", batchIndex,
 				"batch_unit_index", len(batchSigners),
 				"global_unit_index", unitIndex,
@@ -472,14 +373,14 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 				"header_sha256", headerSHA256,
 			)
 			if err := sender.Send(&SpeculativeUpdateClientUnit{
-				UnitId:    unit.UnitID,
-				Update:    unit.Update,
-				BaseState: unit.BaseState,
+				UnitId:    unitID,
+				Update:    update,
+				BaseState: baseState,
 			}); err != nil {
 				err, _ = sender.enrichSendError(err)
-				return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unit.UnitID, err)
+				return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
 			}
-			batchSigners = append(batchSigners, unit.Update.Signer)
+			batchSigners = append(batchSigners, update.Signer)
 			unitIndex++
 
 			if len(batchSigners) == maxUnits {
@@ -508,7 +409,7 @@ func validateExplicitStateHeaderLaneBatchBoundaries(
 			if unitIndex > 0 && unitIndex%maxUnits == 0 {
 				if !canHeaderUnitStartIndependentExplicitStateBatch(unitIndexInLane, unitHeader) {
 					return fmt.Errorf(
-						"cannot split explicit-state plan at lane %d unit %d: batch boundary requires canonical base state payload",
+						"cannot split explicit-state batch at lane %d unit %d: batch boundary requires canonical base state payload",
 						laneIndex,
 						unitIndexInLane,
 					)

@@ -68,27 +68,6 @@ func (s *explicitStateFallbackTestServer) UpdateClientStream(stream elc.Msg_Upda
 	}
 }
 
-type explicitStateBatchTestServer struct {
-	elc.UnimplementedMsgServer
-	captured **ExecuteSpeculativeUpdateClientBatchRequest
-}
-
-func (s explicitStateBatchTestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
-	req, err := recvSpeculativeBatchStreamRequest(stream)
-	if err != nil {
-		return err
-	}
-	*s.captured = req
-	return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
-		ClientId: req.ClientId,
-		Units: []*elc.StitchedSpeculativeUpdateClientUnitResult{
-			{Response: elc.MsgUpdateClientResponse{Message: []byte("msg-0"), Signature: []byte("sig-0")}},
-			{Response: elc.MsgUpdateClientResponse{Message: []byte("msg-1"), Signature: []byte("sig-1")}},
-			{Response: elc.MsgUpdateClientResponse{Message: []byte("msg-2"), Signature: []byte("sig-2")}},
-		},
-	})
-}
-
 type explicitStateBatchMultiRequestServer struct {
 	elc.UnimplementedMsgServer
 	captured *[]*ExecuteSpeculativeUpdateClientBatchRequest
@@ -455,253 +434,6 @@ func makeSpeculativeBatchTestUpdate(clientID string, signer []byte, index int) *
 	}
 }
 
-func TestNewLinearExplicitStateUpdatePlan(t *testing.T) {
-	plan, err := newLinearExplicitStateUpdatePlan(
-		"07-tendermint-0",
-		[]*elc.MsgUpdateClient{
-			{ClientId: "07-tendermint-0", Signer: []byte("a")},
-			{ClientId: "07-tendermint-0", Signer: []byte("b")},
-		},
-		[]*ExplicitStateRef{
-			{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-			{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newLinearExplicitStateUpdatePlan() error = %v", err)
-	}
-	if len(plan.Units) != 2 {
-		t.Fatalf("unexpected plan units: %d", len(plan.Units))
-	}
-	if got := plan.Units[0].UnitID; got != "unit-0000" {
-		t.Fatalf("unexpected first unit id: %s", got)
-	}
-	if got := plan.Units[1].UnitID; got != "unit-0001" {
-		t.Fatalf("unexpected second unit id: %s", got)
-	}
-	if len(plan.LaneWidths) != 1 || plan.LaneWidths[0] != 2 {
-		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
-	}
-}
-
-func TestExplicitStateUpdatePlanBuildRequest(t *testing.T) {
-	plan, err := newLinearExplicitStateUpdatePlan(
-		"07-tendermint-1",
-		[]*elc.MsgUpdateClient{
-			{ClientId: "07-tendermint-1", Signer: []byte("signer")},
-		},
-		[]*ExplicitStateRef{
-			{PrevHeight: &clienttypes.Height{RevisionHeight: 22}},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newLinearExplicitStateUpdatePlan() error = %v", err)
-	}
-	req := plan.buildRequest()
-	if req.ClientId != "07-tendermint-1" {
-		t.Fatalf("unexpected request client id: %s", req.ClientId)
-	}
-	if len(req.Units) != 1 || req.Units[0] == nil {
-		t.Fatalf("unexpected request units: %#v", req.Units)
-	}
-	if req.Units[0].UnitId != "unit-0000" {
-		t.Fatalf("unexpected request unit id: %s", req.Units[0].UnitId)
-	}
-	if req.Units[0].BaseState == nil || req.Units[0].BaseState.PrevHeight == nil || req.Units[0].BaseState.PrevHeight.RevisionHeight != 22 {
-		t.Fatalf("unexpected base state: %#v", req.Units[0].BaseState)
-	}
-}
-
-func TestNewExplicitStateUpdatePlan(t *testing.T) {
-	plan, err := newExplicitStateUpdatePlan(
-		"07-tendermint-2",
-		[]*ExplicitStatePlannedUnit{
-			{
-				UnitID:    "unit-a",
-				Update:    &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState: &ExplicitStateRef{},
-			},
-			{
-				UnitID:    "unit-b",
-				Update:    &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState: &ExplicitStateRef{},
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newExplicitStateUpdatePlan() error = %v", err)
-	}
-	if len(plan.Units) != 2 {
-		t.Fatalf("unexpected plan units: %d", len(plan.Units))
-	}
-}
-
-func TestNewExplicitStateUpdatePlanRejectsDuplicateUnitID(t *testing.T) {
-	_, err := newExplicitStateUpdatePlan(
-		"07-tendermint-2",
-		[]*ExplicitStatePlannedUnit{
-			{
-				UnitID:    "unit-a",
-				Update:    &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState: &ExplicitStateRef{},
-			},
-			{
-				UnitID:    "unit-a",
-				Update:    &elc.MsgUpdateClient{ClientId: "07-tendermint-2"},
-				BaseState: &ExplicitStateRef{},
-			},
-		},
-	)
-	if err == nil {
-		t.Fatal("expected duplicate unit_id error, got nil")
-	}
-}
-
-func TestNewLaneExplicitStateUpdatePlan(t *testing.T) {
-	plan, err := newLaneExplicitStateUpdatePlan(
-		"07-tendermint-9",
-		[][]*elc.MsgUpdateClient{
-			{
-				{ClientId: "07-tendermint-9"},
-				{ClientId: "07-tendermint-9"},
-			},
-			{
-				{ClientId: "07-tendermint-9"},
-			},
-		},
-		[][]*ExplicitStateRef{
-			{
-				{},
-				{},
-			},
-			{
-				{},
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newLaneExplicitStateUpdatePlan() error = %v", err)
-	}
-	if len(plan.Units) != 3 {
-		t.Fatalf("unexpected plan units: %d", len(plan.Units))
-	}
-	if len(plan.LaneWidths) != 2 || plan.LaneWidths[0] != 2 || plan.LaneWidths[1] != 1 {
-		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
-	}
-}
-
-func TestNewLaneExplicitStateUpdatePlanBuildRequestPreservesLaneRoots(t *testing.T) {
-	plan, err := newLaneExplicitStateUpdatePlan(
-		"07-tendermint-10",
-		[][]*elc.MsgUpdateClient{
-			{
-				{ClientId: "07-tendermint-10", Signer: []byte("lane-0")},
-				{ClientId: "07-tendermint-10", Signer: []byte("lane-0")},
-			},
-			{
-				{ClientId: "07-tendermint-10", Signer: []byte("lane-1")},
-			},
-		},
-		[][]*ExplicitStateRef{
-			{
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
-			},
-			{
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newLaneExplicitStateUpdatePlan() error = %v", err)
-	}
-
-	req := plan.buildRequest()
-	if len(req.Units) != 3 {
-		t.Fatalf("unexpected request units: %d", len(req.Units))
-	}
-	if len(plan.LaneWidths) != 2 || plan.LaneWidths[0] != 2 || plan.LaneWidths[1] != 1 {
-		t.Fatalf("unexpected lane widths: %v", plan.LaneWidths)
-	}
-}
-
-func TestExecuteExplicitStateUpdatePlanInvokesMultiLaneBatch(t *testing.T) {
-	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
-		t.Fatalf("InitLogger() error = %v", err)
-	}
-	plan, err := newLaneExplicitStateUpdatePlan(
-		"07-tendermint-11",
-		[][]*elc.MsgUpdateClient{
-			{
-				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-0"), 0),
-				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-0"), 1),
-			},
-			{
-				makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-1"), 2),
-			},
-		},
-		[][]*ExplicitStateRef{
-			{
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
-			},
-			{
-				{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("newLaneExplicitStateUpdatePlan() error = %v", err)
-	}
-
-	listener := bufconn.Listen(1024 * 1024)
-	server := grpc.NewServer()
-	t.Cleanup(server.Stop)
-
-	var captured *ExecuteSpeculativeUpdateClientBatchRequest
-	elc.RegisterMsgServer(server, &explicitStateBatchTestServer{captured: &captured})
-	go func() {
-		_ = server.Serve(listener)
-	}()
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return listener.Dial()
-		}),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient() error = %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	pr := &Prover{lcpServiceClient: NewLCPServiceClient(conn)}
-	results, err := pr.executeExplicitStateUpdatePlan(context.Background(), plan)
-	if err != nil {
-		t.Fatalf("executeExplicitStateUpdatePlan() error = %v", err)
-	}
-
-	if captured == nil {
-		t.Fatal("expected speculative batch request to be captured")
-	}
-	if captured.ClientId != "07-tendermint-11" {
-		t.Fatalf("unexpected request client id: %s", captured.ClientId)
-	}
-	if len(captured.Units) != 3 {
-		t.Fatalf("unexpected request unit count: %d", len(captured.Units))
-	}
-	if len(results) != 3 {
-		t.Fatalf("unexpected results count: %d", len(results))
-	}
-	if string(results[0].Message) != "msg-0" || string(results[1].Message) != "msg-1" || string(results[2].Message) != "msg-2" {
-		t.Fatalf("unexpected result messages: %#v", results)
-	}
-	if string(results[0].Signer) != "lane-0" || string(results[2].Signer) != "lane-1" {
-		t.Fatalf("unexpected propagated signers: %#v", results)
-	}
-}
-
 func TestExecuteExplicitStateHeaderLanesStreamSendsUnitBeforeResolvingAllBaseStates(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
@@ -994,73 +726,7 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 	}
 }
 
-func TestExplicitStateUpdatePlanSplitIntoExecutableBatches(t *testing.T) {
-	plan, err := newLaneExplicitStateUpdatePlan(
-		"07-tendermint-11",
-		[][]*elc.MsgUpdateClient{{
-			{ClientId: "07-tendermint-11", Signer: []byte("s0")},
-			{ClientId: "07-tendermint-11", Signer: []byte("s1")},
-			{ClientId: "07-tendermint-11", Signer: []byte("s2")},
-		}},
-		[][]*ExplicitStateRef{{
-			{
-				PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
-				ClientState:    &codectypes.Any{TypeUrl: "client/0", Value: []byte("c0")},
-				ConsensusState: &codectypes.Any{TypeUrl: "consensus/0", Value: []byte("s0")},
-			},
-			{
-				PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
-				ClientState:    &codectypes.Any{TypeUrl: "client/1", Value: []byte("c1")},
-				ConsensusState: &codectypes.Any{TypeUrl: "consensus/1", Value: []byte("s1")},
-			},
-			{
-				PrevHeight:     &clienttypes.Height{RevisionHeight: 12},
-				ClientState:    &codectypes.Any{TypeUrl: "client/2", Value: []byte("c2")},
-				ConsensusState: &codectypes.Any{TypeUrl: "consensus/2", Value: []byte("s2")},
-			},
-		}},
-	)
-	if err != nil {
-		t.Fatalf("newLaneExplicitStateUpdatePlan() error = %v", err)
-	}
-
-	batches, err := plan.splitIntoExecutableBatches(2)
-	if err != nil {
-		t.Fatalf("splitIntoExecutableBatches() error = %v", err)
-	}
-	if len(batches) != 2 {
-		t.Fatalf("unexpected batch count: %d", len(batches))
-	}
-	if got := len(batches[0].Units); got != 2 {
-		t.Fatalf("unexpected first batch size: %d", got)
-	}
-	if got := len(batches[1].Units); got != 1 {
-		t.Fatalf("unexpected second batch size: %d", got)
-	}
-	if batches[1].Units[0].BaseState == nil || batches[1].Units[0].BaseState.ClientState == nil || batches[1].Units[0].BaseState.ConsensusState == nil {
-		t.Fatalf("expected second batch root to retain explicit base state payload: %#v", batches[1].Units[0].BaseState)
-	}
-}
-
-func TestCanStartIndependentExplicitStateBatchRequiresPrevHeight(t *testing.T) {
-	unit := &ExplicitStatePlannedUnit{
-		BaseState: &ExplicitStateRef{
-			ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
-			ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
-		},
-	}
-
-	if canStartIndependentExplicitStateBatch(unit) {
-		t.Fatal("base state without prev_height must not start an independent batch")
-	}
-
-	unit.BaseState.PrevHeight = &clienttypes.Height{RevisionHeight: 10}
-	if !canStartIndependentExplicitStateBatch(unit) {
-		t.Fatal("complete base state should start an independent batch")
-	}
-}
-
-func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
+func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
 	t.Cleanup(server.Stop)
@@ -1083,33 +749,37 @@ func TestExecuteExplicitStateUpdatePlanSplitsLargeRequests(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	updates := make([]*elc.MsgUpdateClient, 0, DefaultMaxSpeculativeBatchUnits+1)
-	baseStates := make([]*ExplicitStateRef, 0, DefaultMaxSpeculativeBatchUnits+1)
+	lane := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
 	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
-		updates = append(updates, makeSpeculativeBatchTestUpdate(
-			"07-tendermint-11",
-			[]byte(fmt.Sprintf("s%02d", i)),
-			i,
-		))
-		baseStates = append(baseStates, &ExplicitStateRef{
-			PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + i)},
-			ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("c%d", i))},
-			ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", i), Value: []byte(fmt.Sprintf("s%d", i))},
+		lane = append(lane, &ExplicitStateHeaderUnit{
+			Header: makeSpeculativeBatchTestUpdate(
+				"07-tendermint-11",
+				[]byte(fmt.Sprintf("s%02d", i)),
+				i,
+			).Header,
+			TrustedHeight: &clienttypes.Height{RevisionHeight: uint64(10 + i)},
+			BaseState: &ExplicitStateRef{
+				PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + i)},
+				ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("c%d", i))},
+				ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", i), Value: []byte(fmt.Sprintf("s%d", i))},
+			},
 		})
-	}
-	plan, err := newLaneExplicitStateUpdatePlan(
-		"07-tendermint-11",
-		[][]*elc.MsgUpdateClient{updates},
-		[][]*ExplicitStateRef{baseStates},
-	)
-	if err != nil {
-		t.Fatalf("newLaneExplicitStateUpdatePlan() error = %v", err)
 	}
 
 	pr := &Prover{lcpServiceClient: NewLCPServiceClient(conn)}
-	results, err := pr.executeExplicitStateUpdatePlan(context.Background(), plan)
+	results, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+		context.Background(),
+		[][]*ExplicitStateHeaderUnit{lane},
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
+			t.Fatal("resolver should not be called for embedded base states")
+			return nil, nil
+		},
+	)
 	if err != nil {
-		t.Fatalf("executeExplicitStateUpdatePlan() error = %v", err)
+		t.Fatalf("executeExplicitStateHeaderLanesStreamWithResolver() error = %v", err)
 	}
 
 	if len(captured) != 2 {
@@ -1519,59 +1189,11 @@ func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesChunkProvider(t *test
 	}
 }
 
-func TestBuildExplicitStateUpdatePlanForHeaderLanesUsesEmbeddedBaseState(t *testing.T) {
-	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
-	embedded := &ExplicitStateRef{
-		PrevHeight:  &clienttypes.Height{RevisionHeight: 10},
-		PrevStateId: []byte("embedded"),
-	}
-	pr := &Prover{}
-	resolverCalls := 0
-
-	plan, err := pr.buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
-		context.Background(),
-		[][]*ExplicitStateHeaderUnit{
-			{
-				{
-					Header:        anyHeader,
-					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-					BaseState:     embedded,
-				},
-			},
-		},
-		"07-tendermint-0",
-		false,
-		[]byte("signer"),
-		func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error) {
-			resolverCalls++
-			return &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 99}}, nil
-		},
-	)
-	if err != nil {
-		t.Fatalf("buildExplicitStateUpdatePlanForHeaderLanesWithResolver() error = %v", err)
-	}
-	if resolverCalls != 0 {
-		t.Fatalf("expected embedded base state to bypass resolver, got %d calls", resolverCalls)
-	}
-	if len(plan.Units) != 1 {
-		t.Fatalf("unexpected plan units: %d", len(plan.Units))
-	}
-	if plan.Units[0].BaseState == nil || plan.Units[0].BaseState.PrevHeight == nil || plan.Units[0].BaseState.PrevHeight.RevisionHeight != 10 {
-		t.Fatalf("unexpected embedded base state: %#v", plan.Units[0].BaseState)
-	}
-	if string(plan.Units[0].BaseState.PrevStateId) != "embedded" {
-		t.Fatalf("unexpected embedded prev_state_id: %x", plan.Units[0].BaseState.PrevStateId)
-	}
-	if plan.Units[0].BaseState == embedded {
-		t.Fatal("expected embedded base state to be cloned")
-	}
-}
-
-func TestBuildExplicitStateUpdatePlanForHeaderLanesRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
+func TestExecuteExplicitStateHeaderLanesStreamRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
 	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
 	pr := &Prover{}
 
-	_, err := pr.buildExplicitStateUpdatePlanForHeaderLanesWithResolver(
+	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
 		context.Background(),
 		[][]*ExplicitStateHeaderUnit{
 			{
