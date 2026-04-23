@@ -15,6 +15,38 @@ type ExplicitStateSourceHeaderUnit struct {
 	BaseState     *ExplicitStateRef
 }
 
+type ExplicitStateSourceHeaderUnitOrError struct {
+	Unit  *ExplicitStateSourceHeaderUnit
+	Error error
+}
+
+func makeExplicitStateSourceHeaderUnitStream(
+	units []*ExplicitStateSourceHeaderUnit,
+) <-chan *ExplicitStateSourceHeaderUnitOrError {
+	ch := make(chan *ExplicitStateSourceHeaderUnitOrError, len(units))
+	for _, unit := range units {
+		ch <- &ExplicitStateSourceHeaderUnitOrError{Unit: unit}
+	}
+	close(ch)
+	return ch
+}
+
+func drainExplicitStateSourceHeaderUnitStream(
+	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+) ([]*ExplicitStateSourceHeaderUnit, error) {
+	var units []*ExplicitStateSourceHeaderUnit
+	i := 0
+	for item := range unitStream {
+		unit, err := explicitStateSourceHeaderUnitFromStreamItemOrError(item, i)
+		if err != nil {
+			return nil, err
+		}
+		units = append(units, unit)
+		i += 1
+	}
+	return units, nil
+}
+
 func collectExplicitStateSourceHeaderUnits(
 	headerStream <-chan *core.HeaderOrError,
 ) ([]*ExplicitStateSourceHeaderUnit, error) {
@@ -57,6 +89,32 @@ func explicitStateSourceHeaderUnitFromStreamItem(
 		AnyHeader:     anyHeader,
 		TrustedHeight: trustedHeight,
 	}, nil
+}
+
+func explicitStateSourceHeaderUnitFromStreamItemOrError(
+	item *ExplicitStateSourceHeaderUnitOrError,
+	i int,
+) (*ExplicitStateSourceHeaderUnit, error) {
+	if item == nil {
+		return nil, fmt.Errorf("received nil explicit-state source header stream item: i=%v", i)
+	}
+	if item.Error != nil {
+		return nil, fmt.Errorf("failed to setup an explicit-state source header unit: i=%v %w", i, item.Error)
+	}
+	if item.Unit == nil {
+		return nil, fmt.Errorf("received nil explicit-state source header unit: i=%v", i)
+	}
+	if item.Unit.AnyHeader == nil {
+		return nil, fmt.Errorf("explicit-state source header unit missing packed header: i=%v", i)
+	}
+	if item.Unit.TrustedHeight == nil {
+		trustedHeight, err := trustedHeightForExplicitState(item.Unit.AnyHeader, nil)
+		if err != nil {
+			return nil, err
+		}
+		item.Unit.TrustedHeight = trustedHeight
+	}
+	return item.Unit, nil
 }
 
 func extractAnyHeadersFromSourceUnits(

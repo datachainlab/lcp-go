@@ -397,14 +397,14 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
 	if !disableExplicitStateUpdateClient() {
-		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, sourceChain, latestHeader)
+		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(ctx, sourceChain, latestHeader)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			results, err := pr.executeExplicitStateELCUpdateHeaderUnits(
+			results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 				ctx,
-				sourceHeaderUnits,
+				sourceHeaderUnitStream,
 				elcClientID,
 				includeState,
 				signer,

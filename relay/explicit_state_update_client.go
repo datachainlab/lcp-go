@@ -56,9 +56,16 @@ func countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits []*ExplicitS
 
 func validateExplicitStateHeaderUnits(headerUnits []*ExplicitStateHeaderUnit) error {
 	for i, unit := range headerUnits {
-		if unit == nil || unit.Header == nil {
-			return fmt.Errorf("explicit-state header unit[%d] must not be nil", i)
+		if err := validateExplicitStateHeaderUnit(i, unit); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func validateExplicitStateHeaderUnit(i int, unit *ExplicitStateHeaderUnit) error {
+	if unit == nil || unit.Header == nil {
+		return fmt.Errorf("explicit-state header unit[%d] must not be nil", i)
 	}
 	return nil
 }
@@ -246,6 +253,156 @@ func (pr *Prover) executeExplicitStateHeaderUnitsStreamWithResolver(
 		return nil, err
 	}
 	return results, nil
+}
+
+func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
+	ctx context.Context,
+	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	resolveBaseState func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error),
+) ([]*elcupdater_storage.UpdateClientResult, []*ExplicitStateSourceHeaderUnit, error) {
+	var results []*elcupdater_storage.UpdateClientResult
+	var sourceHeaderUnits []*ExplicitStateSourceHeaderUnit
+
+	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
+	var sender *speculativeBatchStreamSender
+	closed := true
+	batchSigners := make([][]byte, 0, maxUnits)
+	batchIndex := 0
+	unitIndex := 0
+	defer func() {
+		if !closed && sender != nil {
+			_ = sender.CloseSend()
+		}
+	}()
+
+	openBatch := func() error {
+		if sender != nil {
+			return nil
+		}
+		pr.getLogger().InfoContext(
+			ctx,
+			"invoke speculative update client batch",
+			"client_id", elcClientID,
+			"batch_index", batchIndex,
+			"batch_unit_limit", maxUnits,
+		)
+		nextSender, err := openSpeculativeUpdateClientBatchStream(
+			ctx,
+			pr.lcpServiceClient,
+			elcClientID,
+			pr.config.GetMaxChunkSizeForUpdateClient(),
+		)
+		if err != nil {
+			return err
+		}
+		sender = nextSender
+		closed = false
+		return nil
+	}
+
+	flushBatch := func() error {
+		if sender == nil {
+			return nil
+		}
+		resp, err := sender.CloseAndRecv()
+		closed = true
+		if err != nil {
+			return fmt.Errorf("failed explicit-state update client batch: %w", err)
+		}
+		if len(resp.Units) != len(batchSigners) {
+			return fmt.Errorf("unexpected speculative batch response shape: units=%d sent=%d", len(resp.Units), len(batchSigners))
+		}
+		for i, unit := range resp.Units {
+			if unit == nil {
+				return fmt.Errorf("unexpected speculative batch response unit at index %d", i)
+			}
+			results = append(results, &elcupdater_storage.UpdateClientResult{
+				Message:   unit.Response.Message,
+				Signature: unit.Response.Signature,
+				Signer:    batchSigners[i],
+			})
+		}
+		sender = nil
+		batchSigners = batchSigners[:0]
+		batchIndex++
+		return nil
+	}
+
+	for item := range unitStream {
+		sourceUnit, err := explicitStateSourceHeaderUnitFromStreamItemOrError(item, unitIndex)
+		if err != nil {
+			return nil, sourceHeaderUnits, err
+		}
+		sourceHeaderUnits = append(sourceHeaderUnits, sourceUnit)
+		unitHeader := &ExplicitStateHeaderUnit{
+			Header:        sourceUnit.AnyHeader,
+			TrustedHeight: sourceUnit.TrustedHeight,
+			BaseState:     cloneExplicitStateRef(sourceUnit.BaseState),
+		}
+		if err := validateExplicitStateHeaderUnit(unitIndex, unitHeader); err != nil {
+			return nil, sourceHeaderUnits, err
+		}
+
+		var baseState *ExplicitStateRef
+		if unitHeader.BaseState != nil {
+			baseState = cloneExplicitStateRef(unitHeader.BaseState)
+			if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+		} else if unitIndex == 0 {
+			baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
+			if err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+		} else {
+			baseState, err = buildDeferredExplicitStateRef(unitHeader.Header, pr.codec)
+			if err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+		}
+
+		unitID := buildSpeculativeUnitID(unitIndex)
+		update := &elc.MsgUpdateClient{
+			ClientId:     elcClientID,
+			Header:       unitHeader.Header,
+			IncludeState: includeState,
+			Signer:       signer,
+		}
+		if sender == nil && unitIndex > 0 && !hasCanonicalExplicitStatePayload(baseState) {
+			return nil, sourceHeaderUnits, fmt.Errorf(
+				"cannot split explicit-state batch at unit %s: missing base state payload",
+				unitID,
+			)
+		}
+
+		if err := openBatch(); err != nil {
+			return nil, sourceHeaderUnits, err
+		}
+		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
+		if err := sender.Send(&SpeculativeUpdateClientUnit{
+			UnitId:    unitID,
+			Update:    update,
+			BaseState: baseState,
+		}); err != nil {
+			err, _ = sender.enrichSendError(err)
+			return nil, sourceHeaderUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
+		}
+		batchSigners = append(batchSigners, update.Signer)
+		unitIndex++
+
+		if len(batchSigners) == maxUnits {
+			if err := flushBatch(); err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+		}
+	}
+	if err := flushBatch(); err != nil {
+		return nil, sourceHeaderUnits, err
+	}
+	return results, sourceHeaderUnits, nil
 }
 
 func logExplicitStateUnitSend(
