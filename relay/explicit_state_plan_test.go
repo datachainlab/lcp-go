@@ -410,6 +410,15 @@ func (p fakeOriginProver) SetupExplicitStateChunksForUpdate(context.Context, cor
 	return p.explicitStateChunks, nil
 }
 
+func mustExplicitStateSourceUnitsFromHeaders(t *testing.T, headers ...core.Header) []*ExplicitStateSourceHeaderUnit {
+	t.Helper()
+	units, err := collectExplicitStateSourceHeaderUnits(core.MakeHeaderStream(headers...))
+	if err != nil {
+		t.Fatalf("collectExplicitStateSourceHeaderUnits() error = %v", err)
+	}
+	return units
+}
+
 func (p fakeOriginProver) CheckRefreshRequired(context.Context, core.ChainInfoICS02Querier) (bool, error) {
 	return false, nil
 }
@@ -805,7 +814,8 @@ func TestUpdateELCForUpdateClientKeepsTendermintSharedTrustedHeightLinear(t *tes
 		config: ProverConfig{ElcClientId: "07-tendermint-11"},
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
-			headers: headers,
+			headers:             headers,
+			explicitStateChunks: mustExplicitStateSourceUnitsFromHeaders(t, headers...),
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{
@@ -1199,7 +1209,8 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleLane(t *testing.T) {
 		config: ProverConfig{ElcClientId: "07-tendermint-11"},
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
-			headers: headers,
+			headers:             headers,
+			explicitStateChunks: mustExplicitStateSourceUnitsFromHeaders(t, headers...),
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{

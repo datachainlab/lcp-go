@@ -25,6 +25,7 @@ import (
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
@@ -394,25 +395,44 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	pr.getLogger().InfoContext(ctx, "try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 
-	// 2. query the header from the upstream chain. Use the explicit-state
-	// collector here too so activation can carry chunk-local base states.
-	sourceHeaderUnits, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(
-		ctx,
-		NewLCPQuerier(pr.lcpServiceClient, elcClientID),
-		latestHeader,
-	)
-	if err != nil {
-		return nil, err
-	}
+	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
+	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+	var results []*elcupdater_storage.UpdateClientResult
+	handledByExplicitState := false
 
-	results, err := pr.executeELCUpdateHeaderUnits(
-		ctx,
-		sourceHeaderUnits,
-		elcClientID,
-		includeState,
-		pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
-		"enclave_key_update",
-	)
+	if useExplicitStateUpdateClient() {
+		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, sourceChain, latestHeader)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			handledByExplicitState = true
+			results, err = pr.executeExplicitStateELCUpdateHeaderUnits(
+				ctx,
+				sourceHeaderUnits,
+				elcClientID,
+				includeState,
+				signer,
+				"enclave_key_update",
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if !handledByExplicitState {
+		sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(ctx, sourceChain, latestHeader)
+		if err != nil {
+			return nil, err
+		}
+		results, err = pr.executeSerialELCUpdateHeaderUnits(
+			ctx,
+			sourceHeaderUnits,
+			elcClientID,
+			includeState,
+			signer,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -297,28 +297,53 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	sourceHeaderUnits, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+	var results []*elcupdater_storage.UpdateClientResult
+
+	if useExplicitStateUpdateClient() {
+		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			results, err = pr.executeExplicitStateELCUpdateHeaderUnits(
+				ctx,
+				sourceHeaderUnits,
+				pr.config.ElcClientId,
+				false,
+				signer,
+				"update_client",
+			)
+			if err != nil {
+				return nil, err
+			}
+			return pr.finalizeUpdateELCResults(ctx, latestFinalizedHeader, results)
+		}
+	}
+
+	sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, err
 	}
-	if len(sourceHeaderUnits) == 0 {
-		if pr.gauge != nil {
-			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
-		}
-		return nil, nil
-	}
-
-	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	results, err := pr.executeELCUpdateHeaderUnits(
+	results, err = pr.executeSerialELCUpdateHeaderUnits(
 		ctx,
 		sourceHeaderUnits,
 		pr.config.ElcClientId,
 		false,
 		signer,
-		"update_client",
 	)
 	if err != nil {
 		return nil, err
+	}
+	return pr.finalizeUpdateELCResults(ctx, latestFinalizedHeader, results)
+}
+
+func (pr *Prover) finalizeUpdateELCResults(ctx context.Context, latestFinalizedHeader core.Header, results []*elcupdater_storage.UpdateClientResult) ([]*elcupdater_storage.UpdateClientResult, error) {
+	if len(results) == 0 {
+		if pr.gauge != nil {
+			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
+		}
+		return nil, nil
 	}
 
 	for _, result := range results {
@@ -333,13 +358,12 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 	return results, nil
 }
 
-func (pr *Prover) executeELCUpdateHeaderUnits(
+func (pr *Prover) executeSerialELCUpdateHeaderUnits(
 	ctx context.Context,
 	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
-	operation string,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	anyHeaders, err := extractAnyHeadersFromSourceUnits(sourceHeaderUnits)
 	if err != nil {
@@ -349,74 +373,70 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 		return nil, nil
 	}
 
-	runSerialUpdate := func() ([]*elcupdater_storage.UpdateClientResult, error) {
-		serialResults := make([]*elcupdater_storage.UpdateClientResult, 0, len(anyHeaders))
-		for _, anyHeader := range anyHeaders {
-			res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
-			if err != nil {
-				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
-			}
-			serialResults = append(serialResults, &elcupdater_storage.UpdateClientResult{
-				Message:   res.Message,
-				Signature: res.Signature,
-				Signer:    signer,
-			})
+	serialResults := make([]*elcupdater_storage.UpdateClientResult, 0, len(anyHeaders))
+	for _, anyHeader := range anyHeaders {
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 		}
-		return serialResults, nil
+		serialResults = append(serialResults, &elcupdater_storage.UpdateClientResult{
+			Message:   res.Message,
+			Signature: res.Signature,
+			Signer:    signer,
+		})
 	}
+	return serialResults, nil
+}
 
-	if useExplicitStateUpdateClient() {
-		headerUnits := extractExplicitStateHeaderUnits(sourceHeaderUnits)
-		headerLanes, err := planExplicitStateHeaderLanes(headerUnits)
-		if err != nil {
-			return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", elcClientID, err)
-		}
-		laneWidths := explicitStateHeaderLaneWidths(headerLanes)
-		pr.getLogger().InfoContext(
-			ctx,
-			"explicit-state update plan",
-			"operation", operation,
-			"strategy", explicitStateLaneStrategy(),
-			"num_source_headers", len(sourceHeaderUnits),
-			"num_units", countExplicitStateHeaderLaneUnits(headerLanes),
-			"num_lanes", len(laneWidths),
-			"num_complete_base_states", countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits),
-			"lane_widths", laneWidths,
-			"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, laneWidths),
-		)
-		results, err := pr.executeExplicitStateHeaderLanesStream(
-			ctx,
-			headerLanes,
-			elcClientID,
-			includeState,
-			signer,
-		)
-		if err != nil {
-			if !shouldFallbackToSerialUpdateClient(err) {
-				return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
-			}
-			if shouldLogSerialUpdateClientFallback(err) {
-				pr.getLogger().InfoContext(
-					ctx,
-					"fall back to serial update client after explicit-state batch failure",
-					"operation", operation,
-					"client_id", elcClientID,
-					"error", err.Error(),
-				)
-			}
-			results, err = runSerialUpdate()
-			if err != nil {
-				return nil, err
-			}
-		}
-		return results, nil
-	} else {
-		results, err := runSerialUpdate()
-		if err != nil {
-			return nil, err
-		}
-		return results, nil
+func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
+	ctx context.Context,
+	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	operation string,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	headerUnits := extractExplicitStateHeaderUnits(sourceHeaderUnits)
+	headerLanes, err := planExplicitStateHeaderLanes(headerUnits)
+	if err != nil {
+		return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", elcClientID, err)
 	}
+	laneWidths := explicitStateHeaderLaneWidths(headerLanes)
+	pr.getLogger().InfoContext(
+		ctx,
+		"explicit-state update plan",
+		"operation", operation,
+		"strategy", explicitStateLaneStrategy(),
+		"num_source_headers", len(sourceHeaderUnits),
+		"num_units", countExplicitStateHeaderLaneUnits(headerLanes),
+		"num_lanes", len(laneWidths),
+		"num_complete_base_states", countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits),
+		"lane_widths", laneWidths,
+		"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, laneWidths),
+	)
+	results, err := pr.executeExplicitStateHeaderLanesStream(
+		ctx,
+		headerLanes,
+		elcClientID,
+		includeState,
+		signer,
+	)
+	if err != nil {
+		if !shouldFallbackToSerialUpdateClient(err) {
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
+		}
+		if shouldLogSerialUpdateClientFallback(err) {
+			pr.getLogger().InfoContext(
+				ctx,
+				"fall back to serial update client after explicit-state batch failure",
+				"operation", operation,
+				"client_id", elcClientID,
+				"error", err.Error(),
+			)
+		}
+		return pr.executeSerialELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer)
+	}
+	return results, nil
 }
 
 func shouldFallbackToSerialUpdateClient(err error) bool {
@@ -445,18 +465,42 @@ func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
 ) ([]*ExplicitStateSourceHeaderUnit, error) {
+	units, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return units, nil
+	}
+	return pr.collectSerialSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+}
+
+func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitsForUpdate(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+) ([]*ExplicitStateSourceHeaderUnit, bool, error) {
 	if pr.sourceHeaderCollector != nil {
-		return pr.sourceHeaderCollector(ctx, dstChain, latestFinalizedHeader)
+		units, err := pr.sourceHeaderCollector(ctx, dstChain, latestFinalizedHeader)
+		return units, true, err
 	}
 	if provider, ok := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider); ok {
 		units, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader)
 		if err != nil {
-			return nil, err
+			return nil, true, err
 		}
 		if len(units) > 0 {
-			return units, nil
+			return units, true, nil
 		}
 	}
+	return nil, false, nil
+}
+
+func (pr *Prover) collectSerialSourceHeaderUnitsForUpdate(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+) ([]*ExplicitStateSourceHeaderUnit, error) {
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
