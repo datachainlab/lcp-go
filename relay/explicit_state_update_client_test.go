@@ -10,6 +10,24 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 )
 
+func TestShouldFlushSpeculativeBatchBeforeUnitByHeaderBytes(t *testing.T) {
+	if !shouldFlushSpeculativeBatchBeforeUnit(1, MaxSpeculativeBatchHeaderBytes-16, 32, DefaultMaxSpeculativeBatchUnits) {
+		t.Fatal("expected flush when next unit would exceed batch header byte limit")
+	}
+}
+
+func TestShouldFlushSpeculativeBatchBeforeUnitByUnitCount(t *testing.T) {
+	if !shouldFlushSpeculativeBatchBeforeUnit(2, 128, 64, 2) {
+		t.Fatal("expected flush when batch already reached max units")
+	}
+}
+
+func TestShouldFlushSpeculativeBatchBeforeUnitKeepsEmptyBatchOpen(t *testing.T) {
+	if shouldFlushSpeculativeBatchBeforeUnit(0, MaxSpeculativeBatchHeaderBytes, 1, DefaultMaxSpeculativeBatchUnits) {
+		t.Fatal("did not expect flush before first unit in batch")
+	}
+}
+
 func TestBuildExplicitStateRefFromCanonicalState(t *testing.T) {
 	ref, err := buildExplicitStateRefFromCanonicalState(
 		&lcptypes.ClientState{LatestHeight: clienttypes.Height{RevisionNumber: 0, RevisionHeight: 11}},

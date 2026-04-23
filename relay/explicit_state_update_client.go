@@ -52,6 +52,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	var sender *speculativeBatchStreamSender
 	closed := true
 	batchSigners := make([][]byte, 0, maxUnits)
+	batchHeaderBytes := 0
 	batchIndex := 0
 	unitIndex := 0
 	defer func() {
@@ -70,6 +71,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			"client_id", elcClientID,
 			"batch_index", batchIndex,
 			"batch_unit_limit", maxUnits,
+			"max_batch_header_bytes", MaxSpeculativeBatchHeaderBytes,
 		)
 		nextSender, err := openSpeculativeUpdateClientBatchStream(
 			ctx,
@@ -109,6 +111,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		}
 		sender = nil
 		batchSigners = batchSigners[:0]
+		batchHeaderBytes = 0
 		batchIndex++
 		return nil
 	}
@@ -153,11 +156,39 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 				unitID,
 			)
 		}
+		headerBytes := 0
+		if update != nil && update.Header != nil {
+			headerBytes = len(update.Header.Value)
+		}
+		if headerBytes > MaxSpeculativeBatchHeaderBytes {
+			return nil, sourceHeaderUnits, fmt.Errorf(
+				"explicit-state header exceeds max speculative batch header bytes: unit_id=%q bytes=%d max=%d",
+				unitID,
+				headerBytes,
+				MaxSpeculativeBatchHeaderBytes,
+			)
+		}
+		if shouldFlushSpeculativeBatchBeforeUnit(len(batchSigners), batchHeaderBytes, headerBytes, maxUnits) {
+			pr.getLogger().InfoContext(
+				ctx,
+				"split speculative update client batch",
+				"client_id", elcClientID,
+				"batch_index", batchIndex,
+				"split_reason", "header_bytes_limit",
+				"batch_header_bytes", batchHeaderBytes,
+				"next_unit_id", unitID,
+				"next_header_bytes", headerBytes,
+				"max_batch_header_bytes", MaxSpeculativeBatchHeaderBytes,
+			)
+			if err := flushBatch(); err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+		}
 
 		if err := openBatch(); err != nil {
 			return nil, sourceHeaderUnits, err
 		}
-		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
+		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, batchHeaderBytes, update)
 		if err := sender.Send(&SpeculativeUpdateClientUnit{
 			UnitId:    unitID,
 			Update:    update,
@@ -167,6 +198,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			return nil, sourceHeaderUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
 		}
 		batchSigners = append(batchSigners, update.Signer)
+		batchHeaderBytes += headerBytes
 		unitIndex++
 
 		if len(batchSigners) == maxUnits {
@@ -190,6 +222,7 @@ func logExplicitStateUnitSend(
 	batchUnitIndex int,
 	unitIndex int,
 	includeState bool,
+	batchHeaderBytesBeforeSend int,
 	update *elc.MsgUpdateClient,
 ) {
 	headerBytes := 0
@@ -208,9 +241,25 @@ func logExplicitStateUnitSend(
 		"batch_unit_index", batchUnitIndex,
 		"unit_index", unitIndex,
 		"include_state", includeState,
+		"batch_header_bytes_before_send", batchHeaderBytesBeforeSend,
 		"header_bytes", headerBytes,
 		"header_sha256", headerSHA256,
 	)
+}
+
+func shouldFlushSpeculativeBatchBeforeUnit(
+	batchUnits int,
+	batchHeaderBytes int,
+	nextHeaderBytes int,
+	maxUnits int,
+) bool {
+	if batchUnits == 0 {
+		return false
+	}
+	if maxUnits > 0 && batchUnits >= maxUnits {
+		return true
+	}
+	return batchHeaderBytes+nextHeaderBytes > MaxSpeculativeBatchHeaderBytes
 }
 
 func buildExplicitStateRefFromCanonicalState(

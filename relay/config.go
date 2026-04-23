@@ -23,6 +23,7 @@ const (
 	DefaultMaxChunkSize                = 4*1024*1024 - 1024
 	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
 	DefaultMaxSpeculativeBatchUnits    = 256
+	MaxSpeculativeBatchHeaderBytes     = 512 * 1024 * 1024
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
