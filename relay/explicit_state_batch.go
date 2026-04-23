@@ -12,15 +12,6 @@ import (
 	"github.com/datachainlab/lcp-go/relay/elc"
 )
 
-func executeSpeculativeUpdateClientBatchStream(
-	ctx context.Context,
-	client LCPServiceClient,
-	in *ExecuteSpeculativeUpdateClientBatchRequest,
-	chunkSize uint32,
-) (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	return executeSpeculativeUpdateClientUnitsStream(ctx, client, in.ClientId, speculativeUnitSlice(in.Units), chunkSize)
-}
-
 func executeSpeculativeUpdateClientPlannedUnitsStream(
 	ctx context.Context,
 	client LCPServiceClient,
@@ -34,16 +25,6 @@ func executeSpeculativeUpdateClientPlannedUnitsStream(
 type speculativeUnitIterator interface {
 	Len() int
 	At(index int) (*SpeculativeUpdateClientUnit, error)
-}
-
-type speculativeUnitSlice []*SpeculativeUpdateClientUnit
-
-func (s speculativeUnitSlice) Len() int {
-	return len(s)
-}
-
-func (s speculativeUnitSlice) At(index int) (*SpeculativeUpdateClientUnit, error) {
-	return s[index], nil
 }
 
 type plannedSpeculativeUnitIterator []*ExplicitStatePlannedUnit
