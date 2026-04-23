@@ -25,7 +25,6 @@ import (
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
-	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
@@ -431,26 +430,14 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestHeader, err)
 	}
 
-	var results []*elcupdater_storage.UpdateClientResult
-	if !disableExplicitStateUpdateClient() {
-		results, err = pr.executeExplicitStateELCUpdateHeaderStream(
-			ctx,
-			headerStream,
-			elcClientID,
-			includeState,
-			signer,
-			"enclave_key_update",
-		)
-	} else {
-		results, err = pr.executeELCUpdateHeaderStream(
-			ctx,
-			headerStream,
-			elcClientID,
-			includeState,
-			signer,
-			"enclave_key_update",
-		)
-	}
+	results, err := pr.executeELCUpdateHeaderStream(
+		ctx,
+		headerStream,
+		elcClientID,
+		includeState,
+		signer,
+		"enclave_key_update",
+	)
 	if err != nil {
 		return nil, err
 	}
