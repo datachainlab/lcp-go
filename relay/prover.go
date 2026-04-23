@@ -10,11 +10,9 @@ import (
 	"sync"
 	"time"
 
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
-	tmclient "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	elcupdater_grpc "github.com/datachainlab/lcp-go/relay/elcupdater/grpc"
@@ -457,60 +455,6 @@ func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(
 		}
 		if len(units) > 0 {
 			return units, nil
-		}
-	}
-	if useExplicitStateTMMultiHeaderCollector() {
-		unwrappedProver := unwrapExplicitStateOriginProver(pr.originProver)
-		unwrappedChain := unwrapExplicitStateOriginChain(pr.originChain)
-		headerProvider, okHeaderProvider := unwrappedProver.(interface {
-			UpdateLightClient(context.Context, int64) (*tmclient.Header, error)
-		})
-		valsetQuerier, okValsetQuerier := unwrappedChain.(interface {
-			QueryValsetAtHeight(context.Context, clienttypes.Height) (*tmproto.ValidatorSet, error)
-		})
-		pr.getLogger().InfoContext(
-			ctx,
-			"explicit-state tm multi-header collector check",
-			"origin_prover_type", fmt.Sprintf("%T", pr.originProver),
-			"origin_chain_type", fmt.Sprintf("%T", pr.originChain),
-			"unwrapped_prover_type", fmt.Sprintf("%T", unwrappedProver),
-			"unwrapped_chain_type", fmt.Sprintf("%T", unwrappedChain),
-			"ok_header_provider", okHeaderProvider,
-			"ok_valset_querier", okValsetQuerier,
-			"codec_initialized", pr.codec != nil,
-		)
-		if okHeaderProvider && okValsetQuerier && pr.codec != nil {
-			if units, ok, err := collectTendermintSharedTrustedSourceHeaderUnits(
-				ctx,
-				pr.codec,
-				dstChain,
-				headerProvider,
-				valsetQuerier,
-				latestFinalizedHeader,
-				explicitStateTMMultiHeaderLimit(),
-			); err != nil {
-				return nil, err
-			} else if ok {
-				pr.getLogger().InfoContext(
-					ctx,
-					"explicit-state tm multi-header collector selected",
-					"num_source_headers", len(units),
-					"max_source_headers", explicitStateTMMultiHeaderLimit(),
-				)
-				return units, nil
-			} else {
-				pr.getLogger().InfoContext(
-					ctx,
-					"explicit-state tm multi-header collector fallback",
-					"reason", "collector_returned_no_units",
-				)
-			}
-		} else {
-			pr.getLogger().InfoContext(
-				ctx,
-				"explicit-state tm multi-header collector fallback",
-				"reason", "missing_runtime_support",
-			)
 		}
 	}
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)

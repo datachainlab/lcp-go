@@ -3,58 +3,20 @@ package relay
 import (
 	"context"
 	"io"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	commitmenttypes "github.com/cosmos/ibc-go/v8/modules/core/23-commitment/types"
-	ibcexported "github.com/cosmos/ibc-go/v8/modules/core/exported"
 	tmclienttypes "github.com/cosmos/ibc-go/v8/modules/light-clients/07-tendermint"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
-	"github.com/hyperledger-labs/yui-relayer/core"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-type fakeExplicitStateCounterpartyQuerier struct {
-	clientStateHeight clienttypes.Height
-}
-
-func (q fakeExplicitStateCounterpartyQuerier) LatestHeight(context.Context) (ibcexported.Height, error) {
-	return q.clientStateHeight, nil
-}
-
-func (q fakeExplicitStateCounterpartyQuerier) QueryClientState(core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
-	anyClientState, err := clienttypes.PackClientState(&tmclienttypes.ClientState{
-		LatestHeight: q.clientStateHeight,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &clienttypes.QueryClientStateResponse{ClientState: anyClientState}, nil
-}
-
-type fakeExplicitStateTMHeaderProvider struct{}
-
-func (fakeExplicitStateTMHeaderProvider) UpdateLightClient(_ context.Context, height int64) (*tmclienttypes.Header, error) {
-	return &tmclienttypes.Header{
-		TrustedHeight: clienttypes.Height{RevisionHeight: uint64(height - 1)},
-		SignedHeader:  &tmproto.SignedHeader{Header: &tmproto.Header{Height: height}},
-		ValidatorSet:  &tmproto.ValidatorSet{},
-	}, nil
-}
-
-type fakeExplicitStateTMValsetQuerier struct{}
-
-func (fakeExplicitStateTMValsetQuerier) QueryValsetAtHeight(_ context.Context, _ clienttypes.Height) (*tmproto.ValidatorSet, error) {
-	return &tmproto.ValidatorSet{}, nil
-}
 
 type eofingSpeculativeMsgClient struct {
 	elc.MsgClient
@@ -546,89 +508,6 @@ func TestExplicitStateLaneLimitReason(t *testing.T) {
 		[]int{2},
 	); got != "conservative_strategy" {
 		t.Fatalf("unexpected conservative reason: %s", got)
-	}
-}
-
-func TestCollectTendermintSharedTrustedSourceHeaderUnits(t *testing.T) {
-	codec := core.MakeCodec()
-	latestHeader := &tmclienttypes.Header{
-		SignedHeader: &tmproto.SignedHeader{Header: &tmproto.Header{Height: 12}},
-		ValidatorSet: &tmproto.ValidatorSet{},
-	}
-	units, ok, err := collectTendermintSharedTrustedSourceHeaderUnits(
-		context.Background(),
-		codec,
-		fakeExplicitStateCounterpartyQuerier{
-			clientStateHeight: clienttypes.Height{RevisionHeight: 10},
-		},
-		fakeExplicitStateTMHeaderProvider{},
-		fakeExplicitStateTMValsetQuerier{},
-		latestHeader,
-		16,
-	)
-	if err != nil {
-		t.Fatalf("collectTendermintSharedTrustedSourceHeaderUnits() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("expected tendermint multi-header collector to activate")
-	}
-	if len(units) != 2 {
-		t.Fatalf("unexpected unit count: %d", len(units))
-	}
-	wantTrustedHeights := []uint64{10, 11}
-	for i, unit := range units {
-		if unit == nil || unit.TrustedHeight == nil || unit.TrustedHeight.RevisionHeight != wantTrustedHeights[i] {
-			t.Fatalf("unexpected unit[%d] trusted height: %#v", i, unit)
-		}
-	}
-}
-
-func TestCollectTendermintSharedTrustedSourceHeaderUnitsRespectsLimit(t *testing.T) {
-	codec := core.MakeCodec()
-	latestHeader := &tmclienttypes.Header{
-		SignedHeader: &tmproto.SignedHeader{Header: &tmproto.Header{Height: 20}},
-		ValidatorSet: &tmproto.ValidatorSet{},
-	}
-	units, ok, err := collectTendermintSharedTrustedSourceHeaderUnits(
-		context.Background(),
-		codec,
-		fakeExplicitStateCounterpartyQuerier{
-			clientStateHeight: clienttypes.Height{RevisionHeight: 10},
-		},
-		fakeExplicitStateTMHeaderProvider{},
-		fakeExplicitStateTMValsetQuerier{},
-		latestHeader,
-		4,
-	)
-	if err != nil {
-		t.Fatalf("collectTendermintSharedTrustedSourceHeaderUnits() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("expected tendermint multi-header collector to activate")
-	}
-	var gotHeights []uint64
-	for _, unit := range units {
-		header, ok := unit.Header.(*tmclienttypes.Header)
-		if !ok {
-			t.Fatalf("unexpected header type: %T", unit.Header)
-		}
-		gotHeights = append(gotHeights, header.GetHeight().GetRevisionHeight())
-	}
-	wantHeights := []uint64{13, 15, 18, 20}
-	if !reflect.DeepEqual(gotHeights, wantHeights) {
-		t.Fatalf("unexpected collected heights: got=%v want=%v", gotHeights, wantHeights)
-	}
-}
-
-func TestBuildExplicitStateTMTargetHeights(t *testing.T) {
-	if got := buildExplicitStateTMTargetHeights(10, 10, 4); len(got) != 0 {
-		t.Fatalf("expected empty targets, got %v", got)
-	}
-	if got := buildExplicitStateTMTargetHeights(10, 13, 4); !reflect.DeepEqual(got, []uint64{11, 12, 13}) {
-		t.Fatalf("unexpected short-range targets: %v", got)
-	}
-	if got := buildExplicitStateTMTargetHeights(10, 20, 4); !reflect.DeepEqual(got, []uint64{13, 15, 18, 20}) {
-		t.Fatalf("unexpected capped targets: %v", got)
 	}
 }
 
