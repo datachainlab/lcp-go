@@ -1093,14 +1093,47 @@ func TestShouldLogSerialUpdateClientFallbackSuppressesUnimplemented(t *testing.T
 	}
 }
 
-func TestShouldLogSerialUpdateClientFallbackKeepsEOF(t *testing.T) {
-	err := fmt.Errorf("send failed: %w", io.EOF)
+func TestShouldFallbackToSerialUpdateClientAllowsBaseStateMismatch(t *testing.T) {
+	err := fmt.Errorf(
+		"failed explicit-state update client batch: %w",
+		status.Error(codes.Aborted, "BaseStateMismatch: base prev_height mismatch: expected=10 observed=11"),
+	)
 
 	if !shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected EOF to trigger serial fallback")
+		t.Fatal("expected BaseStateMismatch to trigger serial fallback")
 	}
 	if !shouldLogSerialUpdateClientFallback(err) {
-		t.Fatal("expected EOF fallback log to be kept")
+		t.Fatal("expected BaseStateMismatch fallback log to be kept")
+	}
+}
+
+func TestShouldFallbackToSerialUpdateClientAllowsDependencyStateMismatch(t *testing.T) {
+	err := fmt.Errorf(
+		"failed explicit-state update client batch: %w",
+		status.Error(codes.Aborted, "DependencyStateMismatch: unit unit-0001 base state does not match dependency unit-0000 post state"),
+	)
+
+	if !shouldFallbackToSerialUpdateClient(err) {
+		t.Fatal("expected DependencyStateMismatch to trigger serial fallback")
+	}
+}
+
+func TestShouldFallbackToSerialUpdateClientRejectsEOF(t *testing.T) {
+	err := fmt.Errorf("send failed: %w", io.EOF)
+
+	if shouldFallbackToSerialUpdateClient(err) {
+		t.Fatal("expected EOF not to trigger serial fallback")
+	}
+}
+
+func TestShouldFallbackToSerialUpdateClientRejectsConflictingWriteSet(t *testing.T) {
+	err := fmt.Errorf(
+		"failed explicit-state update client batch: %w",
+		status.Error(codes.Aborted, "ConflictingWriteSet: independent speculative units unit-0000 and unit-0001 write the same key clients/arbitrum-1/clientState"),
+	)
+
+	if shouldFallbackToSerialUpdateClient(err) {
+		t.Fatal("expected ConflictingWriteSet not to trigger serial fallback")
 	}
 }
 

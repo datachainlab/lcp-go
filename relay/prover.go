@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -505,16 +505,26 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
 }
 
-// Only transport/capability failures fall back to serial execution.
-// Ordered-chain validation and merge errors must stay visible so we do not
-// silently mask explicit-state bugs as a successful serial update-client.
+const (
+	speculativeBatchFailureKindBaseStateMismatch      = "BaseStateMismatch"
+	speculativeBatchFailureKindDependencyStateMismatch = "DependencyStateMismatch"
+)
+
+// Serial fallback is allowed only for capability failures and explicit-state
+// prediction mismatches that indicate this ELC cannot provide a stable ordered
+// chain base state for the current attempt. Ordered-chain merge/write-set
+// failures must stay visible so we do not silently mask explicit-state bugs as
+// a successful serial update-client.
 func shouldFallbackToSerialUpdateClient(err error) bool {
 	for current := err; current != nil; current = errors.Unwrap(current) {
-		if errors.Is(current, io.EOF) || errors.Is(current, io.ErrUnexpectedEOF) {
-			return true
-		}
 		if grpcstatus.Code(current) == codes.Unimplemented {
 			return true
+		}
+		if kind, ok := speculativeBatchFailureKindFromError(current); ok {
+			switch kind {
+			case speculativeBatchFailureKindBaseStateMismatch, speculativeBatchFailureKindDependencyStateMismatch:
+				return true
+			}
 		}
 	}
 	return false
@@ -527,6 +537,23 @@ func shouldLogSerialUpdateClientFallback(err error) bool {
 		}
 	}
 	return true
+}
+
+func speculativeBatchFailureKindFromError(err error) (string, bool) {
+	statusErr, ok := grpcstatus.FromError(err)
+	if !ok || statusErr.Code() != codes.Aborted {
+		return "", false
+	}
+	message := statusErr.Message()
+	for _, kind := range []string{
+		speculativeBatchFailureKindBaseStateMismatch,
+		speculativeBatchFailureKindDependencyStateMismatch,
+	} {
+		if strings.HasPrefix(message, kind+": ") {
+			return kind, true
+		}
+	}
+	return "", false
 }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
