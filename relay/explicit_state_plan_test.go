@@ -94,42 +94,6 @@ func (s explicitStateBatchMultiRequestServer) SpeculativeUpdateClientBatchStream
 	})
 }
 
-type explicitStatePipelineObserveServer struct {
-	elc.UnimplementedMsgServer
-	firstUnitEnd chan struct{}
-}
-
-func (s explicitStatePipelineObserveServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
-	unitCount := 0
-	for {
-		chunk, err := stream.Recv()
-		if err == io.EOF {
-			units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, unitCount)
-			for i := 0; i < unitCount; i++ {
-				units = append(units, &elc.StitchedSpeculativeUpdateClientUnitResult{
-					Response: elc.MsgUpdateClientResponse{
-						Message:   []byte(fmt.Sprintf("msg-%d", i)),
-						Signature: []byte(fmt.Sprintf("sig-%d", i)),
-					},
-				})
-			}
-			return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
-				ClientId: "07-tendermint-11",
-				Units:    units,
-			})
-		}
-		if err != nil {
-			return err
-		}
-		if end, ok := chunk.Chunk.(*elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd); ok {
-			unitCount++
-			if end.UnitEnd.UnitId == "unit-0000" {
-				close(s.firstUnitEnd)
-			}
-		}
-	}
-}
-
 type explicitStateIntegrationTestServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
@@ -434,84 +398,10 @@ func makeSpeculativeBatchTestUpdate(clientID string, signer []byte, index int) *
 	}
 }
 
-func TestExecuteExplicitStateHeaderLanesStreamSendsUnitBeforeResolvingAllBaseStates(t *testing.T) {
+func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-
-	listener := bufconn.Listen(1024 * 1024)
-	server := grpc.NewServer()
-	t.Cleanup(server.Stop)
-
-	firstUnitEnd := make(chan struct{})
-	elc.RegisterMsgServer(server, &explicitStatePipelineObserveServer{firstUnitEnd: firstUnitEnd})
-	go func() {
-		_ = server.Serve(listener)
-	}()
-
-	conn, err := grpc.NewClient(
-		"passthrough:///bufnet",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return listener.Dial()
-		}),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient() error = %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	header0 := makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-0"), 0).Header
-	header1 := makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("lane-1"), 1).Header
-	headerLanes := [][]*ExplicitStateHeaderUnit{
-		{{Header: header0}},
-		{{Header: header1}},
-	}
-	resolveCalls := 0
-	resolver := func(ctx context.Context, clientID string, header *codectypes.Any) (*ExplicitStateRef, error) {
-		resolveCalls++
-		if resolveCalls == 2 {
-			select {
-			case <-firstUnitEnd:
-			case <-time.After(2 * time.Second):
-				return nil, fmt.Errorf("first unit was not streamed before resolving the second base state")
-			}
-		}
-		return &ExplicitStateRef{
-			PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + resolveCalls)},
-			ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", resolveCalls), Value: []byte("client")},
-			ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", resolveCalls), Value: []byte("consensus")},
-		}, nil
-	}
-
-	pr := &Prover{
-		config:           ProverConfig{ElcClientId: "07-tendermint-11"},
-		lcpServiceClient: NewLCPServiceClient(conn),
-	}
-	results, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
-		context.Background(),
-		headerLanes,
-		"07-tendermint-11",
-		false,
-		[]byte("signer"),
-		resolver,
-	)
-	if err != nil {
-		t.Fatalf("executeExplicitStateHeaderLanesStreamWithResolver() error = %v", err)
-	}
-	if resolveCalls != 2 {
-		t.Fatalf("unexpected resolver calls: %d", resolveCalls)
-	}
-	if len(results) != 2 {
-		t.Fatalf("unexpected results count: %d", len(results))
-	}
-}
-
-func TestUpdateELCForUpdateClientKeepsTendermintSharedTrustedHeightLinear(t *testing.T) {
-	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
-		t.Fatalf("InitLogger() error = %v", err)
-	}
-	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
 
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
@@ -726,7 +616,7 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 	}
 }
 
-func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) {
+func TestExecuteExplicitStateHeaderUnitsStreamSplitsLargeRequests(t *testing.T) {
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
 	t.Cleanup(server.Stop)
@@ -749,9 +639,9 @@ func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	lane := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
+	headerUnits := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
 	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
-		lane = append(lane, &ExplicitStateHeaderUnit{
+		headerUnits = append(headerUnits, &ExplicitStateHeaderUnit{
 			Header: makeSpeculativeBatchTestUpdate(
 				"07-tendermint-11",
 				[]byte(fmt.Sprintf("s%02d", i)),
@@ -767,9 +657,9 @@ func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) 
 	}
 
 	pr := &Prover{lcpServiceClient: NewLCPServiceClient(conn)}
-	results, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+	results, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
 		context.Background(),
-		[][]*ExplicitStateHeaderUnit{lane},
+		headerUnits,
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
@@ -779,7 +669,7 @@ func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) 
 		},
 	)
 	if err != nil {
-		t.Fatalf("executeExplicitStateHeaderLanesStreamWithResolver() error = %v", err)
+		t.Fatalf("executeExplicitStateHeaderUnitsStreamWithResolver() error = %v", err)
 	}
 
 	if len(captured) != 2 {
@@ -804,19 +694,19 @@ func TestExecuteExplicitStateHeaderLanesStreamSplitsLargeRequests(t *testing.T) 
 	}
 }
 
-func TestExecuteExplicitStateHeaderLanesStreamRejectsDeferredBatchBoundaryBeforeOpeningStream(t *testing.T) {
-	lane := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
+func TestExecuteExplicitStateHeaderUnitsStreamRejectsDeferredBatchBoundaryBeforeOpeningStream(t *testing.T) {
+	headerUnits := make([]*ExplicitStateHeaderUnit, 0, DefaultMaxSpeculativeBatchUnits+1)
 	for i := 0; i < DefaultMaxSpeculativeBatchUnits+1; i++ {
-		lane = append(lane, &ExplicitStateHeaderUnit{
+		headerUnits = append(headerUnits, &ExplicitStateHeaderUnit{
 			Header: &codectypes.Any{TypeUrl: "header", Value: []byte{byte(i)}},
 		})
 	}
 
 	resolveCalls := 0
 	pr := &Prover{}
-	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+	_, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
 		context.Background(),
-		[][]*ExplicitStateHeaderUnit{lane},
+		headerUnits,
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
@@ -839,12 +729,10 @@ func TestExecuteExplicitStateHeaderLanesStreamRejectsDeferredBatchBoundaryBefore
 	}
 }
 
-func TestUpdateELCForUpdateClientSingleHeaderStaysSingleLane(t *testing.T) {
+func TestUpdateELCForUpdateClientSingleHeaderStaysSingleUnitBatch(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
-	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
-
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
 	var captured *ExecuteSpeculativeUpdateClientBatchRequest
@@ -1189,22 +1077,20 @@ func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesChunkProvider(t *test
 	}
 }
 
-func TestExecuteExplicitStateHeaderLanesStreamRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
+func TestExecuteExplicitStateHeaderUnitsStreamRejectsEmbeddedBaseStateHeightMismatch(t *testing.T) {
 	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
 	pr := &Prover{}
 
-	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+	_, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
 		context.Background(),
-		[][]*ExplicitStateHeaderUnit{
+		[]*ExplicitStateHeaderUnit{
 			{
-				{
-					Header:        anyHeader,
-					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-					BaseState: &ExplicitStateRef{
-						PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
-						ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
-						ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
-					},
+				Header:        anyHeader,
+				TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+				BaseState: &ExplicitStateRef{
+					PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
+					ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("c")},
+					ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("s")},
 				},
 			},
 		},

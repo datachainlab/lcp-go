@@ -433,26 +433,17 @@ func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
 	operation string,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	headerUnits := extractExplicitStateHeaderUnits(sourceHeaderUnits)
-	headerLanes, err := planExplicitStateHeaderLanes(headerUnits)
-	if err != nil {
-		return nil, fmt.Errorf("failed to plan explicit-state update batch: elc_client_id=%v %w", elcClientID, err)
-	}
-	laneWidths := explicitStateHeaderLaneWidths(headerLanes)
 	pr.getLogger().InfoContext(
 		ctx,
-		"explicit-state update plan",
+		"explicit-state ordered update units",
 		"operation", operation,
-		"strategy", explicitStateLaneStrategy(),
 		"num_source_headers", len(sourceHeaderUnits),
-		"num_units", countExplicitStateHeaderLaneUnits(headerLanes),
-		"num_lanes", len(laneWidths),
+		"num_units", len(headerUnits),
 		"num_complete_base_states", countExplicitStateHeaderUnitsWithCompleteBaseState(headerUnits),
-		"lane_widths", laneWidths,
-		"lane_limit_reason", explicitStateLaneLimitReason(sourceHeaderUnits, laneWidths),
 	)
-	results, err := pr.executeExplicitStateHeaderLanesStream(
+	results, err := pr.executeExplicitStateHeaderUnitsStream(
 		ctx,
-		headerLanes,
+		headerUnits,
 		elcClientID,
 		includeState,
 		signer,

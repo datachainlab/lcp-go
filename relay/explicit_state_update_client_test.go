@@ -46,7 +46,7 @@ func TestBuildExplicitStateRefFromCanonicalState(t *testing.T) {
 	}
 }
 
-func TestExecuteExplicitStateHeaderLanesStreamClosesOpenStreamAndEnrichesEOF(t *testing.T) {
+func TestExecuteExplicitStateHeaderUnitsStreamClosesOpenStreamAndEnrichesEOF(t *testing.T) {
 	stream := &recordingSpeculativeBatchStream{
 		sendErrAfter: 2,
 		sendErr:      io.EOF,
@@ -58,11 +58,11 @@ func TestExecuteExplicitStateHeaderLanesStreamClosesOpenStreamAndEnrichesEOF(t *
 		},
 	}
 
-	_, err := pr.executeExplicitStateHeaderLanesStreamWithResolver(
+	_, err := pr.executeExplicitStateHeaderUnitsStreamWithResolver(
 		context.Background(),
-		[][]*ExplicitStateHeaderUnit{{
+		[]*ExplicitStateHeaderUnit{
 			{Header: &codectypes.Any{TypeUrl: "header", Value: []byte("header")}},
-		}},
+		},
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
@@ -135,193 +135,10 @@ func TestBuildExplicitStateRefFromCanonicalStateTendermint(t *testing.T) {
 	}
 }
 
-func TestPlanConservativeExplicitStateHeaderLanes(t *testing.T) {
-	headers := []*codectypes.Any{
-		{TypeUrl: "header-0"},
-		{TypeUrl: "header-1"},
-	}
-	units, err := buildExplicitStateHeaderUnits(headers)
-	if err != nil {
-		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
-	}
-	lanes, err := planConservativeExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planConservativeExplicitStateHeaderLanes() error = %v", err)
-	}
-	if len(lanes) != 1 {
-		t.Fatalf("unexpected lane count: %d", len(lanes))
-	}
-	if len(lanes[0]) != 2 {
-		t.Fatalf("unexpected lane width: %d", len(lanes[0]))
-	}
-	if lanes[0][0].Header != headers[0] || lanes[0][1].Header != headers[1] {
-		t.Fatalf("unexpected lane contents: %#v", lanes[0])
-	}
-}
-
-func TestPlanConservativeExplicitStateHeaderLanesEmpty(t *testing.T) {
-	lanes, err := planConservativeExplicitStateHeaderLanes(nil)
-	if err != nil {
-		t.Fatalf("planConservativeExplicitStateHeaderLanes() error = %v", err)
-	}
-	if lanes != nil {
-		t.Fatalf("expected nil lanes, got %#v", lanes)
-	}
-}
-
-func TestPlanConservativeExplicitStateHeaderLanesRejectsNilHeader(t *testing.T) {
+func TestBuildExplicitStateHeaderUnitsRejectsNilHeader(t *testing.T) {
 	_, err := buildExplicitStateHeaderUnits([]*codectypes.Any{{TypeUrl: "header-0"}, nil})
 	if err == nil {
 		t.Fatal("expected nil header error, got nil")
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesSingleHeader(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "single_header")
-	headers := []*codectypes.Any{
-		{TypeUrl: "header-0"},
-		{TypeUrl: "header-1"},
-	}
-	units, err := buildExplicitStateHeaderUnits(headers)
-	if err != nil {
-		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
-	}
-	lanes, err := planExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
-	}
-	if len(lanes) != 1 {
-		t.Fatalf("unexpected lane count: %d", len(lanes))
-	}
-	if len(lanes[0]) != 2 {
-		t.Fatalf("unexpected lane widths: %#v", lanes)
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesSingleHeaderSplitsOnlyCompleteBaseState(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "single_header")
-	completeBaseState := func(height uint64) *ExplicitStateRef {
-		return &ExplicitStateRef{
-			PrevHeight:     &clienttypes.Height{RevisionHeight: height},
-			ClientState:    &codectypes.Any{TypeUrl: "client", Value: []byte("client")},
-			ConsensusState: &codectypes.Any{TypeUrl: "consensus", Value: []byte("consensus")},
-		}
-	}
-	units := []*ExplicitStateHeaderUnit{
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-0"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-			BaseState:     completeBaseState(10),
-		},
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-1"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
-			BaseState: &ExplicitStateRef{
-				PrevHeight: &clienttypes.Height{RevisionHeight: 11},
-			},
-		},
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-2"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
-			BaseState:     completeBaseState(12),
-		},
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-3"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 13},
-			BaseState:     completeBaseState(99),
-		},
-	}
-
-	lanes, err := planExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
-	}
-	if got := explicitStateHeaderLaneWidths(lanes); len(got) != 2 || got[0] != 2 || got[1] != 2 {
-		t.Fatalf("unexpected lane widths: %v", got)
-	}
-	if lanes[0][0] != units[0] || lanes[0][1] != units[1] || lanes[1][0] != units[2] || lanes[1][1] != units[3] {
-		t.Fatalf("unexpected lane contents: %#v", lanes)
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesKeepsEmbeddedBaseStateUnitsOrderedByDefault(t *testing.T) {
-	units := []*ExplicitStateHeaderUnit{
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-0"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 10}},
-		},
-		{
-			Header:        &codectypes.Any{TypeUrl: "header-1"},
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
-			BaseState:     &ExplicitStateRef{PrevHeight: &clienttypes.Height{RevisionHeight: 11}},
-		},
-	}
-	lanes, err := planExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
-	}
-	if len(lanes) != 1 {
-		t.Fatalf("unexpected lane count: %d", len(lanes))
-	}
-	if len(lanes[0]) != 2 {
-		t.Fatalf("unexpected lane widths: %#v", lanes)
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesSharedTrustedHeight(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
-	headers := []*codectypes.Any{
-		mustPackTMHeaderForExplicitStateTest(t, 10),
-		mustPackTMHeaderForExplicitStateTest(t, 10),
-	}
-	units, err := buildExplicitStateHeaderUnits(headers)
-	if err != nil {
-		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
-	}
-	lanes, err := planExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
-	}
-	if len(lanes) != 1 {
-		t.Fatalf("unexpected lane count: %d", len(lanes))
-	}
-	if len(lanes[0]) != 2 {
-		t.Fatalf("unexpected lane widths: %#v", lanes)
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesSharedTrustedHeightFallbacksToConservative(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
-	headers := []*codectypes.Any{
-		mustPackTMHeaderForExplicitStateTest(t, 10),
-		mustPackTMHeaderForExplicitStateTest(t, 11),
-	}
-	units, err := buildExplicitStateHeaderUnits(headers)
-	if err != nil {
-		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
-	}
-	lanes, err := planExplicitStateHeaderLanes(units)
-	if err != nil {
-		t.Fatalf("planExplicitStateHeaderLanes() error = %v", err)
-	}
-	if len(lanes) != 1 {
-		t.Fatalf("unexpected lane count: %d", len(lanes))
-	}
-	if len(lanes[0]) != 2 {
-		t.Fatalf("unexpected lane width: %d", len(lanes[0]))
-	}
-}
-
-func TestPlanExplicitStateHeaderLanesRejectsUnknownStrategy(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "bad_strategy")
-	units, err := buildExplicitStateHeaderUnits([]*codectypes.Any{{TypeUrl: "header-0"}})
-	if err != nil {
-		t.Fatalf("buildExplicitStateHeaderUnits() error = %v", err)
-	}
-	_, err = planExplicitStateHeaderLanes(units)
-	if err == nil {
-		t.Fatal("expected unknown strategy error, got nil")
 	}
 }
 
@@ -334,45 +151,6 @@ func TestBuildExplicitStateHeaderUnitsTrustedHeight(t *testing.T) {
 	}
 	if len(units) != 1 || units[0].TrustedHeight == nil || units[0].TrustedHeight.RevisionHeight != 17 {
 		t.Fatalf("unexpected header units: %#v", units)
-	}
-}
-
-func TestExplicitStateLaneLimitReason(t *testing.T) {
-	t.Setenv(envExplicitStateLaneStrategy, "shared_trusted_height")
-	if got := explicitStateLaneLimitReason(nil, nil); got != "no_source_headers" {
-		t.Fatalf("unexpected empty-source reason: %s", got)
-	}
-	if got := explicitStateLaneLimitReason([]*ExplicitStateSourceHeaderUnit{{TrustedHeight: &clienttypes.Height{RevisionHeight: 10}}}, []int{1}); got != "single_source_header" {
-		t.Fatalf("unexpected single-source reason: %s", got)
-	}
-	if got := explicitStateLaneLimitReason(
-		[]*ExplicitStateSourceHeaderUnit{
-			{TrustedHeight: &clienttypes.Height{RevisionHeight: 10}},
-			{TrustedHeight: &clienttypes.Height{RevisionHeight: 11}},
-		},
-		[]int{2},
-	); got != "mixed_trusted_height" {
-		t.Fatalf("unexpected mixed trusted-height reason: %s", got)
-	}
-	if got := explicitStateLaneLimitReason(
-		[]*ExplicitStateSourceHeaderUnit{
-			{AnyHeader: mustPackTMHeaderForExplicitStateTest(t, 10), TrustedHeight: &clienttypes.Height{RevisionHeight: 10}},
-			{AnyHeader: mustPackTMHeaderForExplicitStateTest(t, 10), TrustedHeight: &clienttypes.Height{RevisionHeight: 10}},
-		},
-		[]int{2},
-	); got != "shared_write_domain" {
-		t.Fatalf("unexpected shared-write-domain reason: %s", got)
-	}
-
-	t.Setenv(envExplicitStateLaneStrategy, "conservative")
-	if got := explicitStateLaneLimitReason(
-		[]*ExplicitStateSourceHeaderUnit{
-			{AnyHeader: mustPackTMHeaderForExplicitStateTest(t, 10), TrustedHeight: &clienttypes.Height{RevisionHeight: 10}},
-			{AnyHeader: mustPackTMHeaderForExplicitStateTest(t, 10), TrustedHeight: &clienttypes.Height{RevisionHeight: 10}},
-		},
-		[]int{2},
-	); got != "conservative_strategy" {
-		t.Fatalf("unexpected conservative reason: %s", got)
 	}
 }
 
