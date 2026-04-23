@@ -9,10 +9,9 @@ import (
 )
 
 type ExplicitStateSourceHeaderUnit struct {
-	Header        core.Header
-	AnyHeader     *codectypes.Any
-	TrustedHeight *clienttypes.Height
-	BaseState     *ExplicitStateRef
+	Header    core.Header
+	AnyHeader *codectypes.Any
+	BaseState *ExplicitStateRef
 }
 
 type ExplicitStateSourceHeaderUnitOrError struct {
@@ -97,14 +96,9 @@ func explicitStateSourceHeaderUnitFromStreamItem(
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 	}
-	trustedHeight, err := trustedHeightForExplicitState(anyHeader, nil)
-	if err != nil {
-		return nil, err
-	}
 	return &ExplicitStateSourceHeaderUnit{
-		Header:        h.Header,
-		AnyHeader:     anyHeader,
-		TrustedHeight: trustedHeight,
+		Header:    h.Header,
+		AnyHeader: anyHeader,
 	}, nil
 }
 
@@ -123,13 +117,6 @@ func explicitStateSourceHeaderUnitFromStreamItemOrError(
 	}
 	if item.Unit.AnyHeader == nil {
 		return nil, fmt.Errorf("explicit-state source header unit missing packed header: i=%v", i)
-	}
-	if item.Unit.TrustedHeight == nil {
-		trustedHeight, err := trustedHeightForExplicitState(item.Unit.AnyHeader, nil)
-		if err != nil {
-			return nil, err
-		}
-		item.Unit.TrustedHeight = trustedHeight
 	}
 	return item.Unit, nil
 }

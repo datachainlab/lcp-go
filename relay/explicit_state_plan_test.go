@@ -459,11 +459,7 @@ func mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t *testing.T, headers
 		if unit == nil {
 			t.Fatalf("source unit[%d] is nil", i)
 		}
-		var prevHeight *clienttypes.Height
-		if unit.TrustedHeight != nil {
-			h := *unit.TrustedHeight
-			prevHeight = &h
-		}
+		prevHeight := &clienttypes.Height{RevisionHeight: uint64(i + 10)}
 		unit.BaseState = &ExplicitStateRef{
 			PrevHeight:     prevHeight,
 			ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("client-%d", i))},
@@ -569,8 +565,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	}()
 
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
-		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
-		TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
 		BaseState: &ExplicitStateRef{
 			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
 			ClientState:    &codectypes.Any{TypeUrl: "client/10", Value: []byte("client-10")},
@@ -583,8 +578,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 		t.Fatal("first unit was not streamed before the second source unit was provided")
 	}
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
-		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
-		TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
 		BaseState: &ExplicitStateRef{
 			PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
 			ClientState:    &codectypes.Any{TypeUrl: "client/11", Value: []byte("client-11")},
@@ -628,8 +622,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamFallsBackToSerialAtNilBaseSta
 
 	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError, 3)
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
-		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
-		TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
 		BaseState: &ExplicitStateRef{
 			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
 			ClientState:    &codectypes.Any{TypeUrl: "client/10", Value: []byte("client-10")},
@@ -637,13 +630,11 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamFallsBackToSerialAtNilBaseSta
 		},
 	}}
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
-		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
-		TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
-		BaseState:     nil,
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
+		BaseState: nil,
 	}}
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
-		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 2).Header,
-		TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 2).Header,
 		BaseState: &ExplicitStateRef{
 			PrevHeight:     &clienttypes.Height{RevisionHeight: 12},
 			ClientState:    &codectypes.Any{TypeUrl: "client/12", Value: []byte("client-12")},
@@ -720,12 +711,13 @@ func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
 	}
+	explicitStateChunks := mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...)
 	pr := &Prover{
 		config: ProverConfig{ElcClientId: "07-tendermint-11"},
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
-			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
+			explicitStateChunks: explicitStateChunks,
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{
@@ -754,10 +746,10 @@ func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 	if captured.ClientId != "07-tendermint-11" {
 		t.Fatalf("unexpected client id: %s", captured.ClientId)
 	}
-	if captured.Units[0].BaseState == nil || captured.Units[0].BaseState.PrevHeight == nil || captured.Units[0].BaseState.PrevHeight.RevisionHeight != 10 {
+	if captured.Units[0].BaseState == nil || captured.Units[0].BaseState.PrevHeight == nil || !captured.Units[0].BaseState.PrevHeight.EQ(*explicitStateChunks[0].BaseState.PrevHeight) {
 		t.Fatalf("unexpected first base state: %#v", captured.Units[0].BaseState)
 	}
-	if captured.Units[1].BaseState == nil || captured.Units[1].BaseState.PrevHeight == nil || captured.Units[1].BaseState.PrevHeight.RevisionHeight != 10 {
+	if captured.Units[1].BaseState == nil || captured.Units[1].BaseState.PrevHeight == nil || !captured.Units[1].BaseState.PrevHeight.EQ(*explicitStateChunks[1].BaseState.PrevHeight) {
 		t.Fatalf("unexpected second base state: %#v", captured.Units[1].BaseState)
 	}
 	if len(results) != 2 {
@@ -849,14 +841,12 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 			headers: headers,
 			explicitStateChunks: []*ExplicitStateSourceHeaderUnit{
 				{
-					AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 10),
-					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-					BaseState:     baseStates[0],
+					AnyHeader:  mustPackTMHeaderForExplicitStateTest(t, 10),
+					BaseState:  baseStates[0],
 				},
 				{
-					AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 10),
-					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
-					BaseState:     baseStates[1],
+					AnyHeader:  mustPackTMHeaderForExplicitStateTest(t, 10),
+					BaseState:  baseStates[1],
 				},
 			},
 		},
@@ -1014,8 +1004,7 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 		originProver: fakeOriginProver{
 			explicitStateChunks: []*ExplicitStateSourceHeaderUnit{
 				{
-					AnyHeader:     anyHeader,
-					TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+					AnyHeader: anyHeader,
 					BaseState: &ExplicitStateRef{
 						PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
 						ClientState:    &codectypes.Any{TypeUrl: "client/0", Value: []byte("client")},
@@ -1194,9 +1183,8 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 	}
 	expected := []*ExplicitStateSourceHeaderUnit{
 		{
-			AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 12),
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
-			BaseState:     expectedBaseState,
+			AnyHeader: mustPackTMHeaderForExplicitStateTest(t, 12),
+			BaseState: expectedBaseState,
 		},
 	}
 	pr := &Prover{

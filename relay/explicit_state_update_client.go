@@ -138,10 +138,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if sourceUnit.BaseState == nil {
 			return nil, sourceHeaderUnits, fmt.Errorf("explicit-state source header unit[%d] missing base state", unitIndex)
 		}
-		if err := validateExplicitStateBaseStateHeight(sourceUnit); err != nil {
-			return nil, sourceHeaderUnits, err
-		}
-
 		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
 		unitID := buildSpeculativeUnitID(unitIndex)
@@ -215,54 +211,6 @@ func logExplicitStateUnitSend(
 		"header_bytes", headerBytes,
 		"header_sha256", headerSHA256,
 	)
-}
-
-func validateExplicitStateBaseStateHeight(sourceUnit *ExplicitStateSourceHeaderUnit) error {
-	if sourceUnit == nil || sourceUnit.BaseState == nil || sourceUnit.BaseState.PrevHeight == nil || sourceUnit.TrustedHeight == nil {
-		return nil
-	}
-	if !sourceUnit.BaseState.PrevHeight.EQ(*sourceUnit.TrustedHeight) {
-		return fmt.Errorf(
-			"explicit-state base_state prev_height mismatch: trusted_height=%s base_state_prev_height=%s",
-			sourceUnit.TrustedHeight.String(),
-			sourceUnit.BaseState.PrevHeight.String(),
-		)
-	}
-	return nil
-}
-
-func trustedHeightForExplicitState(
-	anyHeader *codectypes.Any,
-	cdc codectypes.AnyUnpacker,
-) (*clienttypes.Height, error) {
-	if anyHeader == nil {
-		return nil, nil
-	}
-	var clientMessage ibcexported.ClientMessage
-	if cdc != nil {
-		if err := cdc.UnpackAny(anyHeader, &clientMessage); err != nil {
-			return nil, fmt.Errorf("failed to unpack explicit-state header: %w", err)
-		}
-	} else {
-		switch anyHeader.TypeUrl {
-		case "/ibc.lightclients.tendermint.v1.Header":
-			var header tmclienttypes.Header
-			if err := gogoproto.Unmarshal(anyHeader.Value, &header); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal tendermint explicit-state header: %w", err)
-			}
-			height := header.TrustedHeight
-			return &height, nil
-		default:
-			return nil, nil
-		}
-	}
-	switch header := clientMessage.(type) {
-	case *tmclienttypes.Header:
-		height := header.TrustedHeight
-		return &height, nil
-	default:
-		return nil, nil
-	}
 }
 
 func buildExplicitStateRefFromCanonicalState(
