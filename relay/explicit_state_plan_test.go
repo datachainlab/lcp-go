@@ -94,6 +94,63 @@ func (s explicitStateBatchMultiRequestServer) SpeculativeUpdateClientBatchStream
 	})
 }
 
+type explicitStateStreamingObserveServer struct {
+	elc.UnimplementedQueryServer
+	elc.UnimplementedMsgServer
+	firstUnitEnd chan struct{}
+}
+
+func (s explicitStateStreamingObserveServer) Client(context.Context, *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	clientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{
+		LatestHeight: clienttypes.Height{RevisionHeight: 7},
+	})
+	if err != nil {
+		return nil, err
+	}
+	consensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{
+		StateId: []byte("state-7"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &elc.QueryClientResponse{
+		Found:          true,
+		ClientState:    clientStateAny,
+		ConsensusState: consensusStateAny,
+	}, nil
+}
+
+func (s explicitStateStreamingObserveServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	unitCount := 0
+	for {
+		chunk, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		switch c := chunk.GetChunk().(type) {
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd:
+			unitCount++
+			if c.UnitEnd.UnitId == "unit-0000" {
+				close(s.firstUnitEnd)
+			}
+		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd:
+			units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, unitCount)
+			for i := 0; i < unitCount; i++ {
+				units = append(units, &elc.StitchedSpeculativeUpdateClientUnitResult{
+					Response: elc.MsgUpdateClientResponse{
+						Message:   []byte(fmt.Sprintf("msg-%d", i)),
+						Signature: []byte(fmt.Sprintf("sig-%d", i)),
+					},
+				})
+			}
+			return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
+				ClientId: "07-tendermint-11",
+				Units:    units,
+			})
+		}
+	}
+}
+
 type explicitStateIntegrationTestServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
@@ -395,6 +452,83 @@ func makeSpeculativeBatchTestUpdate(clientID string, signer []byte, index int) *
 			Value:   []byte(fmt.Sprintf("header-%d", index)),
 		},
 		Signer: signer,
+	}
+}
+
+func makeExplicitStateTestCodec() codec.ProtoCodecMarshaler {
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	return codec.NewProtoCodec(interfaceRegistry)
+}
+
+func TestExecuteExplicitStateHeaderStreamSendsUnitBeforeReceivingAllHeaders(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	listener := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	t.Cleanup(server.Stop)
+
+	firstUnitEnd := make(chan struct{})
+	observeServer := &explicitStateStreamingObserveServer{firstUnitEnd: firstUnitEnd}
+	elc.RegisterQueryServer(server, observeServer)
+	elc.RegisterMsgServer(server, observeServer)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	headerStream := make(chan *core.HeaderOrError)
+	done := make(chan error, 1)
+	pr := &Prover{
+		config:           ProverConfig{ElcClientId: "07-tendermint-11"},
+		codec:            makeExplicitStateTestCodec(),
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}
+	go func() {
+		results, err := pr.executeExplicitStateELCUpdateHeaderStream(
+			context.Background(),
+			headerStream,
+			"07-tendermint-11",
+			false,
+			[]byte("signer"),
+			"test",
+		)
+		if err != nil {
+			done <- err
+			return
+		}
+		if len(results) != 2 {
+			done <- fmt.Errorf("unexpected result count: %d", len(results))
+			return
+		}
+		done <- nil
+	}()
+
+	headerStream <- &core.HeaderOrError{Header: &tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}}}
+	select {
+	case <-firstUnitEnd:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first unit was not streamed before the second header was provided")
+	}
+	headerStream <- &core.HeaderOrError{Header: &tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 11}}}
+	close(headerStream)
+
+	if err := <-done; err != nil {
+		t.Fatalf("executeExplicitStateELCUpdateHeaderStream() error = %v", err)
 	}
 }
 
@@ -984,37 +1118,7 @@ func TestShouldLogSerialUpdateClientFallbackKeepsEOF(t *testing.T) {
 	}
 }
 
-func TestCollectExplicitStateSourceHeaderUnitsForUpdate(t *testing.T) {
-	headers := []core.Header{
-		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
-		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
-	}
-	pr := &Prover{
-		originProver: fakeOriginProver{headers: headers},
-	}
-
-	units, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(
-		context.Background(),
-		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
-		headers[len(headers)-1],
-	)
-	if err != nil {
-		t.Fatalf("collectExplicitStateSourceHeaderUnitsForUpdate() error = %v", err)
-	}
-	if len(units) != 2 {
-		t.Fatalf("unexpected source unit count: %d", len(units))
-	}
-	for i, unit := range units {
-		if unit == nil || unit.AnyHeader == nil {
-			t.Fatalf("source unit[%d] missing packed header: %#v", i, unit)
-		}
-		if unit.TrustedHeight == nil || unit.TrustedHeight.RevisionHeight != 10 {
-			t.Fatalf("unexpected source unit[%d] trusted height: %#v", i, unit.TrustedHeight)
-		}
-	}
-}
-
-func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesOverride(t *testing.T) {
+func TestCollectExplicitStateChunkSourceHeaderUnitsForUpdateUsesOverride(t *testing.T) {
 	expected := []*ExplicitStateSourceHeaderUnit{
 		{
 			AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 12),
@@ -1030,20 +1134,23 @@ func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesOverride(t *testing.T
 		},
 	}
 
-	units, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(
+	units, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(
 		context.Background(),
 		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 12}},
 	)
 	if err != nil {
-		t.Fatalf("collectExplicitStateSourceHeaderUnitsForUpdate() error = %v", err)
+		t.Fatalf("collectExplicitStateChunkSourceHeaderUnitsForUpdate() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected override to be used")
 	}
 	if len(units) != len(expected) || units[0] != expected[0] {
 		t.Fatalf("unexpected override result: %#v", units)
 	}
 }
 
-func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesChunkProvider(t *testing.T) {
+func TestCollectExplicitStateChunkSourceHeaderUnitsForUpdateUsesChunkProvider(t *testing.T) {
 	expectedBaseState := &ExplicitStateRef{
 		PrevHeight:  &clienttypes.Height{RevisionHeight: 12},
 		PrevStateId: []byte("state-12"),
@@ -1061,13 +1168,16 @@ func TestCollectExplicitStateSourceHeaderUnitsForUpdateUsesChunkProvider(t *test
 		},
 	}
 
-	units, err := pr.collectExplicitStateSourceHeaderUnitsForUpdate(
+	units, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(
 		context.Background(),
 		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 12}},
 	)
 	if err != nil {
-		t.Fatalf("collectExplicitStateSourceHeaderUnitsForUpdate() error = %v", err)
+		t.Fatalf("collectExplicitStateChunkSourceHeaderUnitsForUpdate() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected chunk provider to be used")
 	}
 	if len(units) != 1 {
 		t.Fatalf("unexpected source unit count: %d", len(units))

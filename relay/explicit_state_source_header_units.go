@@ -21,31 +21,42 @@ func collectExplicitStateSourceHeaderUnits(
 	var units []*ExplicitStateSourceHeaderUnit
 	i := 0
 	for h := range headerStream {
-		if h == nil {
-			return nil, fmt.Errorf("received nil header stream item: i=%v", i)
-		}
-		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
-		}
-		if h.Header == nil {
-			return nil, fmt.Errorf("received nil header in header stream: i=%v", i)
-		}
-		anyHeader, err := clienttypes.PackClientMessage(h.Header)
-		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
-		}
-		trustedHeight, err := trustedHeightForExplicitState(anyHeader, nil)
+		unit, err := explicitStateSourceHeaderUnitFromStreamItem(h, i)
 		if err != nil {
 			return nil, err
 		}
-		units = append(units, &ExplicitStateSourceHeaderUnit{
-			Header:        h.Header,
-			AnyHeader:     anyHeader,
-			TrustedHeight: trustedHeight,
-		})
+		units = append(units, unit)
 		i += 1
 	}
 	return units, nil
+}
+
+func explicitStateSourceHeaderUnitFromStreamItem(
+	h *core.HeaderOrError,
+	i int,
+) (*ExplicitStateSourceHeaderUnit, error) {
+	if h == nil {
+		return nil, fmt.Errorf("received nil header stream item: i=%v", i)
+	}
+	if h.Error != nil {
+		return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+	}
+	if h.Header == nil {
+		return nil, fmt.Errorf("received nil header in header stream: i=%v", i)
+	}
+	anyHeader, err := clienttypes.PackClientMessage(h.Header)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
+	}
+	trustedHeight, err := trustedHeightForExplicitState(anyHeader, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &ExplicitStateSourceHeaderUnit{
+		Header:        h.Header,
+		AnyHeader:     anyHeader,
+		TrustedHeight: trustedHeight,
+	}, nil
 }
 
 func extractAnyHeadersFromSourceUnits(

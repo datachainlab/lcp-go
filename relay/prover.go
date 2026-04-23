@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
@@ -325,14 +326,26 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 	}
 
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	results, err := pr.executeELCUpdateHeaderStream(
-		ctx,
-		headerStream,
-		pr.config.ElcClientId,
-		false,
-		signer,
-		"update_client",
-	)
+	var results []*elcupdater_storage.UpdateClientResult
+	if !disableExplicitStateUpdateClient() {
+		results, err = pr.executeExplicitStateELCUpdateHeaderStream(
+			ctx,
+			headerStream,
+			pr.config.ElcClientId,
+			false,
+			signer,
+			"update_client",
+		)
+	} else {
+		results, err = pr.executeELCUpdateHeaderStream(
+			ctx,
+			headerStream,
+			pr.config.ElcClientId,
+			false,
+			signer,
+			"update_client",
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -466,6 +479,47 @@ func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
 	return results, nil
 }
 
+func (pr *Prover) executeExplicitStateELCUpdateHeaderStream(
+	ctx context.Context,
+	headerStream <-chan *core.HeaderOrError,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	operation string,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	results, sourceHeaderUnits, err := pr.executeExplicitStateHeaderStreamWithResolver(
+		ctx,
+		headerStream,
+		elcClientID,
+		includeState,
+		signer,
+		func(ctx context.Context, elcClientID string, anyHeader *codectypes.Any) (*ExplicitStateRef, error) {
+			return pr.queryExplicitStateRef(ctx, elcClientID, anyHeader)
+		},
+	)
+	if err == nil {
+		return results, nil
+	}
+	if !shouldFallbackToSerialUpdateClient(err) {
+		return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
+	}
+	if shouldLogSerialUpdateClientFallback(err) {
+		pr.getLogger().InfoContext(
+			ctx,
+			"fall back to serial update client after explicit-state batch failure",
+			"operation", operation,
+			"client_id", elcClientID,
+			"error", err.Error(),
+		)
+	}
+	remainingUnits, collectErr := collectExplicitStateSourceHeaderUnits(headerStream)
+	if collectErr != nil {
+		return nil, collectErr
+	}
+	sourceHeaderUnits = append(sourceHeaderUnits, remainingUnits...)
+	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
+}
+
 func shouldFallbackToSerialUpdateClient(err error) bool {
 	for current := err; current != nil; current = errors.Unwrap(current) {
 		if errors.Is(current, io.EOF) || errors.Is(current, io.ErrUnexpectedEOF) {
@@ -487,21 +541,6 @@ func shouldLogSerialUpdateClientFallback(err error) bool {
 	return true
 }
 
-func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(
-	ctx context.Context,
-	dstChain core.FinalityAwareChain,
-	latestFinalizedHeader core.Header,
-) ([]*ExplicitStateSourceHeaderUnit, error) {
-	units, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return units, nil
-	}
-	return pr.collectHeaderStreamSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
-}
-
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitsForUpdate(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
@@ -521,22 +560,6 @@ func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitsForUpdate(
 		}
 	}
 	return nil, false, nil
-}
-
-func (pr *Prover) collectHeaderStreamSourceHeaderUnitsForUpdate(
-	ctx context.Context,
-	dstChain core.FinalityAwareChain,
-	latestFinalizedHeader core.Header,
-) ([]*ExplicitStateSourceHeaderUnit, error) {
-	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
-	}
-	sourceHeaderUnits, err := collectExplicitStateSourceHeaderUnits(headerStream)
-	if err != nil {
-		return nil, err
-	}
-	return sourceHeaderUnits, nil
 }
 
 func unwrapExplicitStateOriginProver(prover core.Prover) core.Prover {
