@@ -505,6 +505,9 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
 }
 
+// Only transport/capability failures fall back to serial execution.
+// Ordered-chain validation and merge errors must stay visible so we do not
+// silently mask explicit-state bugs as a successful serial update-client.
 func shouldFallbackToSerialUpdateClient(err error) bool {
 	for current := err; current != nil; current = errors.Unwrap(current) {
 		if errors.Is(current, io.EOF) || errors.Is(current, io.ErrUnexpectedEOF) {
