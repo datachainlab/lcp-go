@@ -319,21 +319,15 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 		}
 	}
 
-	sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
-		return nil, err
-	}
-	if len(sourceHeaderUnits) == 0 {
-		if pr.gauge != nil {
-			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
-		}
-		return nil, nil
+		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
 
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	results, err := pr.executeELCUpdateHeaderUnits(
+	results, err := pr.executeELCUpdateHeaderStream(
 		ctx,
-		sourceHeaderUnits,
+		headerStream,
 		pr.config.ElcClientId,
 		false,
 		signer,
@@ -365,6 +359,44 @@ func (pr *Prover) validateUpdateELCResults(ctx context.Context, latestFinalizedH
 	return results, nil
 }
 
+func (pr *Prover) executeELCUpdateHeaderStream(
+	ctx context.Context,
+	headerStream <-chan *core.HeaderOrError,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	_ string,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	var results []*elcupdater_storage.UpdateClientResult
+	i := 0
+	for h := range headerStream {
+		if h == nil {
+			return nil, fmt.Errorf("received nil header stream item: i=%v", i)
+		}
+		if h.Error != nil {
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+		}
+		if h.Header == nil {
+			return nil, fmt.Errorf("received nil header in header stream: i=%v", i)
+		}
+		anyHeader, err := clienttypes.PackClientMessage(h.Header)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
+		}
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
+		}
+		results = append(results, &elcupdater_storage.UpdateClientResult{
+			Message:   res.Message,
+			Signature: res.Signature,
+			Signer:    signer,
+		})
+		i += 1
+	}
+	return results, nil
+}
+
 func (pr *Prover) executeELCUpdateHeaderUnits(
 	ctx context.Context,
 	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
@@ -377,23 +409,19 @@ func (pr *Prover) executeELCUpdateHeaderUnits(
 	if err != nil {
 		return nil, err
 	}
-	if len(anyHeaders) == 0 {
-		return nil, nil
-	}
-
-	serialResults := make([]*elcupdater_storage.UpdateClientResult, 0, len(anyHeaders))
+	var results []*elcupdater_storage.UpdateClientResult
 	for _, anyHeader := range anyHeaders {
 		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 		}
-		serialResults = append(serialResults, &elcupdater_storage.UpdateClientResult{
+		results = append(results, &elcupdater_storage.UpdateClientResult{
 			Message:   res.Message,
 			Signature: res.Signature,
 			Signer:    signer,
 		})
 	}
-	return serialResults, nil
+	return results, nil
 }
 
 func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
@@ -480,7 +508,7 @@ func (pr *Prover) collectExplicitStateSourceHeaderUnitsForUpdate(
 	if ok {
 		return units, nil
 	}
-	return pr.collectSerialSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
+	return pr.collectHeaderStreamSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
 }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitsForUpdate(
@@ -504,7 +532,7 @@ func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitsForUpdate(
 	return nil, false, nil
 }
 
-func (pr *Prover) collectSerialSourceHeaderUnitsForUpdate(
+func (pr *Prover) collectHeaderStreamSourceHeaderUnitsForUpdate(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,

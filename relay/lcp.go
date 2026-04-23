@@ -425,18 +425,14 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	}
 
 	// 2. query the header from the upstream chain.
-	sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(
-		ctx,
-		sourceChain,
-		latestHeader,
-	)
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, sourceChain, latestHeader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestHeader, err)
 	}
 
-	results, err := pr.executeELCUpdateHeaderUnits(
+	results, err := pr.executeELCUpdateHeaderStream(
 		ctx,
-		sourceHeaderUnits,
+		headerStream,
 		elcClientID,
 		includeState,
 		signer,
