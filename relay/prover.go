@@ -34,10 +34,9 @@ import (
 )
 
 type Prover struct {
-	config                ProverConfig
-	originChain           core.Chain
-	originProver          core.Prover
-	sourceHeaderCollector ExplicitStateSourceHeaderCollector
+	config       ProverConfig
+	originChain  core.Chain
+	originProver core.Prover
 
 	homePath         string
 	codec            codec.ProtoCodecMarshaler
@@ -58,8 +57,6 @@ type Prover struct {
 
 	gauge *Int64Gauge
 }
-
-type ExplicitStateSourceHeaderCollector func(context.Context, core.FinalityAwareChain, core.Header) ([]*ExplicitStateSourceHeaderUnit, error)
 
 type ExplicitStateChunkProvider interface {
 	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
@@ -534,10 +531,6 @@ func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
 ) (<-chan *ExplicitStateSourceHeaderUnitOrError, bool, error) {
-	if pr.sourceHeaderCollector != nil {
-		units, err := pr.sourceHeaderCollector(ctx, dstChain, latestFinalizedHeader)
-		return makeExplicitStateSourceHeaderUnitStream(units), true, err
-	}
 	if provider, ok := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider); ok {
 		unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader)
 		if err != nil {

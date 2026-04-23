@@ -1104,42 +1104,6 @@ func TestShouldLogSerialUpdateClientFallbackKeepsEOF(t *testing.T) {
 	}
 }
 
-func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesOverride(t *testing.T) {
-	expected := []*ExplicitStateSourceHeaderUnit{
-		{
-			AnyHeader:     mustPackTMHeaderForExplicitStateTest(t, 12),
-			TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
-		},
-	}
-	pr := &Prover{
-		sourceHeaderCollector: func(_ context.Context, _ core.FinalityAwareChain, latest core.Header) ([]*ExplicitStateSourceHeaderUnit, error) {
-			if latest == nil {
-				t.Fatal("latest header must not be nil")
-			}
-			return expected, nil
-		},
-	}
-
-	unitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
-		context.Background(),
-		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
-		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 12}},
-	)
-	if err != nil {
-		t.Fatalf("collectExplicitStateChunkSourceHeaderUnitStreamForUpdate() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("expected override to be used")
-	}
-	units, err := drainExplicitStateSourceHeaderUnitStream(unitStream)
-	if err != nil {
-		t.Fatalf("drainExplicitStateSourceHeaderUnitStream() error = %v", err)
-	}
-	if len(units) != len(expected) || units[0] != expected[0] {
-		t.Fatalf("unexpected override result: %#v", units)
-	}
-}
-
 func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvider(t *testing.T) {
 	expectedBaseState := &ExplicitStateRef{
 		PrevHeight:  &clienttypes.Height{RevisionHeight: 12},
