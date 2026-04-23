@@ -297,16 +297,14 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	var results []*elcupdater_storage.UpdateClientResult
-
 	if useExplicitStateUpdateClient() {
 		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, dstChain, latestFinalizedHeader)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			results, err = pr.executeExplicitStateELCUpdateHeaderUnits(
+			signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+			results, err := pr.executeExplicitStateELCUpdateHeaderUnits(
 				ctx,
 				sourceHeaderUnits,
 				pr.config.ElcClientId,
@@ -317,7 +315,7 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 			if err != nil {
 				return nil, err
 			}
-			return pr.finalizeUpdateELCResults(ctx, latestFinalizedHeader, results)
+			return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 		}
 	}
 
@@ -325,20 +323,29 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 	if err != nil {
 		return nil, err
 	}
-	results, err = pr.executeSerialELCUpdateHeaderUnits(
+	if len(sourceHeaderUnits) == 0 {
+		if pr.gauge != nil {
+			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
+		}
+		return nil, nil
+	}
+
+	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+	results, err := pr.executeELCUpdateHeaderUnits(
 		ctx,
 		sourceHeaderUnits,
 		pr.config.ElcClientId,
 		false,
 		signer,
+		"update_client",
 	)
 	if err != nil {
 		return nil, err
 	}
-	return pr.finalizeUpdateELCResults(ctx, latestFinalizedHeader, results)
+	return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 }
 
-func (pr *Prover) finalizeUpdateELCResults(ctx context.Context, latestFinalizedHeader core.Header, results []*elcupdater_storage.UpdateClientResult) ([]*elcupdater_storage.UpdateClientResult, error) {
+func (pr *Prover) validateUpdateELCResults(ctx context.Context, latestFinalizedHeader core.Header, results []*elcupdater_storage.UpdateClientResult) ([]*elcupdater_storage.UpdateClientResult, error) {
 	if len(results) == 0 {
 		if pr.gauge != nil {
 			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
@@ -358,12 +365,13 @@ func (pr *Prover) finalizeUpdateELCResults(ctx context.Context, latestFinalizedH
 	return results, nil
 }
 
-func (pr *Prover) executeSerialELCUpdateHeaderUnits(
+func (pr *Prover) executeELCUpdateHeaderUnits(
 	ctx context.Context,
 	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
+	_ string,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	anyHeaders, err := extractAnyHeadersFromSourceUnits(sourceHeaderUnits)
 	if err != nil {
@@ -434,7 +442,7 @@ func (pr *Prover) executeExplicitStateELCUpdateHeaderUnits(
 				"error", err.Error(),
 			)
 		}
-		return pr.executeSerialELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer)
+		return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
 	}
 	return results, nil
 }

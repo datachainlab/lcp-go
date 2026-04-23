@@ -25,7 +25,6 @@ import (
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
-	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
@@ -397,17 +396,13 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	var results []*elcupdater_storage.UpdateClientResult
-	handledByExplicitState := false
-
 	if useExplicitStateUpdateClient() {
 		sourceHeaderUnits, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitsForUpdate(ctx, sourceChain, latestHeader)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			handledByExplicitState = true
-			results, err = pr.executeExplicitStateELCUpdateHeaderUnits(
+			results, err := pr.executeExplicitStateELCUpdateHeaderUnits(
 				ctx,
 				sourceHeaderUnits,
 				elcClientID,
@@ -418,21 +413,35 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 			if err != nil {
 				return nil, err
 			}
+			responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
+			for _, result := range results {
+				responses = append(responses, &elc.MsgUpdateClientResponse{
+					Message:   result.Message,
+					Signature: result.Signature,
+				})
+			}
+			return responses, nil
 		}
 	}
-	if !handledByExplicitState {
-		sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(ctx, sourceChain, latestHeader)
-		if err != nil {
-			return nil, err
-		}
-		results, err = pr.executeSerialELCUpdateHeaderUnits(
-			ctx,
-			sourceHeaderUnits,
-			elcClientID,
-			includeState,
-			signer,
-		)
+
+	// 2. query the header from the upstream chain.
+	sourceHeaderUnits, err := pr.collectSerialSourceHeaderUnitsForUpdate(
+		ctx,
+		sourceChain,
+		latestHeader,
+	)
+	if err != nil {
+		return nil, err
 	}
+
+	results, err := pr.executeELCUpdateHeaderUnits(
+		ctx,
+		sourceHeaderUnits,
+		elcClientID,
+		includeState,
+		signer,
+		"enclave_key_update",
+	)
 	if err != nil {
 		return nil, err
 	}
