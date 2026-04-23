@@ -130,6 +130,55 @@ func (s explicitStateSourceUnitStreamingObserveServer) SpeculativeUpdateClientBa
 	}
 }
 
+type explicitStateSplitBoundaryServer struct {
+	elc.UnimplementedQueryServer
+	elc.UnimplementedMsgServer
+	batchCalls      int
+	batchUnitCounts []int
+	updateCalls     int
+}
+
+func (s *explicitStateSplitBoundaryServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	req, err := recvSpeculativeBatchStreamRequest(stream)
+	if err != nil {
+		return err
+	}
+	s.batchCalls++
+	s.batchUnitCounts = append(s.batchUnitCounts, len(req.Units))
+	units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, len(req.Units))
+	for i := range req.Units {
+		units = append(units, &elc.StitchedSpeculativeUpdateClientUnitResult{
+			Response: elc.MsgUpdateClientResponse{
+				Message:   mustMakeExplicitStateTestHeaderedUpdateStateMessage(uint64(11+i), byte(i)),
+				Signature: []byte(fmt.Sprintf("batch-sig-%d", i)),
+			},
+		})
+	}
+	return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
+		ClientId: req.ClientId,
+		Units:    units,
+	})
+}
+
+func (s *explicitStateSplitBoundaryServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			s.updateCalls++
+			return stream.SendAndClose(&elc.MsgUpdateClientResponse{
+				Message:   mustMakeExplicitStateTestHeaderedUpdateStateMessage(uint64(20+s.updateCalls), byte(10+s.updateCalls)),
+				Signature: []byte(fmt.Sprintf("serial-sig-%d", s.updateCalls)),
+			})
+		}
+		if err != nil {
+			return err
+		}
+		if chunk == nil {
+			return fmt.Errorf("received nil update client stream chunk")
+		}
+	}
+}
+
 type explicitStateIntegrationTestServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
@@ -404,6 +453,27 @@ func mustExplicitStateSourceUnitsFromHeaders(t *testing.T, headers ...core.Heade
 	return units
 }
 
+func mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t *testing.T, headers ...core.Header) []*ExplicitStateSourceHeaderUnit {
+	t.Helper()
+	units := mustExplicitStateSourceUnitsFromHeaders(t, headers...)
+	for i, unit := range units {
+		if unit == nil {
+			t.Fatalf("source unit[%d] is nil", i)
+		}
+		var prevHeight *clienttypes.Height
+		if unit.TrustedHeight != nil {
+			h := *unit.TrustedHeight
+			prevHeight = &h
+		}
+		unit.BaseState = &ExplicitStateRef{
+			PrevHeight:     prevHeight,
+			ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte(fmt.Sprintf("client-%d", i))},
+			ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", i), Value: []byte(fmt.Sprintf("consensus-%d", i))},
+		}
+	}
+	return units
+}
+
 func (p fakeOriginProver) CheckRefreshRequired(context.Context, core.ChainInfoICS02Querier) (bool, error) {
 	return false, nil
 }
@@ -518,6 +588,89 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	}
 }
 
+func TestExecuteExplicitStateSourceHeaderUnitStreamFallsBackToSerialAtNilBaseStateBoundary(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	listener := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	t.Cleanup(server.Stop)
+
+	svc := &explicitStateSplitBoundaryServer{}
+	elc.RegisterQueryServer(server, svc)
+	elc.RegisterMsgServer(server, svc)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError, 3)
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
+		TrustedHeight: &clienttypes.Height{RevisionHeight: 10},
+		BaseState: &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
+			ClientState:    &codectypes.Any{TypeUrl: "client/10", Value: []byte("client-10")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/10", Value: []byte("consensus-10")},
+		},
+	}}
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
+		TrustedHeight: &clienttypes.Height{RevisionHeight: 11},
+		BaseState:     nil,
+	}}
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader:     makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 2).Header,
+		TrustedHeight: &clienttypes.Height{RevisionHeight: 12},
+		BaseState: &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 12},
+			ClientState:    &codectypes.Any{TypeUrl: "client/12", Value: []byte("client-12")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/12", Value: []byte("consensus-12")},
+		},
+	}}
+	close(unitStream)
+
+	pr := &Prover{
+		config:           ProverConfig{ElcClientId: "07-tendermint-11"},
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}
+	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+		context.Background(),
+		unitStream,
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		"test",
+	)
+	if err != nil {
+		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("unexpected result count: %d", len(results))
+	}
+	if svc.batchCalls != 1 {
+		t.Fatalf("expected one speculative batch before boundary, got %d", svc.batchCalls)
+	}
+	if len(svc.batchUnitCounts) != 1 || svc.batchUnitCounts[0] != 1 {
+		t.Fatalf("unexpected speculative batch unit counts: %#v", svc.batchUnitCounts)
+	}
+	if svc.updateCalls != 2 {
+		t.Fatalf("expected two serial update-client calls after boundary, got %d", svc.updateCalls)
+	}
+}
+
 func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
@@ -562,7 +715,7 @@ func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
-			explicitStateChunks: mustExplicitStateSourceUnitsFromHeaders(t, headers...),
+			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{
@@ -891,7 +1044,7 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleUnitBatch(t *testing.T) 
 		codec:  coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
-			explicitStateChunks: mustExplicitStateSourceUnitsFromHeaders(t, headers...),
+			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 		activeEnclaveKey: &enclave.EnclaveKeyInfo{

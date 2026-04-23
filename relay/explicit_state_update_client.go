@@ -261,7 +261,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	elcClientID string,
 	includeState bool,
 	signer []byte,
-	resolveBaseState func(context.Context, string, *codectypes.Any) (*ExplicitStateRef, error),
 ) ([]*elcupdater_storage.UpdateClientResult, []*ExplicitStateSourceHeaderUnit, error) {
 	var results []*elcupdater_storage.UpdateClientResult
 	var sourceHeaderUnits []*ExplicitStateSourceHeaderUnit
@@ -336,6 +335,19 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if err != nil {
 			return nil, sourceHeaderUnits, err
 		}
+		if sourceUnit.BaseState == nil {
+			if err := flushBatch(); err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+			pendingUnits, err := collectCurrentAndRemainingExplicitStateSourceHeaderUnits(sourceUnit, unitStream, unitIndex)
+			if err != nil {
+				return nil, sourceHeaderUnits, err
+			}
+			return results, sourceHeaderUnits, &explicitStateSerialRestartError{
+				pendingUnits: pendingUnits,
+				reason:       fmt.Sprintf("explicit-state source unit %d missing base state; restart from this boundary", unitIndex),
+			}
+		}
 		sourceHeaderUnits = append(sourceHeaderUnits, sourceUnit)
 		unitHeader := &ExplicitStateHeaderUnit{
 			Header:        sourceUnit.AnyHeader,
@@ -347,21 +359,9 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		}
 
 		var baseState *ExplicitStateRef
-		if unitHeader.BaseState != nil {
-			baseState = cloneExplicitStateRef(unitHeader.BaseState)
-			if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
-				return nil, sourceHeaderUnits, err
-			}
-		} else if unitIndex == 0 {
-			baseState, err = resolveBaseState(ctx, elcClientID, unitHeader.Header)
-			if err != nil {
-				return nil, sourceHeaderUnits, err
-			}
-		} else {
-			baseState, err = buildDeferredExplicitStateRef(unitHeader.Header, pr.codec)
-			if err != nil {
-				return nil, sourceHeaderUnits, err
-			}
+		baseState = cloneExplicitStateRef(unitHeader.BaseState)
+		if err := validateExplicitStateBaseStateHeight(unitHeader, baseState); err != nil {
+			return nil, sourceHeaderUnits, err
 		}
 
 		unitID := buildSpeculativeUnitID(unitIndex)

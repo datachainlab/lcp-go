@@ -47,6 +47,23 @@ func drainExplicitStateSourceHeaderUnitStream(
 	return units, nil
 }
 
+func collectCurrentAndRemainingExplicitStateSourceHeaderUnits(
+	current *ExplicitStateSourceHeaderUnit,
+	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+	startIndex int,
+) ([]*ExplicitStateSourceHeaderUnit, error) {
+	if current == nil {
+		return nil, fmt.Errorf("explicit-state source header unit must not be nil: i=%v", startIndex)
+	}
+	units := []*ExplicitStateSourceHeaderUnit{current}
+	remaining, err := drainExplicitStateSourceHeaderUnitStream(unitStream)
+	if err != nil {
+		return nil, err
+	}
+	units = append(units, remaining...)
+	return units, nil
+}
+
 func collectExplicitStateSourceHeaderUnits(
 	headerStream <-chan *core.HeaderOrError,
 ) ([]*ExplicitStateSourceHeaderUnit, error) {

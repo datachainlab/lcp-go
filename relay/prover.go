@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
@@ -478,12 +477,31 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 		elcClientID,
 		includeState,
 		signer,
-		func(ctx context.Context, elcClientID string, anyHeader *codectypes.Any) (*ExplicitStateRef, error) {
-			return pr.queryExplicitStateRef(ctx, elcClientID, anyHeader)
-		},
 	)
 	if err == nil {
 		return results, nil
+	}
+	var restartErr *explicitStateSerialRestartError
+	if errors.As(err, &restartErr) {
+		pr.getLogger().InfoContext(
+			ctx,
+			"fall back to serial update client at explicit-state boundary",
+			"operation", operation,
+			"client_id", elcClientID,
+			"reason", restartErr.reason,
+		)
+		serialResults, serialErr := pr.executeELCUpdateHeaderUnits(
+			ctx,
+			restartErr.pendingUnits,
+			elcClientID,
+			includeState,
+			signer,
+			operation,
+		)
+		if serialErr != nil {
+			return nil, serialErr
+		}
+		return append(results, serialResults...), nil
 	}
 	if !shouldFallbackToSerialUpdateClient(err) {
 		return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
@@ -503,6 +521,18 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	}
 	sourceHeaderUnits = append(sourceHeaderUnits, remainingUnits...)
 	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer, operation)
+}
+
+type explicitStateSerialRestartError struct {
+	pendingUnits []*ExplicitStateSourceHeaderUnit
+	reason       string
+}
+
+func (e *explicitStateSerialRestartError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.reason
 }
 
 const (
