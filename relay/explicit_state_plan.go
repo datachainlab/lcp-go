@@ -221,7 +221,7 @@ func (pr *Prover) executeExplicitStateUpdatePlan(
 			return nil, fmt.Errorf("unexpected speculative batch response shape: units=%d plan=%d", len(resp.Units), len(batch.Units))
 		}
 		for i, unit := range resp.Units {
-			if unit == nil || unit.Response == nil {
+			if unit == nil {
 				return nil, fmt.Errorf("unexpected speculative batch response unit at index %d", i)
 			}
 			logExplicitStateUnitObservedTransition(ctx, pr, batch, unit, i, batchIndex, len(batches))
@@ -282,7 +282,7 @@ func logExplicitStateUnitObservedTransition(
 	if plannedUnit == nil {
 		return
 	}
-	transition := unitResult.ObservedTransition
+	transition := &unitResult.ObservedTransition
 	var nextUnit *ExplicitStatePlannedUnit
 	if unitIndex+1 < len(batch.Units) {
 		nextUnit = batch.Units[unitIndex+1]
@@ -361,7 +361,7 @@ func observedPostHeight(transition *ObservedStateTransition) *clienttypes.Height
 	if transition == nil {
 		return nil
 	}
-	return transition.PostHeight
+	return &transition.PostHeight
 }
 
 func observedPrevStateID(transition *ObservedStateTransition) []byte {
@@ -382,7 +382,7 @@ func observedPostMatchesNextInput(transition *ObservedStateTransition, nextUnit 
 	if transition == nil || nextUnit == nil || nextUnit.BaseState == nil {
 		return false
 	}
-	return heightsEqual(transition.PostHeight, nextUnit.BaseState.PrevHeight) &&
+	return heightsEqual(&transition.PostHeight, nextUnit.BaseState.PrevHeight) &&
 		bytes.Equal(transition.PostStateId, nextUnit.BaseState.PrevStateId)
 }
 

@@ -390,7 +390,7 @@ func (pr *Prover) executeExplicitStateHeaderLanesStreamWithResolver(
 			return fmt.Errorf("unexpected speculative batch response shape: units=%d plan=%d", len(resp.Units), len(batchSigners))
 		}
 		for i, unit := range resp.Units {
-			if unit == nil || unit.Response == nil {
+			if unit == nil {
 				return fmt.Errorf("unexpected speculative batch response unit at index %d", i)
 			}
 			results = append(results, &elcupdater_storage.UpdateClientResult{
