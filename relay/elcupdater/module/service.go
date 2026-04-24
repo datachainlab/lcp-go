@@ -21,6 +21,8 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
 
@@ -203,6 +205,13 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 
 	// Register ELCUpdater service
 	elcupdater_grpc.RegisterServiceServer(grpcServer, grpcService)
+
+	// Register standard grpc.health.v1 liveness service. The overall ("")
+	// status reports SERVING for as long as this gRPC server is accepting
+	// requests.
+	healthSrv := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthSrv)
+
 	// Create listener
 	lis, err := net.Listen("tcp", srv.GRPCAddr)
 	if err != nil {
@@ -222,6 +231,7 @@ func (srv *Service) runGRPCServer(ctx context.Context) error {
 	<-ctx.Done()
 
 	logger.InfoContext(ctx, "Stopping ELCUpdater gRPC server")
+	healthSrv.Shutdown()
 	grpcServer.GracefulStop()
 
 	return nil
