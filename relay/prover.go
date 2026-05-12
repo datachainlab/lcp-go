@@ -3,8 +3,10 @@ package relay
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -18,12 +20,15 @@ import (
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/hyperledger-labs/yui-relayer/core"
 	"github.com/hyperledger-labs/yui-relayer/log"
+	yuiotelcore "github.com/hyperledger-labs/yui-relayer/otelcore"
 	"github.com/hyperledger-labs/yui-relayer/signer"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 type Prover struct {
@@ -50,8 +55,17 @@ type Prover struct {
 	gauge *Int64Gauge
 }
 
+type ExplicitStateChunkProvider interface {
+	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
+}
+
 var (
 	_ core.Prover = (*Prover)(nil)
+)
+
+const (
+	explicitStateFallbackOperationUpdateClient     = "update_client"
+	explicitStateFallbackOperationEnclaveKeyUpdate = "enclave_key_update"
 )
 
 func NewProver(config ProverConfig, originChain core.Chain, originProver core.Prover) (*Prover, error) {
@@ -283,28 +297,120 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
+	if pr.shouldUseExplicitStateUpdateClient() {
+		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(ctx, dstChain, latestFinalizedHeader)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+			results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+				ctx,
+				sourceHeaderUnitStream,
+				pr.config.ElcClientId,
+				false,
+				signer,
+				explicitStateFallbackOperationUpdateClient,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
+		}
+	}
+
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestFinalizedHeader, err)
 	}
-	var results []*elcupdater_storage.UpdateClientResult
 
+	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+	results, err := pr.executeELCUpdateHeaderStream(
+		ctx,
+		headerStream,
+		pr.config.ElcClientId,
+		false,
+		signer,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
+}
+
+func (pr *Prover) validateUpdateELCResults(ctx context.Context, latestFinalizedHeader core.Header, results []*elcupdater_storage.UpdateClientResult) ([]*elcupdater_storage.UpdateClientResult, error) {
+	if len(results) == 0 {
+		if pr.gauge != nil {
+			pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
+		}
+		return nil, nil
+	}
+
+	for _, result := range results {
+		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(result.Message); err != nil {
+			return nil, fmt.Errorf("failed to decode headered proxy message: message=%x %w", result.Message, err)
+		}
+	}
+
+	if pr.gauge != nil {
+		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
+	}
+	return results, nil
+}
+
+func (pr *Prover) executeELCUpdateHeaderStream(
+	ctx context.Context,
+	headerStream <-chan *core.HeaderOrError,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	var results []*elcupdater_storage.UpdateClientResult
+	i := 0
 	for h := range headerStream {
+		if h == nil {
+			return nil, fmt.Errorf("received nil header stream item: i=%v", i)
+		}
 		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: %w", h.Error)
+			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
+		}
+		if h.Header == nil {
+			return nil, fmt.Errorf("received nil header in header stream: i=%v", i)
 		}
 		anyHeader, err := clienttypes.PackClientMessage(h.Header)
 		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: header=%v %w", h.Header, err)
+			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
 		}
-		signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, pr.config.ElcClientId, false, signer)
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
 		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", pr.config.ElcClientId, err)
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 		}
-		// ensure the message is valid
-		if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(res.Message); err != nil {
-			return nil, fmt.Errorf("failed to decode headered proxy message: message=%x %w", res.Message, err)
+		results = append(results, &elcupdater_storage.UpdateClientResult{
+			Message:   res.Message,
+			Signature: res.Signature,
+			Signer:    signer,
+		})
+		i += 1
+	}
+	return results, nil
+}
+
+func (pr *Prover) executeELCUpdateHeaderUnits(
+	ctx context.Context,
+	sourceHeaderUnits []*ExplicitStateSourceHeaderUnit,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	anyHeaders, err := extractAnyHeadersFromSourceUnits(sourceHeaderUnits)
+	if err != nil {
+		return nil, err
+	}
+	var results []*elcupdater_storage.UpdateClientResult
+	for _, anyHeader := range anyHeaders {
+		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, signer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 		}
 		results = append(results, &elcupdater_storage.UpdateClientResult{
 			Message:   res.Message,
@@ -312,11 +418,125 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 			Signer:    signer,
 		})
 	}
-
-	if pr.gauge != nil {
-		pr.gauge.Set(ctx, int64(latestFinalizedHeader.GetHeight().GetRevisionHeight()))
-	}
 	return results, nil
+}
+
+func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
+	ctx context.Context,
+	sourceHeaderUnitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	operation string,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	results, sourceHeaderUnits, err := pr.executeExplicitStateSourceHeaderUnitStreamWithResolver(
+		ctx,
+		sourceHeaderUnitStream,
+		elcClientID,
+		includeState,
+		signer,
+	)
+	if err == nil {
+		return results, nil
+	}
+	if !shouldFallbackToSerialUpdateClient(err) {
+		return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
+	}
+	if shouldLogSerialUpdateClientFallback(err) {
+		pr.getLogger().InfoContext(
+			ctx,
+			"fall back to serial update client after explicit-state batch failure",
+			"operation", operation,
+			"client_id", elcClientID,
+			"error", err.Error(),
+		)
+	}
+	remainingUnits, collectErr := drainExplicitStateSourceHeaderUnitStream(sourceHeaderUnitStream)
+	if collectErr != nil {
+		return nil, collectErr
+	}
+	sourceHeaderUnits = append(sourceHeaderUnits, remainingUnits...)
+	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer)
+}
+
+const (
+	speculativeBatchFailureKindBaseStateMismatch       = "BaseStateMismatch"
+	speculativeBatchFailureKindDependencyStateMismatch = "DependencyStateMismatch"
+)
+
+// Serial fallback is allowed only for capability failures and explicit-state
+// prediction mismatches that indicate this ELC cannot provide a stable ordered
+// chain base state for the current attempt. Ordered-chain merge/write-set
+// failures must stay visible so we do not silently mask explicit-state bugs as
+// a successful serial update-client.
+func shouldFallbackToSerialUpdateClient(err error) bool {
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if grpcstatus.Code(current) == codes.Unimplemented {
+			return true
+		}
+		if kind, ok := speculativeBatchFailureKindFromError(current); ok {
+			switch kind {
+			case speculativeBatchFailureKindBaseStateMismatch, speculativeBatchFailureKindDependencyStateMismatch:
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func shouldLogSerialUpdateClientFallback(err error) bool {
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if grpcstatus.Code(current) == codes.Unimplemented {
+			return false
+		}
+	}
+	return true
+}
+
+func speculativeBatchFailureKindFromError(err error) (string, bool) {
+	statusErr, ok := grpcstatus.FromError(err)
+	if !ok || statusErr.Code() != codes.Aborted {
+		return "", false
+	}
+	message := statusErr.Message()
+	for _, kind := range []string{
+		speculativeBatchFailureKindBaseStateMismatch,
+		speculativeBatchFailureKindDependencyStateMismatch,
+	} {
+		if strings.HasPrefix(message, kind+": ") {
+			return kind, true
+		}
+	}
+	return "", false
+}
+
+func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+) (<-chan *ExplicitStateSourceHeaderUnitOrError, bool, error) {
+	if provider, ok := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider); ok {
+		unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader)
+		if err != nil {
+			return nil, true, err
+		}
+		if unitStream == nil {
+			return nil, true, fmt.Errorf("explicit-state chunk provider returned nil source header unit stream")
+		}
+		return unitStream, true, nil
+	}
+	return nil, false, nil
+}
+
+func unwrapExplicitStateOriginProver(prover core.Prover) core.Prover {
+	for {
+		switch p := prover.(type) {
+		case *yuiotelcore.Prover:
+			prover = p.Prover
+		default:
+			return prover
+		}
+	}
 }
 
 func splitMessagesBySigner(messages [][]byte, signatures [][]byte, signers [][]byte) ([]*elc.MsgAggregateMessages, error) {
