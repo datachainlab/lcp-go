@@ -54,6 +54,12 @@ message ProverConfig {
     // if empty (default), local implementation will be used
     // if specified, SetupHeadersForUpdate will use this gRPC server instead
     string elc_updater_grpc_address = 34;
+
+    // Max speculative UpdateClient units per request.
+    uint32 max_speculative_batch_units_per_request = 35;
+
+    // Disable the explicit-state UpdateClient path for this prover.
+    bool disable_explicit_state_update_client = 36;
 }
 
 message Fraction {

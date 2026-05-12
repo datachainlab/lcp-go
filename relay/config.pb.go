@@ -70,6 +70,10 @@ type ProverConfig struct {
 	// if empty (default), local implementation will be used
 	// if specified, SetupHeadersForUpdate will use this gRPC server instead
 	ElcUpdaterGrpcAddress string `protobuf:"bytes,34,opt,name=elc_updater_grpc_address,json=elcUpdaterGrpcAddress,proto3" json:"elc_updater_grpc_address,omitempty"`
+	// Max speculative UpdateClient units per request.
+	MaxSpeculativeBatchUnitsPerRequest uint32 `protobuf:"varint,35,opt,name=max_speculative_batch_units_per_request,json=maxSpeculativeBatchUnitsPerRequest,proto3" json:"max_speculative_batch_units_per_request,omitempty"`
+	// Disable the explicit-state UpdateClient path for this prover.
+	DisableExplicitStateUpdateClient bool `protobuf:"varint,36,opt,name=disable_explicit_state_update_client,json=disableExplicitStateUpdateClient,proto3" json:"disable_explicit_state_update_client,omitempty"`
 }
 
 func (m *ProverConfig) Reset()         { *m = ProverConfig{} }
@@ -433,6 +437,25 @@ func (m *ProverConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2
 		i--
 		dAtA[i] = 0x92
+	}
+	if m.MaxSpeculativeBatchUnitsPerRequest != 0 {
+		i = encodeVarintConfig(dAtA, i, uint64(m.MaxSpeculativeBatchUnitsPerRequest))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0x98
+	}
+	if m.DisableExplicitStateUpdateClient {
+		i--
+		if m.DisableExplicitStateUpdateClient {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xa0
 	}
 	if m.MaxChunkSizeForUpdateClient != 0 {
 		i = encodeVarintConfig(dAtA, i, uint64(m.MaxChunkSizeForUpdateClient))
@@ -905,6 +928,12 @@ func (m *ProverConfig) Size() (n int) {
 	l = len(m.ElcUpdaterGrpcAddress)
 	if l > 0 {
 		n += 2 + l + sovConfig(uint64(l))
+	}
+	if m.MaxSpeculativeBatchUnitsPerRequest != 0 {
+		n += 2 + sovConfig(uint64(m.MaxSpeculativeBatchUnitsPerRequest))
+	}
+	if m.DisableExplicitStateUpdateClient {
+		n += 3
 	}
 	return n
 }
@@ -1651,6 +1680,45 @@ func (m *ProverConfig) Unmarshal(dAtA []byte) error {
 			}
 			m.ElcUpdaterGrpcAddress = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+		case 35:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxSpeculativeBatchUnitsPerRequest", wireType)
+			}
+			m.MaxSpeculativeBatchUnitsPerRequest = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MaxSpeculativeBatchUnitsPerRequest |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 36:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DisableExplicitStateUpdateClient", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowConfig
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.DisableExplicitStateUpdateClient = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipConfig(dAtA[iNdEx:])
