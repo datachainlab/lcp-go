@@ -2,7 +2,6 @@ package relay
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/datachainlab/lcp-go/relay/elc"
@@ -28,7 +27,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	signer []byte,
 ) ([]*elcupdater_storage.UpdateClientResult, []*ExplicitStateSourceHeaderUnit, error) {
 	var results []*elcupdater_storage.UpdateClientResult
-	var sourceHeaderUnits []*ExplicitStateSourceHeaderUnit
+	var fallbackUnits []*ExplicitStateSourceHeaderUnit
 
 	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
 	var sender *speculativeBatchStreamSender
@@ -98,12 +97,12 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	for item := range unitStream {
 		sourceUnit, err := explicitStateSourceHeaderUnitFromStreamItemOrError(item, unitIndex)
 		if err != nil {
-			return nil, sourceHeaderUnits, err
+			return nil, fallbackUnits, err
 		}
 		if sourceUnit.BaseState == nil {
-			sourceHeaderUnits = append(sourceHeaderUnits, sourceUnit)
+			fallbackUnits = append(fallbackUnits, sourceUnit)
 			if err := flushBatch(); err != nil {
-				return nil, sourceHeaderUnits, err
+				return results, fallbackUnits, err
 			}
 			serialResults, err := pr.executeELCUpdateHeaderUnits(
 				ctx,
@@ -113,19 +112,14 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 				signer,
 			)
 			if err != nil {
-				return nil, sourceHeaderUnits, err
+				return results, fallbackUnits, err
 			}
 			results = append(results, serialResults...)
+			fallbackUnits = fallbackUnits[:0]
 			unitIndex++
 			continue
 		}
-		sourceHeaderUnits = append(sourceHeaderUnits, sourceUnit)
-		if sourceUnit.AnyHeader == nil {
-			return nil, sourceHeaderUnits, fmt.Errorf("explicit-state source header unit[%d] missing packed header", unitIndex)
-		}
-		if sourceUnit.BaseState == nil {
-			return nil, sourceHeaderUnits, fmt.Errorf("explicit-state source header unit[%d] missing base state", unitIndex)
-		}
+		fallbackUnits = append(fallbackUnits, sourceUnit)
 		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
 		unitID := buildSpeculativeUnitID(unitIndex)
@@ -136,14 +130,14 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			Signer:       signer,
 		}
 		if sender == nil && unitIndex > 0 && !hasCanonicalExplicitStatePayload(baseState) {
-			return nil, sourceHeaderUnits, fmt.Errorf(
+			return results, fallbackUnits, fmt.Errorf(
 				"cannot split explicit-state batch at unit %s: missing base state payload",
 				unitID,
 			)
 		}
 
 		if err := openBatch(); err != nil {
-			return nil, sourceHeaderUnits, err
+			return results, fallbackUnits, err
 		}
 		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
 		if err := sender.Send(&SpeculativeUpdateClientUnit{
@@ -152,21 +146,23 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			BaseState: baseState,
 		}); err != nil {
 			err, _ = sender.enrichSendError(err)
-			return nil, sourceHeaderUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
+			return results, fallbackUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
 		}
 		batchSigners = append(batchSigners, update.Signer)
 		unitIndex++
 
 		if len(batchSigners) == maxUnits {
 			if err := flushBatch(); err != nil {
-				return nil, sourceHeaderUnits, err
+				return results, fallbackUnits, err
 			}
+			fallbackUnits = fallbackUnits[:0]
 		}
 	}
 	if err := flushBatch(); err != nil {
-		return nil, sourceHeaderUnits, err
+		return results, fallbackUnits, err
 	}
-	return results, sourceHeaderUnits, nil
+	fallbackUnits = fallbackUnits[:0]
+	return results, fallbackUnits, nil
 }
 
 func logExplicitStateUnitSend(
@@ -181,11 +177,8 @@ func logExplicitStateUnitSend(
 	update *elc.MsgUpdateClient,
 ) {
 	headerBytes := 0
-	headerSHA256 := ""
 	if update != nil && update.Header != nil {
 		headerBytes = len(update.Header.Value)
-		headerHash := sha256.Sum256(update.Header.Value)
-		headerSHA256 = fmt.Sprintf("%x", headerHash)
 	}
 	pr.getLogger().InfoContext(
 		ctx,
@@ -197,6 +190,5 @@ func logExplicitStateUnitSend(
 		"unit_index", unitIndex,
 		"include_state", includeState,
 		"header_bytes", headerBytes,
-		"header_sha256", headerSHA256,
 	)
 }

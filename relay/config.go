@@ -22,7 +22,8 @@ const (
 	// It is necessary to subtract from 4 MB to account for metadata size.
 	DefaultMaxChunkSize                = 4*1024*1024 - 1024
 	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
-	DefaultMaxSpeculativeBatchUnits    = 256
+	MaxSpeculativeBatchUnitsLimit      = 256
+	DefaultMaxSpeculativeBatchUnits    = MaxSpeculativeBatchUnitsLimit
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -129,8 +130,8 @@ func (pc ProverConfig) Validate() error {
 	if pc.MaxChunkSizeForUpdateClient > MaxSpeculativeBatchHeaderChunkSize {
 		return fmt.Errorf("MaxChunkSizeForUpdateClient must be less than or equal to %d", MaxSpeculativeBatchHeaderChunkSize)
 	}
-	if pc.MaxSpeculativeBatchUnitsPerRequest > DefaultMaxSpeculativeBatchUnits {
-		return fmt.Errorf("MaxSpeculativeBatchUnitsPerRequest must be less than or equal to %d", DefaultMaxSpeculativeBatchUnits)
+	if pc.MaxSpeculativeBatchUnitsPerRequest > MaxSpeculativeBatchUnitsLimit {
+		return fmt.Errorf("MaxSpeculativeBatchUnitsPerRequest must be less than or equal to %d", MaxSpeculativeBatchUnitsLimit)
 	}
 	if pc.KeyUpdateBufferTime == 0 {
 		return fmt.Errorf("KeyUpdateBufferTime must be greater than 0")

@@ -429,7 +429,7 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	signer []byte,
 	operation string,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
-	results, sourceHeaderUnits, err := pr.executeExplicitStateSourceHeaderUnitStreamWithResolver(
+	results, fallbackUnits, err := pr.executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		ctx,
 		sourceHeaderUnitStream,
 		elcClientID,
@@ -455,8 +455,12 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	if collectErr != nil {
 		return nil, collectErr
 	}
-	sourceHeaderUnits = append(sourceHeaderUnits, remainingUnits...)
-	return pr.executeELCUpdateHeaderUnits(ctx, sourceHeaderUnits, elcClientID, includeState, signer)
+	fallbackUnits = append(fallbackUnits, remainingUnits...)
+	serialResults, serialErr := pr.executeELCUpdateHeaderUnits(ctx, fallbackUnits, elcClientID, includeState, signer)
+	if serialErr != nil {
+		return nil, serialErr
+	}
+	return append(results, serialResults...), nil
 }
 
 const (
