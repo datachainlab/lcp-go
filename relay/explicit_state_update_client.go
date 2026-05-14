@@ -19,6 +19,11 @@ func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
 		baseState.ConsensusState != nil
 }
 
+func clearExplicitStateSourceHeaderUnits(units []*ExplicitStateSourceHeaderUnit) []*ExplicitStateSourceHeaderUnit {
+	clear(units)
+	return units[:0]
+}
+
 func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	ctx context.Context,
 	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
@@ -115,7 +120,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 				return results, fallbackUnits, err
 			}
 			results = append(results, serialResults...)
-			fallbackUnits = fallbackUnits[:0]
+			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
 			unitIndex++
 			continue
 		}
@@ -155,13 +160,13 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			if err := flushBatch(); err != nil {
 				return results, fallbackUnits, err
 			}
-			fallbackUnits = fallbackUnits[:0]
+			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
 		}
 	}
 	if err := flushBatch(); err != nil {
 		return results, fallbackUnits, err
 	}
-	fallbackUnits = fallbackUnits[:0]
+	fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
 	return results, fallbackUnits, nil
 }
 
