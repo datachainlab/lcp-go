@@ -24,6 +24,12 @@ const (
 	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
 	MaxSpeculativeBatchUnitsLimit      = 256
 	DefaultMaxSpeculativeBatchUnits    = MaxSpeculativeBatchUnitsLimit
+	// DefaultMaxSpeculativeBatchBytes caps the per-batch in-flight header
+	// payload that the relayer retains for fallback. The streaming worker
+	// flushes the current batch whenever appending another unit would exceed
+	// this limit, which keeps peak memory bounded even when individual
+	// upstream headers (for example Arbitrum size-capped chunks) are large.
+	DefaultMaxSpeculativeBatchBytes = 192 * 1024 * 1024
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -108,6 +114,24 @@ func (pc ProverConfig) GetMaxSpeculativeBatchUnitsPerRequest() int {
 		return DefaultMaxSpeculativeBatchUnits
 	}
 	return int(pc.MaxSpeculativeBatchUnitsPerRequest)
+}
+
+// speculativeBatchBytesPerRequestOverride lets tests dial the per-batch byte
+// cap down to a value compatible with synthetic header sizes. Production code
+// must not set this; the zero value yields the production default.
+var speculativeBatchBytesPerRequestOverride int
+
+// GetMaxSpeculativeBatchBytesPerRequest returns the per-batch in-flight header
+// payload cap. The streaming worker flushes the current speculative batch
+// before adding another unit when the accumulated header bytes would exceed
+// this value, bounding fallback retention memory independent of unit count.
+func (pc ProverConfig) GetMaxSpeculativeBatchBytesPerRequest() int {
+	if speculativeBatchBytesPerRequestOverride > 0 {
+		return speculativeBatchBytesPerRequestOverride
+	}
+	// Reserved for a future proto-level setting; until then, the default
+	// captures the operational target on its own.
+	return DefaultMaxSpeculativeBatchBytes
 }
 
 func (pc ProverConfig) Validate() error {

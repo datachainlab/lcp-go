@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
 
@@ -72,10 +73,30 @@ func extractAnyHeadersFromSourceUnits(
 		if unit == nil {
 			return nil, fmt.Errorf("source header unit must not be nil: i=%v", i)
 		}
-		if unit.AnyHeader == nil {
-			return nil, fmt.Errorf("source header unit missing packed header: i=%v", i)
+		anyHeader, err := ensureAnyHeaderForSourceUnit(unit)
+		if err != nil {
+			return nil, fmt.Errorf("source header unit at i=%v: %w", i, err)
 		}
-		anyHeaders = append(anyHeaders, unit.AnyHeader)
+		anyHeaders = append(anyHeaders, anyHeader)
 	}
 	return anyHeaders, nil
+}
+
+// ensureAnyHeaderForSourceUnit returns the packed AnyHeader for a source unit,
+// repacking from unit.Header if the packed form was released after a successful
+// speculative Send. The repacked AnyHeader is cached back into the unit so a
+// subsequent fallback iteration does not pay the encoding cost twice.
+func ensureAnyHeaderForSourceUnit(unit *ExplicitStateSourceHeaderUnit) (*codectypes.Any, error) {
+	if unit.AnyHeader != nil {
+		return unit.AnyHeader, nil
+	}
+	if unit.Header == nil {
+		return nil, fmt.Errorf("source header unit missing packed header and core header")
+	}
+	anyHeader, err := clienttypes.PackClientMessage(unit.Header)
+	if err != nil {
+		return nil, fmt.Errorf("failed to repack source header from core header: %w", err)
+	}
+	unit.AnyHeader = anyHeader
+	return anyHeader, nil
 }

@@ -519,6 +519,22 @@ func mustPackTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) *c
 	return anyHeader
 }
 
+// mustBuildTMHeaderForExplicitStateTest returns both the typed header and its
+// packed Any form. Use it for tests that exercise the serial fallback path,
+// because the streaming worker clears the packed Any after a successful Send
+// and the fallback repacks from the typed header.
+func mustBuildTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) (*tmclienttypes.Header, *codectypes.Any) {
+	t.Helper()
+	header := &tmclienttypes.Header{
+		TrustedHeight: clienttypes.Height{RevisionHeight: trustedHeight},
+	}
+	anyHeader, err := codectypes.NewAnyWithValue(header)
+	if err != nil {
+		t.Fatalf("failed to pack tendermint header: %v", err)
+	}
+	return header, anyHeader
+}
+
 func (p fakeOriginProver) CheckRefreshRequired(context.Context, core.ChainInfoICS02Querier) (bool, error) {
 	return false, nil
 }
@@ -708,6 +724,84 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesOnlyNilBaseStateUni
 	}
 	if svc.updateCalls != 1 {
 		t.Fatalf("expected one serial update-client call for nil base-state unit, got %d", svc.updateCalls)
+	}
+}
+
+func TestExecuteExplicitStateSourceHeaderUnitStreamFlushesBatchOnByteBudget(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	// Synthetic headers in this test are 8 bytes each ("header-N"). A budget of
+	// 12 bytes permits one unit per batch and forces a flush before the second.
+	t.Cleanup(func() { speculativeBatchBytesPerRequestOverride = 0 })
+	speculativeBatchBytesPerRequestOverride = 12
+
+	listener := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	t.Cleanup(server.Stop)
+
+	svc := &explicitStateSplitBoundaryServer{}
+	elc.RegisterQueryServer(server, svc)
+	elc.RegisterMsgServer(server, svc)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	conn, err := grpc.NewClient(
+		"passthrough:///bufnet",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return listener.Dial()
+		}),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError, 2)
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
+		BaseState: &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 10},
+			ClientState:    &codectypes.Any{TypeUrl: "client/10", Value: []byte("client-10")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/10", Value: []byte("consensus-10")},
+		},
+	}}
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 1).Header,
+		BaseState: &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 11},
+			ClientState:    &codectypes.Any{TypeUrl: "client/11", Value: []byte("client-11")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/11", Value: []byte("consensus-11")},
+		},
+	}}
+	close(unitStream)
+
+	pr := &Prover{
+		config:           ProverConfig{ElcClientId: "07-tendermint-11"},
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}
+	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+		context.Background(),
+		unitStream,
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		"test",
+	)
+	if err != nil {
+		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("unexpected result count: %d", len(results))
+	}
+	if svc.batchCalls != 2 {
+		t.Fatalf("expected byte budget to force two batches, got batch_calls=%d", svc.batchCalls)
+	}
+	if len(svc.batchUnitCounts) != 2 || svc.batchUnitCounts[0] != 1 || svc.batchUnitCounts[1] != 1 {
+		t.Fatalf("expected byte budget to keep batches at one unit each, got counts=%#v", svc.batchUnitCounts)
 	}
 }
 

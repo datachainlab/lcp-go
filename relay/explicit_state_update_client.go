@@ -35,11 +35,13 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	var fallbackUnits []*ExplicitStateSourceHeaderUnit
 
 	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
+	maxBatchBytes := pr.config.GetMaxSpeculativeBatchBytesPerRequest()
 	var sender *speculativeBatchStreamSender
 	closed := true
 	batchSigners := make([][]byte, 0, maxUnits)
 	batchIndex := 0
 	unitIndex := 0
+	batchBytes := 0
 	defer func() {
 		if !closed && sender != nil {
 			_ = sender.CloseSend()
@@ -96,6 +98,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		sender = nil
 		batchSigners = batchSigners[:0]
 		batchIndex++
+		batchBytes = 0
 		return nil
 	}
 
@@ -124,6 +127,27 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			unitIndex++
 			continue
 		}
+		headerBytes := 0
+		if sourceUnit.AnyHeader != nil {
+			headerBytes = len(sourceUnit.AnyHeader.Value)
+		}
+		// Flush the in-flight batch before appending a unit whose header would
+		// push aggregate retention past the byte cap. The retention is bounded
+		// per batch (cleared in flushBatch's success path), so this caps peak
+		// fallback memory by batch boundary rather than maxUnits * header_size.
+		if sender != nil && headerBytes > 0 && batchBytes+headerBytes > maxBatchBytes {
+			if !hasCanonicalExplicitStatePayload(sourceUnit.BaseState) {
+				return results, fallbackUnits, fmt.Errorf(
+					"cannot split explicit-state batch at unit %s by byte budget: missing base state payload (batch_bytes=%d header_bytes=%d budget=%d)",
+					buildSpeculativeUnitID(unitIndex), batchBytes, headerBytes, maxBatchBytes,
+				)
+			}
+			if err := flushBatch(); err != nil {
+				return results, fallbackUnits, err
+			}
+			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
+		}
+
 		fallbackUnits = append(fallbackUnits, sourceUnit)
 		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
@@ -153,7 +177,17 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			err, _ = sender.enrichSendError(err)
 			return results, fallbackUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
 		}
+		// The gRPC layer has already marshalled and queued the header bytes, so
+		// release our in-process copy when the typed header is available for
+		// serial fallback repacking. Providers may supply only AnyHeader; keep it
+		// in that case because ensureAnyHeaderForSourceUnit cannot repack without
+		// sourceUnit.Header.
+		if sourceUnit.Header != nil {
+			sourceUnit.AnyHeader = nil
+		}
+		update.Header = nil
 		batchSigners = append(batchSigners, update.Signer)
+		batchBytes += headerBytes
 		unitIndex++
 
 		if len(batchSigners) == maxUnits {
