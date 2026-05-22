@@ -122,10 +122,10 @@ func sendSpeculativeUpdateClientUnit(
 	if err := validateSpeculativeBatchStreamChunkSize(chunkSize); err != nil {
 		return err
 	}
-	baseState := cloneExplicitStateRef(unit.BaseState)
-	if baseState == nil {
-		return fmt.Errorf("unit base_state must not be nil")
+	if !hasCanonicalExplicitStatePayload(unit.BaseState) {
+		return fmt.Errorf("unit base_state must be complete")
 	}
+	baseState := cloneExplicitStateRef(unit.BaseState)
 
 	unitInitChunk := &elc.MsgSpeculativeUpdateClientBatchStreamChunk{
 		Chunk: &elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitInit{

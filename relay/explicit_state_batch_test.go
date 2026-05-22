@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -24,6 +25,7 @@ func TestSendSpeculativeUpdateClientUnitRejectsOversizedUnitInit(t *testing.T) {
 			},
 		},
 		BaseState: &ExplicitStateRef{
+			PrevHeight: &clienttypes.Height{RevisionHeight: 10},
 			ClientState: &codectypes.Any{
 				TypeUrl: "client",
 				Value:   make([]byte, int(MaxSpeculativeBatchHeaderChunkSize)),
