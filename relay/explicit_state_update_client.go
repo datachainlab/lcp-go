@@ -107,7 +107,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if err != nil {
 			return nil, fallbackUnits, err
 		}
-		if sourceUnit.BaseState == nil || (unitIndex > 0 && !hasCanonicalExplicitStatePayload(sourceUnit.BaseState)) {
+		if !hasCanonicalExplicitStatePayload(sourceUnit.BaseState) {
 			fallbackUnits = append(fallbackUnits, sourceUnit)
 			if err := flushBatch(); err != nil {
 				return results, fallbackUnits, err
@@ -136,12 +136,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		// per batch (cleared in flushBatch's success path), so this caps peak
 		// fallback memory by batch boundary rather than maxUnits * header_size.
 		if sender != nil && headerBytes > 0 && batchBytes+headerBytes > maxBatchBytes {
-			if !hasCanonicalExplicitStatePayload(sourceUnit.BaseState) {
-				return results, fallbackUnits, fmt.Errorf(
-					"cannot split explicit-state batch at unit %s by byte budget: missing base state payload (batch_bytes=%d header_bytes=%d budget=%d)",
-					buildSpeculativeUnitID(unitIndex), batchBytes, headerBytes, maxBatchBytes,
-				)
-			}
 			if err := flushBatch(); err != nil {
 				return results, fallbackUnits, err
 			}

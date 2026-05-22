@@ -647,7 +647,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	}
 }
 
-func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesNilAndIncompleteNonLeadingBaseStateUnits(t *testing.T) {
+func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesNilAndIncompleteBaseStateUnits(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
