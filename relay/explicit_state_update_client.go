@@ -107,7 +107,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if err != nil {
 			return nil, fallbackUnits, err
 		}
-		if sourceUnit.BaseState == nil {
+		if sourceUnit.BaseState == nil || (unitIndex > 0 && !hasCanonicalExplicitStatePayload(sourceUnit.BaseState)) {
 			fallbackUnits = append(fallbackUnits, sourceUnit)
 			if err := flushBatch(); err != nil {
 				return results, fallbackUnits, err
@@ -158,13 +158,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			IncludeState: includeState,
 			Signer:       signer,
 		}
-		if sender == nil && unitIndex > 0 && !hasCanonicalExplicitStatePayload(baseState) {
-			return results, fallbackUnits, fmt.Errorf(
-				"cannot split explicit-state batch at unit %s: missing base state payload",
-				unitID,
-			)
-		}
-
 		if err := openBatch(); err != nil {
 			return results, fallbackUnits, err
 		}

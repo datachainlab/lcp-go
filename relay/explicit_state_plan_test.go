@@ -647,7 +647,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	}
 }
 
-func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesOnlyNilBaseStateUnit(t *testing.T) {
+func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesNilAndIncompleteNonLeadingBaseStateUnits(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
@@ -675,7 +675,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesOnlyNilBaseStateUni
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError, 3)
+	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError, 4)
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
 		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 0).Header,
 		BaseState: &ExplicitStateRef{
@@ -691,9 +691,15 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesOnlyNilBaseStateUni
 	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
 		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 2).Header,
 		BaseState: &ExplicitStateRef{
-			PrevHeight:     &clienttypes.Height{RevisionHeight: 12},
-			ClientState:    &codectypes.Any{TypeUrl: "client/12", Value: []byte("client-12")},
-			ConsensusState: &codectypes.Any{TypeUrl: "consensus/12", Value: []byte("consensus-12")},
+			PrevHeight: &clienttypes.Height{RevisionHeight: 12},
+		},
+	}}
+	unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+		AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), 3).Header,
+		BaseState: &ExplicitStateRef{
+			PrevHeight:     &clienttypes.Height{RevisionHeight: 13},
+			ClientState:    &codectypes.Any{TypeUrl: "client/13", Value: []byte("client-13")},
+			ConsensusState: &codectypes.Any{TypeUrl: "consensus/13", Value: []byte("consensus-13")},
 		},
 	}}
 	close(unitStream)
@@ -713,17 +719,17 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesOnlyNilBaseStateUni
 	if err != nil {
 		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
 	}
-	if len(results) != 3 {
+	if len(results) != 4 {
 		t.Fatalf("unexpected result count: %d", len(results))
 	}
 	if svc.batchCalls != 2 {
-		t.Fatalf("expected speculative batches before and after nil base-state unit, got %d", svc.batchCalls)
+		t.Fatalf("expected speculative batches around serial base-state units, got %d", svc.batchCalls)
 	}
 	if len(svc.batchUnitCounts) != 2 || svc.batchUnitCounts[0] != 1 || svc.batchUnitCounts[1] != 1 {
 		t.Fatalf("unexpected speculative batch unit counts: %#v", svc.batchUnitCounts)
 	}
-	if svc.updateCalls != 1 {
-		t.Fatalf("expected one serial update-client call for nil base-state unit, got %d", svc.updateCalls)
+	if svc.updateCalls != 2 {
+		t.Fatalf("expected two serial update-client calls for nil/incomplete base-state units, got %d", svc.updateCalls)
 	}
 }
 
