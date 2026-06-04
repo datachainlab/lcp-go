@@ -389,6 +389,37 @@ func (s *explicitStateParityTestServer) UpdateClientStream(stream elc.Msg_Update
 	}
 }
 
+type explicitStateBaseMismatchThenLegacyServer struct {
+	elc.UnimplementedMsgServer
+	batchCalls  int
+	updateCalls int
+}
+
+func (s *explicitStateBaseMismatchThenLegacyServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	if _, err := recvSpeculativeBatchStreamRequest(stream); err != nil {
+		return err
+	}
+	s.batchCalls++
+	return status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=canonical speculative base client_state mismatch: client_id=07-tendermint-11")
+}
+
+func (s *explicitStateBaseMismatchThenLegacyServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			resp := makeExplicitStateParityResponse(s.updateCalls)
+			s.updateCalls++
+			return stream.SendAndClose(&resp)
+		}
+		if err != nil {
+			return err
+		}
+		if chunk == nil {
+			return fmt.Errorf("received nil update client stream chunk")
+		}
+	}
+}
+
 func makeExplicitStateParityResponse(i int) elc.MsgUpdateClientResponse {
 	return elc.MsgUpdateClientResponse{
 		Message:   mustMakeExplicitStateTestHeaderedUpdateStateMessage(uint64(11+i), byte(i+1)),
@@ -967,6 +998,81 @@ func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T)
 		t.Fatalf("expected %d legacy update-client calls, got %d", len(headers), svc.updateCalls)
 	}
 	assertUpdateClientResultsEqual(t, explicitResults, legacyResults)
+}
+
+func TestUpdateELCForUpdateClientFallsBackOnExplicitStateBaseMismatch(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateBaseMismatchThenLegacyServer{}
+	elc.RegisterMsgServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	headers := []core.Header{
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 11}},
+	}
+	results, err := (&Prover{
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
+		originProver: fakeOriginProver{
+			headers:             headers,
+			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}).updateELCForUpdateClient(
+		context.Background(),
+		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
+		headers[len(headers)-1],
+	)
+	if err != nil {
+		t.Fatalf("updateELCForUpdateClient() error = %v", err)
+	}
+	if svc.batchCalls != 1 {
+		t.Fatalf("expected one failed explicit-state batch call, got %d", svc.batchCalls)
+	}
+	if svc.updateCalls != len(headers) {
+		t.Fatalf("expected %d legacy fallback update-client calls, got %d", len(headers), svc.updateCalls)
+	}
+	if len(results) != len(headers) {
+		t.Fatalf("unexpected result count: got=%d want=%d", len(results), len(headers))
+	}
 }
 
 func assertUpdateClientResultsEqual(t *testing.T, got, want []*elcupdater_storage.UpdateClientResult) {
