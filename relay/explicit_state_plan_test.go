@@ -921,8 +921,11 @@ func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T)
 	}
 
 	explicitResults, err := (&Prover{
-		config: ProverConfig{ElcClientId: "07-tendermint-11"},
-		codec:  coreCodec,
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
 			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
@@ -940,8 +943,7 @@ func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T)
 
 	legacyResults, err := (&Prover{
 		config: ProverConfig{
-			ElcClientId:                      "07-tendermint-11",
-			DisableExplicitStateUpdateClient: true,
+			ElcClientId: "07-tendermint-11",
 		},
 		codec: coreCodec,
 		originProver: fakeOriginProver{
@@ -1029,8 +1031,11 @@ func TestUpdateELCForUpdateClientKeepsTendermintHeadersOrdered(t *testing.T) {
 	}
 	explicitStateChunks := mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...)
 	pr := &Prover{
-		config: ProverConfig{ElcClientId: "07-tendermint-11"},
-		codec:  coreCodec,
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
 			explicitStateChunks: explicitStateChunks,
@@ -1151,8 +1156,11 @@ func TestUpdateELCForEnclaveKeyUpdateUsesSpeculativeBatchStream(t *testing.T) {
 		},
 	}
 	pr := &Prover{
-		config: ProverConfig{ElcClientId: "07-tendermint-11"},
-		codec:  coreCodec,
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
 		originProver: fakeOriginProver{
 			headers: headers,
 			explicitStateChunks: []*ExplicitStateSourceHeaderUnit{
@@ -1243,8 +1251,11 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleUnitBatch(t *testing.T) 
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
 	}
 	pr := &Prover{
-		config: ProverConfig{ElcClientId: "07-tendermint-11"},
-		codec:  coreCodec,
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
 		originProver: fakeOriginProver{
 			headers:             headers,
 			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
@@ -1315,8 +1326,11 @@ func TestUpdateELCForUpdateClientReturnsErrorWhenBatchRPCUnavailable(t *testing.
 
 	anyHeader := mustPackTMHeaderForExplicitStateTest(t, 10)
 	pr := &Prover{
-		config: ProverConfig{ElcClientId: "07-tendermint-11"},
-		codec:  coreCodec,
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
 		originProver: fakeOriginProver{
 			explicitStateChunks: []*ExplicitStateSourceHeaderUnit{
 				{
@@ -1456,7 +1470,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamCancelsBlockedSourceProducerO
 	}
 }
 
-func TestUpdateELCForUpdateClientDisablesExplicitStateWhenConfigDisabled(t *testing.T) {
+func TestUpdateELCForUpdateClientUsesLegacyWhenExplicitStateNotEnabled(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
@@ -1494,8 +1508,7 @@ func TestUpdateELCForUpdateClientDisablesExplicitStateWhenConfigDisabled(t *test
 	header := &tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}}
 	pr := &Prover{
 		config: ProverConfig{
-			ElcClientId:                      "07-tendermint-11",
-			DisableExplicitStateUpdateClient: true,
+			ElcClientId: "07-tendermint-11",
 		},
 		codec: coreCodec,
 		originProver: fakeOriginProver{

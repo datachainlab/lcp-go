@@ -60,8 +60,10 @@ message ProverConfig {
     // protocol limit are rejected by config validation.
     uint32 max_speculative_batch_units_per_request = 35;
 
-    // Disable the explicit-state UpdateClient path for this prover.
-    bool disable_explicit_state_update_client = 36;
+    // Enable the explicit-state UpdateClient path for this prover.
+    // Disabled by default so upgrades keep using the legacy serial path unless
+    // this experimental path is explicitly enabled.
+    bool enable_explicit_state_update_client = 36;
 }
 
 message Fraction {

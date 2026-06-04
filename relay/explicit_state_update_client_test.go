@@ -7,20 +7,20 @@ import (
 )
 
 func TestShouldUseExplicitStateUpdateClientUsesProverConfig(t *testing.T) {
-	if got := (&Prover{}).shouldUseExplicitStateUpdateClient(); !got {
-		t.Fatal("expected explicit-state update client to be enabled by default")
+	if got := (&Prover{}).shouldUseExplicitStateUpdateClient(); got {
+		t.Fatal("expected explicit-state update client to be disabled by default")
 	}
 
 	pr := &Prover{
-		config: ProverConfig{DisableExplicitStateUpdateClient: true},
+		config: ProverConfig{EnableExplicitStateUpdateClient: true},
 	}
-	if got := pr.shouldUseExplicitStateUpdateClient(); got {
-		t.Fatal("expected explicit-state update client to be disabled by config")
+	if got := pr.shouldUseExplicitStateUpdateClient(); !got {
+		t.Fatal("expected explicit-state update client to be enabled by config")
 	}
 }
 
-func TestProverConfigDisableExplicitStateUpdateClientRoundTrip(t *testing.T) {
-	bz, err := gogoproto.Marshal(&ProverConfig{DisableExplicitStateUpdateClient: true})
+func TestProverConfigEnableExplicitStateUpdateClientRoundTrip(t *testing.T) {
+	bz, err := gogoproto.Marshal(&ProverConfig{EnableExplicitStateUpdateClient: true})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
@@ -29,7 +29,7 @@ func TestProverConfigDisableExplicitStateUpdateClientRoundTrip(t *testing.T) {
 	if err := gogoproto.Unmarshal(bz, &got); err != nil {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
-	if !got.DisableExplicitStateUpdateClient {
-		t.Fatal("expected disable_explicit_state_update_client to round-trip")
+	if !got.EnableExplicitStateUpdateClient {
+		t.Fatal("expected enable_explicit_state_update_client to round-trip")
 	}
 }

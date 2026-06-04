@@ -9,7 +9,7 @@ import (
 )
 
 func (pr *Prover) shouldUseExplicitStateUpdateClient() bool {
-	return !pr.config.DisableExplicitStateUpdateClient
+	return pr.config.EnableExplicitStateUpdateClient
 }
 
 func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {

@@ -72,8 +72,8 @@ type ProverConfig struct {
 	ElcUpdaterGrpcAddress string `protobuf:"bytes,34,opt,name=elc_updater_grpc_address,json=elcUpdaterGrpcAddress,proto3" json:"elc_updater_grpc_address,omitempty"`
 	// Max speculative UpdateClient units per request.
 	MaxSpeculativeBatchUnitsPerRequest uint32 `protobuf:"varint,35,opt,name=max_speculative_batch_units_per_request,json=maxSpeculativeBatchUnitsPerRequest,proto3" json:"max_speculative_batch_units_per_request,omitempty"`
-	// Disable the explicit-state UpdateClient path for this prover.
-	DisableExplicitStateUpdateClient bool `protobuf:"varint,36,opt,name=disable_explicit_state_update_client,json=disableExplicitStateUpdateClient,proto3" json:"disable_explicit_state_update_client,omitempty"`
+	// Enable the explicit-state UpdateClient path for this prover.
+	EnableExplicitStateUpdateClient bool `protobuf:"varint,36,opt,name=enable_explicit_state_update_client,json=enableExplicitStateUpdateClient,proto3" json:"enable_explicit_state_update_client,omitempty"`
 }
 
 func (m *ProverConfig) Reset()         { *m = ProverConfig{} }
@@ -445,9 +445,9 @@ func (m *ProverConfig) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x98
 	}
-	if m.DisableExplicitStateUpdateClient {
+	if m.EnableExplicitStateUpdateClient {
 		i--
-		if m.DisableExplicitStateUpdateClient {
+		if m.EnableExplicitStateUpdateClient {
 			dAtA[i] = 1
 		} else {
 			dAtA[i] = 0
@@ -932,7 +932,7 @@ func (m *ProverConfig) Size() (n int) {
 	if m.MaxSpeculativeBatchUnitsPerRequest != 0 {
 		n += 2 + sovConfig(uint64(m.MaxSpeculativeBatchUnitsPerRequest))
 	}
-	if m.DisableExplicitStateUpdateClient {
+	if m.EnableExplicitStateUpdateClient {
 		n += 3
 	}
 	return n
@@ -1701,7 +1701,7 @@ func (m *ProverConfig) Unmarshal(dAtA []byte) error {
 			}
 		case 36:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field DisableExplicitStateUpdateClient", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field EnableExplicitStateUpdateClient", wireType)
 			}
 			var v int
 			for shift := uint(0); ; shift += 7 {
@@ -1718,7 +1718,7 @@ func (m *ProverConfig) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-			m.DisableExplicitStateUpdateClient = bool(v != 0)
+			m.EnableExplicitStateUpdateClient = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipConfig(dAtA[iNdEx:])
