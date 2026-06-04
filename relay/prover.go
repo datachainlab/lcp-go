@@ -55,8 +55,10 @@ type ExplicitStateChunkProvider interface {
 	// SetupExplicitStateChunksForUpdate returns source header units for the
 	// explicit-state update-client path. Each emitted Unit must include a non-nil
 	// AnyHeader; incomplete explicit BaseState values are rejected by the
-	// consumer instead of falling back to serial update-client.
-	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
+	// consumer instead of falling back to serial update-client. If base is non-nil,
+	// implementations must build all headers/chunks from base.Height and must use
+	// base.ClientState and base.ConsensusState as the first unit's BaseState.
+	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header, *ExplicitStateBase) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
 }
 
 var (
@@ -293,26 +295,55 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
 	if pr.shouldUseExplicitStateUpdateClient() {
-		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
-		defer cancelExplicitState()
-		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader)
-		if err != nil {
-			return nil, err
+		_, hasExplicitStateProvider := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider)
+		maxExplicitStateAttempts := 1
+		if hasExplicitStateProvider {
+			maxExplicitStateAttempts = 2
 		}
-		if ok {
-			signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-			results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
-				ctx,
-				sourceHeaderUnitStream,
-				pr.config.ElcClientId,
-				false,
-				signer,
-				cancelExplicitState,
-			)
+		for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
+			var base *ExplicitStateBase
+			if attempt > 0 {
+				var err error
+				base, err = pr.queryLCPCanonicalExplicitStateBase(ctx, pr.config.ElcClientId)
+				if err != nil {
+					return nil, err
+				}
+			}
+			explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
+			sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
 			if err != nil {
+				cancelExplicitState()
 				return nil, err
 			}
-			return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
+			if ok {
+				signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+				results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+					ctx,
+					sourceHeaderUnitStream,
+					pr.config.ElcClientId,
+					false,
+					signer,
+					cancelExplicitState,
+				)
+				cancelExplicitState()
+				if err != nil {
+					if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
+						pr.getLogger().WarnContext(
+							ctx,
+							"explicit-state update client base state mismatch; retrying from LCP canonical state",
+							"client_id", pr.config.ElcClientId,
+							"attempt", attempt+1,
+							"max_attempts", maxExplicitStateAttempts,
+							"error", err,
+						)
+						continue
+					}
+					return nil, err
+				}
+				return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
+			}
+			cancelExplicitState()
+			break
 		}
 	}
 
@@ -425,9 +456,11 @@ func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
+	base *ExplicitStateBase,
 ) (<-chan *ExplicitStateSourceHeaderUnitOrError, bool, error) {
-	if provider, ok := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider); ok {
-		unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader)
+	originProver := unwrapExplicitStateOriginProver(pr.originProver)
+	if provider, ok := originProver.(ExplicitStateChunkProvider); ok {
+		unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader, base)
 		if err != nil {
 			return nil, true, err
 		}

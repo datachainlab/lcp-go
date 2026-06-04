@@ -4,8 +4,15 @@ import (
 	"fmt"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/hyperledger-labs/yui-relayer/core"
 )
+
+type ExplicitStateBase struct {
+	Height         clienttypes.Height
+	ClientState    *codectypes.Any
+	ConsensusState *codectypes.Any
+}
 
 type ExplicitStateSourceHeaderUnit struct {
 	Header    core.Header

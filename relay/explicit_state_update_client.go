@@ -3,13 +3,82 @@ package relay
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
+	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 )
 
 func (pr *Prover) shouldUseExplicitStateUpdateClient() bool {
 	return pr.config.EnableExplicitStateUpdateClient
+}
+
+func isExplicitStateBaseStateMismatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// LCP currently returns speculative batch failures as plain gRPC Aborted
+	// status messages rather than typed error details:
+	//
+	//   Status::aborted(format!("{:?}: {}", e.kind, e.detail))
+	//
+	// The "BaseStateMismatch" substring is the Debug representation of
+	// SpeculativeBatchFailureKind::BaseStateMismatch emitted by the LCP service
+	// gRPC layer. The "canonical speculative base" substring is part of the
+	// lower-level enclave/store validation error when the provided explicit
+	// base client_state or consensus_state does not match the canonical LCP
+	// store. Keep both checks until the LCP service exposes a typed gRPC error
+	// detail or stable machine-readable error code for speculative failures.
+	msg := err.Error()
+	return strings.Contains(msg, "BaseStateMismatch") ||
+		strings.Contains(msg, "canonical speculative base")
+}
+
+func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcClientID string) (*ExplicitStateBase, error) {
+	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
+		ClientId: elcClientID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query LCP ELC canonical state: client_id=%s %w", elcClientID, err)
+	}
+	if res == nil || !res.Found {
+		return nil, fmt.Errorf("LCP ELC canonical state not found: client_id=%s", elcClientID)
+	}
+	if res.ClientState == nil {
+		return nil, fmt.Errorf("LCP ELC canonical client_state is nil: client_id=%s", elcClientID)
+	}
+	if res.ConsensusState == nil {
+		return nil, fmt.Errorf("LCP ELC canonical consensus_state is nil: client_id=%s", elcClientID)
+	}
+	var clientState exported.ClientState
+	if err := pr.codec.UnpackAny(res.ClientState, &clientState); err != nil {
+		return nil, fmt.Errorf("failed to unpack LCP ELC canonical client_state: client_id=%s %w", elcClientID, err)
+	}
+	height, ok := clientState.GetLatestHeight().(clienttypes.Height)
+	if !ok {
+		return nil, fmt.Errorf("unsupported LCP ELC canonical latest height type: client_id=%s height_type=%T", elcClientID, clientState.GetLatestHeight())
+	}
+	if height.IsZero() {
+		return nil, fmt.Errorf("LCP ELC canonical latest height is zero: client_id=%s", elcClientID)
+	}
+	return &ExplicitStateBase{
+		Height:         height,
+		ClientState:    cloneExplicitStateAny(res.ClientState),
+		ConsensusState: cloneExplicitStateAny(res.ConsensusState),
+	}, nil
+}
+
+func cloneExplicitStateAny(any *codectypes.Any) *codectypes.Any {
+	if any == nil {
+		return nil
+	}
+	return &codectypes.Any{
+		TypeUrl: any.TypeUrl,
+		Value:   append([]byte(nil), any.Value...),
+	}
 }
 
 func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {

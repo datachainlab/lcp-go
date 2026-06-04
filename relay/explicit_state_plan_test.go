@@ -396,6 +396,109 @@ func makeExplicitStateParityResponse(i int) elc.MsgUpdateClientResponse {
 	}
 }
 
+type explicitStateCanonicalRetryServer struct {
+	elc.UnimplementedQueryServer
+	elc.UnimplementedMsgServer
+	queryCalls int
+	batchCalls int
+}
+
+func (s *explicitStateCanonicalRetryServer) Client(_ context.Context, req *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	s.queryCalls++
+	if req.ClientId != "07-tendermint-11" {
+		return &elc.QueryClientResponse{Found: false}, nil
+	}
+	height := clienttypes.Height{RevisionHeight: uint64(6 + s.queryCalls)}
+	clientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{
+		LatestHeight: height,
+	})
+	if err != nil {
+		return nil, err
+	}
+	consensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{
+		StateId: []byte(fmt.Sprintf("state-%d", height.RevisionHeight)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &elc.QueryClientResponse{
+		Found:          true,
+		ClientState:    clientStateAny,
+		ConsensusState: consensusStateAny,
+	}, nil
+}
+
+func (s *explicitStateCanonicalRetryServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	req, err := recvSpeculativeBatchStreamRequest(stream)
+	if err != nil {
+		return err
+	}
+	s.batchCalls++
+	if s.batchCalls == 1 {
+		return status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=canonical speculative base client_state mismatch: client_id=07-tendermint-11")
+	}
+	units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, len(req.Units))
+	for i := range req.Units {
+		units = append(units, &elc.StitchedSpeculativeUpdateClientUnitResult{
+			Response: makeExplicitStateParityResponse(i),
+		})
+	}
+	return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
+		ClientId: req.ClientId,
+		Units:    units,
+	})
+}
+
+type fakeOriginProverWithBase struct {
+	fakeOriginProver
+	bases []*ExplicitStateBase
+}
+
+func (p *fakeOriginProverWithBase) SetupExplicitStateChunksForUpdate(
+	_ context.Context,
+	_ core.FinalityAwareChain,
+	_ core.Header,
+	base *ExplicitStateBase,
+) (<-chan *ExplicitStateSourceHeaderUnitOrError, error) {
+	p.bases = append(p.bases, base)
+	if base == nil {
+		height := clienttypes.Height{RevisionHeight: 1}
+		clientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{
+			LatestHeight: height,
+		})
+		if err != nil {
+			return nil, err
+		}
+		consensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{
+			StateId: []byte("state-1"),
+		})
+		if err != nil {
+			return nil, err
+		}
+		base = &ExplicitStateBase{
+			Height:         height,
+			ClientState:    clientStateAny,
+			ConsensusState: consensusStateAny,
+		}
+	}
+	anyHeader, err := codectypes.NewAnyWithValue(&tmclienttypes.Header{
+		TrustedHeight: base.Height,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return makeExplicitStateSourceHeaderUnitStream([]*ExplicitStateSourceHeaderUnit{
+		{
+			AnyHeader: anyHeader,
+			BaseState: &ExplicitStateRef{
+				PrevHeight:     &base.Height,
+				ClientState:    base.ClientState,
+				ConsensusState: base.ConsensusState,
+			},
+		},
+	}), nil
+}
+
 func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
 	initChunk, err := stream.Recv()
 	if err != nil {
@@ -510,7 +613,7 @@ func (p fakeOriginProver) SetupHeadersForUpdate(context.Context, core.FinalityAw
 	return core.MakeHeaderStream(p.headers...), nil
 }
 
-func (p fakeOriginProver) SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header) (<-chan *ExplicitStateSourceHeaderUnitOrError, error) {
+func (p fakeOriginProver) SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header, *ExplicitStateBase) (<-chan *ExplicitStateSourceHeaderUnitOrError, error) {
 	return makeExplicitStateSourceHeaderUnitStream(p.explicitStateChunks), nil
 }
 
@@ -967,6 +1070,262 @@ func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T)
 		t.Fatalf("expected %d legacy update-client calls, got %d", len(headers), svc.updateCalls)
 	}
 	assertUpdateClientResultsEqual(t, explicitResults, legacyResults)
+}
+
+func TestIsExplicitStateBaseStateMismatchError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "kind",
+			err:  fmt.Errorf("failed explicit-state update client batch: rpc error: code = Aborted desc = BaseStateMismatch: invalid argument"),
+			want: true,
+		},
+		{
+			name: "grpc status",
+			err:  status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=canonical speculative base client_state mismatch"),
+			want: true,
+		},
+		{
+			name: "detail",
+			err:  fmt.Errorf("canonical speculative base client_state mismatch: client_id=07-tendermint-11"),
+			want: true,
+		},
+		{
+			name: "other",
+			err:  fmt.Errorf("SpeculativeExecutionFailed"),
+			want: false,
+		},
+		{
+			name: "nil",
+			err:  nil,
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isExplicitStateBaseStateMismatchError(tt.err); got != tt.want {
+				t.Fatalf("isExplicitStateBaseStateMismatchError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestQueryLCPCanonicalExplicitStateBase(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateCanonicalRetryServer{}
+	elc.RegisterQueryServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	base, err := (&Prover{
+		codec:            coreCodec,
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}).queryLCPCanonicalExplicitStateBase(context.Background(), "07-tendermint-11")
+	if err != nil {
+		t.Fatalf("queryLCPCanonicalExplicitStateBase() error = %v", err)
+	}
+	if base == nil || base.Height.RevisionHeight != 7 {
+		t.Fatalf("unexpected base height: %#v", base)
+	}
+	if base.ClientState == nil || base.ConsensusState == nil {
+		t.Fatalf("expected packed base states: %#v", base)
+	}
+	if svc.queryCalls != 1 {
+		t.Fatalf("unexpected query calls: %d", svc.queryCalls)
+	}
+}
+
+func TestUpdateELCForUpdateClientRetriesExplicitStateFromCanonicalBase(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateCanonicalRetryServer{}
+	elc.RegisterQueryServer(server, svc)
+	elc.RegisterMsgServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	originProver := &fakeOriginProverWithBase{}
+	results, err := (&Prover{
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec:            coreCodec,
+		originProver:     originProver,
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}).updateELCForUpdateClient(
+		context.Background(),
+		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 1}),
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
+	)
+	if err != nil {
+		t.Fatalf("updateELCForUpdateClient() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("unexpected result count: %d", len(results))
+	}
+	if svc.queryCalls != 1 {
+		t.Fatalf("expected canonical state to be re-queried on mismatch, got %d calls", svc.queryCalls)
+	}
+	if svc.batchCalls != 2 {
+		t.Fatalf("expected speculative batch to be retried once, got %d calls", svc.batchCalls)
+	}
+	if len(originProver.bases) != 2 {
+		t.Fatalf("expected two chunk provider calls, got %d", len(originProver.bases))
+	}
+	if originProver.bases[0] != nil || originProver.bases[1].Height.RevisionHeight != 7 {
+		t.Fatalf("unexpected canonical base heights: %#v", originProver.bases)
+	}
+}
+
+func TestUpdateELCRetriesExplicitStateFromCanonicalBase(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateCanonicalRetryServer{}
+	elc.RegisterQueryServer(server, svc)
+	elc.RegisterMsgServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	originProver := &fakeOriginProverWithBase{
+		fakeOriginProver: fakeOriginProver{
+			headers: []core.Header{
+				&tmclienttypes.Header{
+					SignedHeader: &tmproto.SignedHeader{
+						Header: &tmproto.Header{
+							Height: 10,
+						},
+					},
+				},
+			},
+		},
+	}
+	responses, err := (&Prover{
+		config: ProverConfig{
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec:            coreCodec,
+		originProver:     originProver,
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}).updateELC(
+		context.Background(),
+		"07-tendermint-11",
+		false,
+	)
+	if err != nil {
+		t.Fatalf("updateELC() error = %v", err)
+	}
+	if len(responses) != 1 {
+		t.Fatalf("unexpected response count: %d", len(responses))
+	}
+	if svc.queryCalls != 2 {
+		t.Fatalf("expected initial freshness query plus one canonical base query, got %d calls", svc.queryCalls)
+	}
+	if svc.batchCalls != 2 {
+		t.Fatalf("expected speculative batch to be retried once, got %d calls", svc.batchCalls)
+	}
+	if len(originProver.bases) != 2 {
+		t.Fatalf("expected two chunk provider calls, got %d", len(originProver.bases))
+	}
+	if originProver.bases[0] != nil || originProver.bases[1].Height.RevisionHeight != 8 {
+		t.Fatalf("unexpected canonical base heights: %#v", originProver.bases)
+	}
 }
 
 func assertUpdateClientResultsEqual(t *testing.T, got, want []*elcupdater_storage.UpdateClientResult) {
@@ -1565,6 +1924,7 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 		context.Background(),
 		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 12}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("collectExplicitStateChunkSourceHeaderUnitStreamForUpdate() error = %v", err)

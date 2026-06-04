@@ -397,32 +397,61 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
 	if pr.shouldUseExplicitStateUpdateClient() {
-		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
-		defer cancelExplicitState()
-		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, sourceChain, latestHeader)
-		if err != nil {
-			return nil, err
+		_, hasExplicitStateProvider := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider)
+		maxExplicitStateAttempts := 1
+		if hasExplicitStateProvider {
+			maxExplicitStateAttempts = 2
 		}
-		if ok {
-			results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
-				ctx,
-				sourceHeaderUnitStream,
-				elcClientID,
-				includeState,
-				signer,
-				cancelExplicitState,
-			)
+		for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
+			var base *ExplicitStateBase
+			if attempt > 0 {
+				var err error
+				base, err = pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+				if err != nil {
+					return nil, err
+				}
+			}
+			explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
+			sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, sourceChain, latestHeader, base)
 			if err != nil {
+				cancelExplicitState()
 				return nil, err
 			}
-			responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
-			for _, result := range results {
-				responses = append(responses, &elc.MsgUpdateClientResponse{
-					Message:   result.Message,
-					Signature: result.Signature,
-				})
+			if ok {
+				results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+					ctx,
+					sourceHeaderUnitStream,
+					elcClientID,
+					includeState,
+					signer,
+					cancelExplicitState,
+				)
+				cancelExplicitState()
+				if err != nil {
+					if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
+						pr.getLogger().WarnContext(
+							ctx,
+							"explicit-state update client base state mismatch; retrying from LCP canonical state",
+							"client_id", elcClientID,
+							"attempt", attempt+1,
+							"max_attempts", maxExplicitStateAttempts,
+							"error", err,
+						)
+						continue
+					}
+					return nil, err
+				}
+				responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
+				for _, result := range results {
+					responses = append(responses, &elc.MsgUpdateClientResponse{
+						Message:   result.Message,
+						Signature: result.Signature,
+					})
+				}
+				return responses, nil
 			}
-			return responses, nil
+			cancelExplicitState()
+			break
 		}
 	}
 
