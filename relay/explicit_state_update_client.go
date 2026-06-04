@@ -3,7 +3,6 @@ package relay
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/datachainlab/lcp-go/relay/elc"
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
@@ -11,15 +10,6 @@ import (
 
 func (pr *Prover) shouldUseExplicitStateUpdateClient() bool {
 	return pr.config.EnableExplicitStateUpdateClient
-}
-
-func isExplicitStateBaseStateMismatchError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "BaseStateMismatch") ||
-		strings.Contains(msg, "canonical speculative base")
 }
 
 func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {

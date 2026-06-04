@@ -310,18 +310,9 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 				cancelExplicitState,
 			)
 			if err != nil {
-				if !isExplicitStateBaseStateMismatchError(err) {
-					return nil, err
-				}
-				pr.getLogger().WarnContext(
-					ctx,
-					"explicit-state update client base state mismatch; falling back to legacy update client",
-					"client_id", pr.config.ElcClientId,
-					"error", err,
-				)
-			} else {
-				return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
+				return nil, err
 			}
+			return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 		}
 	}
 
