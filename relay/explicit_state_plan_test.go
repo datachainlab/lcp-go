@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	"github.com/datachainlab/lcp-go/relay/elcupdater"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -36,19 +38,19 @@ type explicitStateBatchTestService interface {
 	SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error
 }
 
-type explicitStateFallbackTestServer struct {
+type unsupportedSpeculativeBatchServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
 	batchCalls  int
 	updateCalls int
 }
 
-func (s *explicitStateFallbackTestServer) SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+func (s *unsupportedSpeculativeBatchServer) SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	s.batchCalls++
 	return status.Error(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented")
 }
 
-func (s *explicitStateFallbackTestServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
+func (s *unsupportedSpeculativeBatchServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
 	for {
 		chunk, err := stream.Recv()
 		if err == io.EOF {
@@ -93,6 +95,27 @@ func (s explicitStateBatchMultiRequestServer) SpeculativeUpdateClientBatchStream
 	})
 }
 
+type blockingSpeculativeBatchErrorServer struct {
+	elc.UnimplementedMsgServer
+	secondSendAttempted <-chan struct{}
+}
+
+func (s blockingSpeculativeBatchErrorServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	req, err := recvSpeculativeBatchStreamRequest(stream)
+	if err != nil {
+		return err
+	}
+	if len(req.Units) != 1 {
+		return fmt.Errorf("expected exactly one unit before batch failure, got %d", len(req.Units))
+	}
+	select {
+	case <-s.secondSendAttempted:
+	case <-time.After(2 * time.Second):
+		return fmt.Errorf("producer did not attempt the second send before batch failure")
+	}
+	return status.Error(codes.Aborted, "test speculative batch failure")
+}
+
 type explicitStateSourceUnitStreamingObserveServer struct {
 	elc.UnimplementedMsgServer
 	firstUnitEnd chan struct{}
@@ -108,7 +131,7 @@ func (s explicitStateSourceUnitStreamingObserveServer) SpeculativeUpdateClientBa
 		switch c := chunk.GetChunk().(type) {
 		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd:
 			unitCount++
-			if c.UnitEnd.UnitId == "unit-0000" {
+			if c.UnitEnd.UnitId == "unit-0" {
 				close(s.firstUnitEnd)
 			}
 		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd:
@@ -325,6 +348,54 @@ func (s explicitStateIntegrationTestServer) SpeculativeUpdateClientBatchStream(s
 	})
 }
 
+type explicitStateParityTestServer struct {
+	elc.UnimplementedMsgServer
+	batchCalls  int
+	updateCalls int
+}
+
+func (s *explicitStateParityTestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
+	req, err := recvSpeculativeBatchStreamRequest(stream)
+	if err != nil {
+		return err
+	}
+	s.batchCalls++
+	units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, len(req.Units))
+	for i := range req.Units {
+		units = append(units, &elc.StitchedSpeculativeUpdateClientUnitResult{
+			Response: makeExplicitStateParityResponse(i),
+		})
+	}
+	return stream.SendAndClose(&elc.ExecuteSpeculativeUpdateClientBatchResponse{
+		ClientId: req.ClientId,
+		Units:    units,
+	})
+}
+
+func (s *explicitStateParityTestServer) UpdateClientStream(stream elc.Msg_UpdateClientStreamServer) error {
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			resp := makeExplicitStateParityResponse(s.updateCalls)
+			s.updateCalls++
+			return stream.SendAndClose(&resp)
+		}
+		if err != nil {
+			return err
+		}
+		if chunk == nil {
+			return fmt.Errorf("received nil update client stream chunk")
+		}
+	}
+}
+
+func makeExplicitStateParityResponse(i int) elc.MsgUpdateClientResponse {
+	return elc.MsgUpdateClientResponse{
+		Message:   mustMakeExplicitStateTestHeaderedUpdateStateMessage(uint64(11+i), byte(i+1)),
+		Signature: []byte(fmt.Sprintf("sig-%d", i)),
+	}
+}
+
 func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
 	initChunk, err := stream.Recv()
 	if err != nil {
@@ -520,9 +591,7 @@ func mustPackTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) *c
 }
 
 // mustBuildTMHeaderForExplicitStateTest returns both the typed header and its
-// packed Any form. Use it for tests that exercise the serial fallback path,
-// because the streaming worker clears the packed Any after a successful Send
-// and the fallback repacks from the typed header.
+// packed Any form. Use it for tests that need both representations.
 func mustBuildTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) (*tmclienttypes.Header, *codectypes.Any) {
 	t.Helper()
 	header := &tmclienttypes.Header{
@@ -606,7 +675,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 			"07-tendermint-11",
 			false,
 			[]byte("signer"),
-			"test",
+			nil,
 		)
 		if err != nil {
 			done <- err
@@ -647,7 +716,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	}
 }
 
-func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesNilAndIncompleteBaseStateUnits(t *testing.T) {
+func TestExecuteExplicitStateSourceHeaderUnitStreamRejectsNilAndIncompleteBaseStateUnits(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
@@ -714,22 +783,16 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSerializesNilAndIncompleteBas
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
-		"test",
+		nil,
 	)
-	if err != nil {
-		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
+	if err == nil {
+		t.Fatal("expected incomplete base-state unit to fail")
 	}
-	if len(results) != 4 {
+	if len(results) != 0 {
 		t.Fatalf("unexpected result count: %d", len(results))
 	}
-	if svc.batchCalls != 2 {
-		t.Fatalf("expected speculative batches around serial base-state units, got %d", svc.batchCalls)
-	}
-	if len(svc.batchUnitCounts) != 2 || svc.batchUnitCounts[0] != 1 || svc.batchUnitCounts[1] != 1 {
-		t.Fatalf("unexpected speculative batch unit counts: %#v", svc.batchUnitCounts)
-	}
-	if svc.updateCalls != 2 {
-		t.Fatalf("expected two serial update-client calls for nil/incomplete base-state units, got %d", svc.updateCalls)
+	if svc.updateCalls != 0 {
+		t.Fatalf("expected serial update-client fallback not to be used, got %d", svc.updateCalls)
 	}
 }
 
@@ -795,7 +858,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamFlushesBatchOnByteBudget(t *t
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
-		"test",
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
@@ -808,6 +871,120 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamFlushesBatchOnByteBudget(t *t
 	}
 	if len(svc.batchUnitCounts) != 2 || svc.batchUnitCounts[0] != 1 || svc.batchUnitCounts[1] != 1 {
 		t.Fatalf("expected byte budget to keep batches at one unit each, got counts=%#v", svc.batchUnitCounts)
+	}
+}
+
+func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateParityTestServer{}
+	elc.RegisterMsgServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	headers := []core.Header{
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 11}},
+	}
+	activeEnclaveKey := &enclave.EnclaveKeyInfo{
+		KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+			Ias: &enclave.IASEnclaveKeyInfo{
+				EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+			},
+		},
+	}
+
+	explicitResults, err := (&Prover{
+		config: ProverConfig{ElcClientId: "07-tendermint-11"},
+		codec:  coreCodec,
+		originProver: fakeOriginProver{
+			headers:             headers,
+			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: activeEnclaveKey,
+	}).updateELCForUpdateClient(
+		context.Background(),
+		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
+		headers[len(headers)-1],
+	)
+	if err != nil {
+		t.Fatalf("explicit updateELCForUpdateClient() error = %v", err)
+	}
+
+	legacyResults, err := (&Prover{
+		config: ProverConfig{
+			ElcClientId:                      "07-tendermint-11",
+			DisableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
+		originProver: fakeOriginProver{
+			headers: headers,
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: activeEnclaveKey,
+	}).updateELCForUpdateClient(
+		context.Background(),
+		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
+		headers[len(headers)-1],
+	)
+	if err != nil {
+		t.Fatalf("legacy updateELCForUpdateClient() error = %v", err)
+	}
+
+	if svc.batchCalls != 1 {
+		t.Fatalf("expected one explicit-state batch call, got %d", svc.batchCalls)
+	}
+	if svc.updateCalls != len(headers) {
+		t.Fatalf("expected %d legacy update-client calls, got %d", len(headers), svc.updateCalls)
+	}
+	assertUpdateClientResultsEqual(t, explicitResults, legacyResults)
+}
+
+func assertUpdateClientResultsEqual(t *testing.T, got, want []*elcupdater_storage.UpdateClientResult) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("result length mismatch: got=%d want=%d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i] == nil || want[i] == nil {
+			t.Fatalf("nil result at index %d: got=%#v want=%#v", i, got[i], want[i])
+		}
+		if !bytes.Equal(got[i].Message, want[i].Message) {
+			t.Fatalf("message mismatch at index %d: got=%x want=%x", i, got[i].Message, want[i].Message)
+		}
+		if !bytes.Equal(got[i].Signature, want[i].Signature) {
+			t.Fatalf("signature mismatch at index %d: got=%x want=%x", i, got[i].Signature, want[i].Signature)
+		}
+		if !bytes.Equal(got[i].Signer, want[i].Signer) {
+			t.Fatalf("signer mismatch at index %d: got=%x want=%x", i, got[i].Signer, want[i].Signer)
+		}
 	}
 }
 
@@ -1101,16 +1278,16 @@ func TestUpdateELCForUpdateClientSingleHeaderStaysSingleUnitBatch(t *testing.T) 
 	}
 }
 
-func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *testing.T) {
+func TestUpdateELCForUpdateClientReturnsErrorWhenBatchRPCUnavailable(t *testing.T) {
 	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
 		t.Fatalf("InitLogger() error = %v", err)
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
-	fallbackServer := &explicitStateFallbackTestServer{}
-	elc.RegisterQueryServer(server, fallbackServer)
-	elc.RegisterMsgServer(server, fallbackServer)
+	unsupportedBatchServer := &unsupportedSpeculativeBatchServer{}
+	elc.RegisterQueryServer(server, unsupportedBatchServer)
+	elc.RegisterMsgServer(server, unsupportedBatchServer)
 	defer server.Stop()
 	go func() {
 		if err := server.Serve(lis); err != nil {
@@ -1167,20 +1344,115 @@ func TestUpdateELCForUpdateClientFallsBackToSerialWhenBatchRPCUnavailable(t *tes
 		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
 	)
-	if err != nil {
-		t.Fatalf("updateELCForUpdateClient() error = %v", err)
+	if err == nil {
+		t.Fatal("expected updateELCForUpdateClient() to fail when speculative batch RPC is unavailable")
 	}
-	if fallbackServer.batchCalls != 1 {
-		t.Fatalf("expected speculative batch to be attempted once, got %d", fallbackServer.batchCalls)
+	if unsupportedBatchServer.batchCalls != 1 {
+		t.Fatalf("expected speculative batch to be attempted once, got %d", unsupportedBatchServer.batchCalls)
 	}
-	if fallbackServer.updateCalls != 1 {
-		t.Fatalf("expected serial update-client fallback to be used once, got %d", fallbackServer.updateCalls)
+	if unsupportedBatchServer.updateCalls != 0 {
+		t.Fatalf("expected serial update-client fallback not to be used, got %d", unsupportedBatchServer.updateCalls)
 	}
-	if len(results) != 1 {
+	if len(results) != 0 {
 		t.Fatalf("unexpected result count: %d", len(results))
 	}
-	if _, err := lcptypes.EthABIDecodeHeaderedProxyMessage(results[0].Message); err != nil {
-		t.Fatalf("result message decode error = %v", err)
+}
+
+func TestExecuteExplicitStateSourceHeaderUnitStreamCancelsBlockedSourceProducerOnBatchError(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	secondSendAttempted := make(chan struct{})
+	elc.RegisterMsgServer(server, &blockingSpeculativeBatchErrorServer{
+		secondSendAttempted: secondSendAttempted,
+	})
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	unitStream := make(chan *ExplicitStateSourceHeaderUnitOrError)
+	producerCtx, producerCancel := context.WithCancel(context.Background())
+	defer producerCancel()
+	producerStoppedAt := make(chan int, 1)
+	go func() {
+		defer close(unitStream)
+		for i := 0; i < 10; i++ {
+			if i == 1 {
+				close(secondSendAttempted)
+			}
+			select {
+			case unitStream <- &ExplicitStateSourceHeaderUnitOrError{Unit: &ExplicitStateSourceHeaderUnit{
+				AnyHeader: makeSpeculativeBatchTestUpdate("07-tendermint-11", []byte("signer"), i).Header,
+				BaseState: &ExplicitStateRef{
+					PrevHeight:     &clienttypes.Height{RevisionHeight: uint64(10 + i)},
+					ClientState:    &codectypes.Any{TypeUrl: fmt.Sprintf("client/%d", i), Value: []byte("client")},
+					ConsensusState: &codectypes.Any{TypeUrl: fmt.Sprintf("consensus/%d", i), Value: []byte("consensus")},
+				},
+			}}:
+			case <-producerCtx.Done():
+				producerStoppedAt <- i
+				return
+			}
+		}
+		producerStoppedAt <- -1
+	}()
+
+	var cancelWaitErr error
+	producerStoppedIndex := -2
+	cancelAndWaitForProducer := func() {
+		producerCancel()
+		select {
+		case producerStoppedIndex = <-producerStoppedAt:
+		case <-time.After(2 * time.Second):
+			cancelWaitErr = fmt.Errorf("producer did not stop after cancellation")
+		}
+	}
+
+	pr := &Prover{
+		config: ProverConfig{
+			ElcClientId:                        "07-tendermint-11",
+			MaxSpeculativeBatchUnitsPerRequest: 1,
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}
+	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+		context.Background(),
+		unitStream,
+		"07-tendermint-11",
+		false,
+		[]byte("signer"),
+		cancelAndWaitForProducer,
+	)
+	if err == nil {
+		t.Fatal("expected speculative batch error")
+	}
+	if len(results) != 0 {
+		t.Fatalf("unexpected result count: %d", len(results))
+	}
+	if cancelWaitErr != nil {
+		t.Fatal(cancelWaitErr)
+	}
+	if producerStoppedIndex != 1 {
+		t.Fatalf("expected producer to be cancelled while sending unit 1, got %d", producerStoppedIndex)
 	}
 }
 
@@ -1191,9 +1463,9 @@ func TestUpdateELCForUpdateClientDisablesExplicitStateWhenConfigDisabled(t *test
 
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
-	fallbackServer := &explicitStateFallbackTestServer{}
-	elc.RegisterQueryServer(server, fallbackServer)
-	elc.RegisterMsgServer(server, fallbackServer)
+	unsupportedBatchServer := &unsupportedSpeculativeBatchServer{}
+	elc.RegisterQueryServer(server, unsupportedBatchServer)
+	elc.RegisterMsgServer(server, unsupportedBatchServer)
 	defer server.Stop()
 	go func() {
 		if err := server.Serve(lis); err != nil {
@@ -1248,72 +1520,14 @@ func TestUpdateELCForUpdateClientDisablesExplicitStateWhenConfigDisabled(t *test
 	if err != nil {
 		t.Fatalf("updateELCForUpdateClient() error = %v", err)
 	}
-	if fallbackServer.batchCalls != 0 {
-		t.Fatalf("expected speculative batch to be disabled, got %d calls", fallbackServer.batchCalls)
+	if unsupportedBatchServer.batchCalls != 0 {
+		t.Fatalf("expected speculative batch to be disabled, got %d calls", unsupportedBatchServer.batchCalls)
 	}
-	if fallbackServer.updateCalls != 1 {
-		t.Fatalf("expected serial update-client to be used once, got %d", fallbackServer.updateCalls)
+	if unsupportedBatchServer.updateCalls != 1 {
+		t.Fatalf("expected serial update-client to be used once, got %d", unsupportedBatchServer.updateCalls)
 	}
 	if len(results) != 1 {
 		t.Fatalf("unexpected result count: %d", len(results))
-	}
-}
-
-func TestShouldLogSerialUpdateClientFallbackSuppressesUnimplemented(t *testing.T) {
-	err := fmt.Errorf(
-		"failed explicit-state update client batch: %w",
-		status.Error(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented"),
-	)
-
-	if !shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected Unimplemented to trigger serial fallback")
-	}
-	if shouldLogSerialUpdateClientFallback(err) {
-		t.Fatal("expected Unimplemented fallback log to be suppressed")
-	}
-}
-
-func TestShouldFallbackToSerialUpdateClientAllowsBaseStateMismatch(t *testing.T) {
-	err := fmt.Errorf(
-		"failed explicit-state update client batch: %w",
-		status.Error(codes.Aborted, "BaseStateMismatch: base prev_height mismatch: expected=10 observed=11"),
-	)
-
-	if !shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected BaseStateMismatch to trigger serial fallback")
-	}
-	if !shouldLogSerialUpdateClientFallback(err) {
-		t.Fatal("expected BaseStateMismatch fallback log to be kept")
-	}
-}
-
-func TestShouldFallbackToSerialUpdateClientAllowsDependencyStateMismatch(t *testing.T) {
-	err := fmt.Errorf(
-		"failed explicit-state update client batch: %w",
-		status.Error(codes.Aborted, "DependencyStateMismatch: unit unit-0001 base state does not match dependency unit-0000 post state"),
-	)
-
-	if !shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected DependencyStateMismatch to trigger serial fallback")
-	}
-}
-
-func TestShouldFallbackToSerialUpdateClientRejectsEOF(t *testing.T) {
-	err := fmt.Errorf("send failed: %w", io.EOF)
-
-	if shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected EOF not to trigger serial fallback")
-	}
-}
-
-func TestShouldFallbackToSerialUpdateClientRejectsConflictingWriteSet(t *testing.T) {
-	err := fmt.Errorf(
-		"failed explicit-state update client batch: %w",
-		status.Error(codes.Aborted, "ConflictingWriteSet: independent speculative units unit-0000 and unit-0001 write the same key clients/arbitrum-1/clientState"),
-	)
-
-	if shouldFallbackToSerialUpdateClient(err) {
-		t.Fatal("expected ConflictingWriteSet not to trigger serial fallback")
 	}
 }
 
@@ -1345,14 +1559,18 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 	if !ok {
 		t.Fatal("expected chunk provider to be used")
 	}
-	units, err := drainExplicitStateSourceHeaderUnitStream(unitStream)
+	item, ok := <-unitStream
+	if !ok {
+		t.Fatal("expected one source unit")
+	}
+	unit, err := explicitStateSourceHeaderUnitFromStreamItemOrError(item, 0)
 	if err != nil {
-		t.Fatalf("drainExplicitStateSourceHeaderUnitStream() error = %v", err)
+		t.Fatalf("explicitStateSourceHeaderUnitFromStreamItemOrError() error = %v", err)
 	}
-	if len(units) != 1 {
-		t.Fatalf("unexpected source unit count: %d", len(units))
+	if unit != expected[0] {
+		t.Fatalf("expected chunk provider result to be used directly: %#v", unit)
 	}
-	if units[0] != expected[0] {
-		t.Fatalf("expected chunk provider result to be used directly: %#v", units[0])
+	if item, ok := <-unitStream; ok {
+		t.Fatalf("unexpected extra source unit: %#v", item)
 	}
 }

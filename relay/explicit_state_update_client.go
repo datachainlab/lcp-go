@@ -19,20 +19,14 @@ func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
 		baseState.ConsensusState != nil
 }
 
-func clearExplicitStateSourceHeaderUnits(units []*ExplicitStateSourceHeaderUnit) []*ExplicitStateSourceHeaderUnit {
-	clear(units)
-	return units[:0]
-}
-
 func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	ctx context.Context,
 	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
-) ([]*elcupdater_storage.UpdateClientResult, []*ExplicitStateSourceHeaderUnit, error) {
+) ([]*elcupdater_storage.UpdateClientResult, error) {
 	var results []*elcupdater_storage.UpdateClientResult
-	var fallbackUnits []*ExplicitStateSourceHeaderUnit
 
 	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
 	maxBatchBytes := pr.config.GetMaxSpeculativeBatchBytesPerRequest()
@@ -105,44 +99,29 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	for item := range unitStream {
 		sourceUnit, err := explicitStateSourceHeaderUnitFromStreamItemOrError(item, unitIndex)
 		if err != nil {
-			return nil, fallbackUnits, err
+			return nil, err
 		}
 		if !hasCanonicalExplicitStatePayload(sourceUnit.BaseState) {
-			fallbackUnits = append(fallbackUnits, sourceUnit)
-			if err := flushBatch(); err != nil {
-				return results, fallbackUnits, err
-			}
-			serialResults, err := pr.executeELCUpdateHeaderUnits(
-				ctx,
-				[]*ExplicitStateSourceHeaderUnit{sourceUnit},
-				elcClientID,
-				includeState,
-				signer,
+			return nil, fmt.Errorf(
+				"explicit-state source header unit missing complete base state: index=%d unit_id=%q",
+				unitIndex,
+				buildSpeculativeUnitID(unitIndex),
 			)
-			if err != nil {
-				return results, fallbackUnits, err
-			}
-			results = append(results, serialResults...)
-			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
-			unitIndex++
-			continue
 		}
 		headerBytes := 0
 		if sourceUnit.AnyHeader != nil {
 			headerBytes = len(sourceUnit.AnyHeader.Value)
 		}
 		// Flush the in-flight batch before appending a unit whose header would
-		// push aggregate retention past the byte cap. The retention is bounded
-		// per batch (cleared in flushBatch's success path), so this caps peak
-		// fallback memory by batch boundary rather than maxUnits * header_size.
+		// push aggregate streamed payload past the byte cap. This keeps peak
+		// request memory bounded by batch boundary rather than
+		// maxUnits * header_size.
 		if sender != nil && headerBytes > 0 && batchBytes+headerBytes > maxBatchBytes {
 			if err := flushBatch(); err != nil {
-				return results, fallbackUnits, err
+				return nil, err
 			}
-			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
 		}
 
-		fallbackUnits = append(fallbackUnits, sourceUnit)
 		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
 		unitID := buildSpeculativeUnitID(unitIndex)
@@ -153,7 +132,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			Signer:       signer,
 		}
 		if err := openBatch(); err != nil {
-			return results, fallbackUnits, err
+			return nil, err
 		}
 		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
 		if err := sender.Send(&SpeculativeUpdateClientUnit{
@@ -162,16 +141,12 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			BaseState: baseState,
 		}); err != nil {
 			err, _ = sender.enrichSendError(err)
-			return results, fallbackUnits, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
+			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
 		}
 		// The gRPC layer has already marshalled and queued the header bytes, so
-		// release our in-process copy when the typed header is available for
-		// serial fallback repacking. Providers may supply only AnyHeader; keep it
-		// in that case because ensureAnyHeaderForSourceUnit cannot repack without
-		// sourceUnit.Header.
-		if sourceUnit.Header != nil {
-			sourceUnit.AnyHeader = nil
-		}
+		// release our in-process copy. Batch failures are surfaced as errors
+		// instead of draining the source stream for serial fallback.
+		sourceUnit.AnyHeader = nil
 		update.Header = nil
 		batchSigners = append(batchSigners, update.Signer)
 		batchBytes += headerBytes
@@ -179,16 +154,14 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 
 		if len(batchSigners) == maxUnits {
 			if err := flushBatch(); err != nil {
-				return results, fallbackUnits, err
+				return nil, err
 			}
-			fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
 		}
 	}
 	if err := flushBatch(); err != nil {
-		return results, fallbackUnits, err
+		return nil, err
 	}
-	fallbackUnits = clearExplicitStateSourceHeaderUnits(fallbackUnits)
-	return results, fallbackUnits, nil
+	return results, nil
 }
 
 func logExplicitStateUnitSend(

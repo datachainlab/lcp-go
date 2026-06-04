@@ -22,13 +22,17 @@ const (
 	// It is necessary to subtract from 4 MB to account for metadata size.
 	DefaultMaxChunkSize                = 4*1024*1024 - 1024
 	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
-	MaxSpeculativeBatchUnitsLimit      = 256
-	DefaultMaxSpeculativeBatchUnits    = MaxSpeculativeBatchUnitsLimit
+	DefaultMaxSpeculativeBatchUnits    = 256
+	// MaxSpeculativeBatchUnitsLimit is the peer LCP service protocol limit, not
+	// just a relayer default. Keep it in sync with LCP's
+	// MAX_SPECULATIVE_BATCH_UNITS and raise both sides together before allowing
+	// larger requests.
+	MaxSpeculativeBatchUnitsLimit = DefaultMaxSpeculativeBatchUnits
 	// DefaultMaxSpeculativeBatchBytes caps the per-batch in-flight header
-	// payload that the relayer retains for fallback. The streaming worker
-	// flushes the current batch whenever appending another unit would exceed
-	// this limit, which keeps peak memory bounded even when individual
-	// upstream headers (for example Arbitrum size-capped chunks) are large.
+	// payload. The streaming worker flushes the current batch whenever appending
+	// another unit would exceed this limit, which keeps peak request memory
+	// bounded even when individual upstream headers or size-capped chunks are
+	// large.
 	DefaultMaxSpeculativeBatchBytes = 192 * 1024 * 1024
 )
 
@@ -124,7 +128,7 @@ var speculativeBatchBytesPerRequestOverride int
 // GetMaxSpeculativeBatchBytesPerRequest returns the per-batch in-flight header
 // payload cap. The streaming worker flushes the current speculative batch
 // before adding another unit when the accumulated header bytes would exceed
-// this value, bounding fallback retention memory independent of unit count.
+// this value, bounding request memory independent of unit count.
 func (pc ProverConfig) GetMaxSpeculativeBatchBytesPerRequest() int {
 	if speculativeBatchBytesPerRequestOverride > 0 {
 		return speculativeBatchBytesPerRequestOverride

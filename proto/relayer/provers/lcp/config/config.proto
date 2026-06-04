@@ -56,6 +56,8 @@ message ProverConfig {
     string elc_updater_grpc_address = 34;
 
     // Max speculative UpdateClient units per request.
+    // Zero uses the relayer default. Values above the current LCP service
+    // protocol limit are rejected by config validation.
     uint32 max_speculative_batch_units_per_request = 35;
 
     // Disable the explicit-state UpdateClient path for this prover.

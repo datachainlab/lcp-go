@@ -397,7 +397,9 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
 	if pr.shouldUseExplicitStateUpdateClient() {
-		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(ctx, sourceChain, latestHeader)
+		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
+		defer cancelExplicitState()
+		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, sourceChain, latestHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -408,7 +410,7 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 				elcClientID,
 				includeState,
 				signer,
-				explicitStateFallbackOperationEnclaveKeyUpdate,
+				cancelExplicitState,
 			)
 			if err != nil {
 				return nil, err

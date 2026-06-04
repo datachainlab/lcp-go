@@ -13,7 +13,6 @@ type (
 )
 
 type LCPServiceClient struct {
-	conn *grpc.ClientConn
 	ELCMsgClient
 	ELCQueryClient
 	EnclaveQueryClient
@@ -21,7 +20,6 @@ type LCPServiceClient struct {
 
 func NewLCPServiceClient(conn *grpc.ClientConn) LCPServiceClient {
 	return LCPServiceClient{
-		conn:               conn,
 		ELCMsgClient:       elc.NewMsgClient(conn),
 		ELCQueryClient:     elc.NewQueryClient(conn),
 		EnclaveQueryClient: enclave.NewQueryClient(conn),

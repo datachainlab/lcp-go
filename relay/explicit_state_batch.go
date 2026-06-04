@@ -7,7 +7,7 @@ import (
 	"io"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	"github.com/cosmos/gogoproto/proto"
+	gogoproto "github.com/cosmos/gogoproto/proto"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 )
@@ -138,7 +138,7 @@ func sendSpeculativeUpdateClientUnit(
 			},
 		},
 	}
-	if size := proto.Size(unitInitChunk); size > DefaultMaxChunkSize {
+	if size := gogoproto.Size(unitInitChunk); size > DefaultMaxChunkSize {
 		return fmt.Errorf(
 			"unit init chunk exceeds max safe speculative batch stream chunk size: unit_id=%q size=%d max=%d",
 			unit.UnitId,
@@ -189,13 +189,6 @@ func validateSpeculativeBatchStreamChunkSize(chunkSize uint32) error {
 	return nil
 }
 
-func unitIDForError(unit *SpeculativeUpdateClientUnit) string {
-	if unit == nil {
-		return ""
-	}
-	return unit.UnitId
-}
-
 func cloneExplicitStateRef(ref *ExplicitStateRef) *ExplicitStateRef {
 	if ref == nil {
 		return nil
@@ -217,12 +210,9 @@ func cloneAny(any *codectypes.Any) *codectypes.Any {
 	if any == nil {
 		return nil
 	}
-	return &codectypes.Any{
-		TypeUrl: any.TypeUrl,
-		Value:   append([]byte(nil), any.Value...),
-	}
+	return gogoproto.Clone(any).(*codectypes.Any)
 }
 
 func buildSpeculativeUnitID(i int) string {
-	return fmt.Sprintf("unit-%04d", i)
+	return fmt.Sprintf("unit-%d", i)
 }

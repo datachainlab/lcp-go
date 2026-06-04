@@ -57,6 +57,9 @@ func TestSpeculativeBatchStreamSenderEnrichesEOFWithServerStatus(t *testing.T) {
 	if !closed {
 		t.Fatal("expected EOF enrichment to close the stream with CloseAndRecv")
 	}
+	if !stream.closeAndRecvCalled {
+		t.Fatal("expected CloseAndRecv to be called")
+	}
 	if !strings.Contains(err.Error(), "server status after send failure") {
 		t.Fatalf("expected enriched server status, got %v", err)
 	}
@@ -68,17 +71,11 @@ func TestSpeculativeBatchStreamSenderEnrichesEOFWithServerStatus(t *testing.T) {
 type recordingSpeculativeBatchStream struct {
 	grpc.ClientStream
 	sent               []*elc.MsgSpeculativeUpdateClientBatchStreamChunk
-	sendErrAfter       int
-	sendErr            error
 	closeErr           error
 	closeAndRecvCalled bool
-	closeSendCalled    bool
 }
 
 func (s *recordingSpeculativeBatchStream) Send(m *elc.MsgSpeculativeUpdateClientBatchStreamChunk) error {
-	if s.sendErrAfter > 0 && len(s.sent) >= s.sendErrAfter {
-		return s.sendErr
-	}
 	s.sent = append(s.sent, m)
 	return nil
 }
@@ -92,6 +89,5 @@ func (s *recordingSpeculativeBatchStream) CloseAndRecv() (*elc.ExecuteSpeculativ
 }
 
 func (s *recordingSpeculativeBatchStream) CloseSend() error {
-	s.closeSendCalled = true
 	return nil
 }
