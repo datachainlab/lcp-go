@@ -64,6 +64,14 @@ func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcCli
 	if height.IsZero() {
 		return nil, fmt.Errorf("LCP ELC canonical latest height is zero: client_id=%s", elcClientID)
 	}
+	pr.getLogger().InfoContext(
+		ctx,
+		"queried LCP canonical explicit-state base",
+		"elc_client_id", elcClientID,
+		"base_height", height.String(),
+		"client_state_type", res.ClientState.TypeUrl,
+		"consensus_state_type", res.ConsensusState.TypeUrl,
+	)
 	return &ExplicitStateBase{
 		Height:         height,
 		ClientState:    cloneExplicitStateAny(res.ClientState),
