@@ -27,14 +27,15 @@ func isExplicitStateBaseStateMismatchError(err error) bool {
 	//
 	// The "BaseStateMismatch" substring is the Debug representation of
 	// SpeculativeBatchFailureKind::BaseStateMismatch emitted by the LCP service
-	// gRPC layer. The "canonical speculative base" substring is part of the
+	// gRPC layer. The "stored speculative base" substring is part of the
 	// lower-level enclave/store validation error when the provided explicit
-	// base client_state or consensus_state does not match the canonical LCP
-	// store. Keep both checks until the LCP service exposes a typed gRPC error
-	// detail or stable machine-readable error code for speculative failures.
+	// base client_state or consensus_state does not match the base state stored
+	// in LCP at the requested previous height. Keep both checks until the LCP
+	// service exposes a typed gRPC error detail or stable machine-readable error
+	// code for speculative failures.
 	msg := err.Error()
 	return strings.Contains(msg, "BaseStateMismatch") ||
-		strings.Contains(msg, "canonical speculative base")
+		strings.Contains(msg, "stored speculative base")
 }
 
 func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcClientID string) (*ExplicitStateBase, error) {

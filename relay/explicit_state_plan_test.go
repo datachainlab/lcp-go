@@ -435,7 +435,7 @@ func (s *explicitStateCanonicalRetryServer) SpeculativeUpdateClientBatchStream(s
 	}
 	s.batchCalls++
 	if s.batchCalls == 1 {
-		return status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=canonical speculative base client_state mismatch: client_id=07-tendermint-11")
+		return status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=stored speculative base client_state mismatch: client_id=07-tendermint-11")
 	}
 	units := make([]*elc.StitchedSpeculativeUpdateClientUnitResult, 0, len(req.Units))
 	for i := range req.Units {
@@ -1085,12 +1085,12 @@ func TestIsExplicitStateBaseStateMismatchError(t *testing.T) {
 		},
 		{
 			name: "grpc status",
-			err:  status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=canonical speculative base client_state mismatch"),
+			err:  status.Error(codes.Aborted, "BaseStateMismatch: invalid argument: descr=stored speculative base client_state mismatch"),
 			want: true,
 		},
 		{
 			name: "detail",
-			err:  fmt.Errorf("canonical speculative base client_state mismatch: client_id=07-tendermint-11"),
+			err:  fmt.Errorf("stored speculative base client_state mismatch: client_id=07-tendermint-11"),
 			want: true,
 		},
 		{
