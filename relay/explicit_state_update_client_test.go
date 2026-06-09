@@ -6,16 +6,24 @@ import (
 	gogoproto "github.com/cosmos/gogoproto/proto"
 )
 
-func TestShouldUseExplicitStateUpdateClientUsesProverConfig(t *testing.T) {
+func TestShouldUseExplicitStateUpdateClientRequiresConfigAndProvider(t *testing.T) {
 	if got := (&Prover{}).shouldUseExplicitStateUpdateClient(); got {
 		t.Fatal("expected explicit-state update client to be disabled by default")
 	}
 
-	pr := &Prover{
+	withoutProvider := &Prover{
 		config: ProverConfig{EnableExplicitStateUpdateClient: true},
 	}
-	if got := pr.shouldUseExplicitStateUpdateClient(); !got {
-		t.Fatal("expected explicit-state update client to be enabled by config")
+	if got := withoutProvider.shouldUseExplicitStateUpdateClient(); got {
+		t.Fatal("expected explicit-state update client to require an ExplicitStateChunkProvider")
+	}
+
+	withProvider := &Prover{
+		config:       ProverConfig{EnableExplicitStateUpdateClient: true},
+		originProver: fakeOriginProver{},
+	}
+	if got := withProvider.shouldUseExplicitStateUpdateClient(); !got {
+		t.Fatal("expected explicit-state update client to be enabled when config and provider are present")
 	}
 }
 

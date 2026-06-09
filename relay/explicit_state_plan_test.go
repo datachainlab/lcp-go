@@ -45,6 +45,10 @@ type unsupportedSpeculativeBatchServer struct {
 	updateCalls int
 }
 
+func (s *unsupportedSpeculativeBatchServer) Client(context.Context, *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	return makeExplicitStateQueryClientResponse(10)
+}
+
 func (s *unsupportedSpeculativeBatchServer) SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
 	s.batchCalls++
 	return status.Error(codes.Unimplemented, "method SpeculativeUpdateClientBatchStream not implemented")
@@ -349,9 +353,14 @@ func (s explicitStateIntegrationTestServer) SpeculativeUpdateClientBatchStream(s
 }
 
 type explicitStateParityTestServer struct {
+	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
 	batchCalls  int
 	updateCalls int
+}
+
+func (s *explicitStateParityTestServer) Client(context.Context, *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	return makeExplicitStateQueryClientResponse(10)
 }
 
 func (s *explicitStateParityTestServer) SpeculativeUpdateClientBatchStream(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) error {
@@ -394,6 +403,26 @@ func makeExplicitStateParityResponse(i int) elc.MsgUpdateClientResponse {
 		Message:   mustMakeExplicitStateTestHeaderedUpdateStateMessage(uint64(11+i), byte(i+1)),
 		Signature: []byte(fmt.Sprintf("sig-%d", i)),
 	}
+}
+
+func makeExplicitStateQueryClientResponse(height uint64) (*elc.QueryClientResponse, error) {
+	clientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{
+		LatestHeight: clienttypes.Height{RevisionHeight: height},
+	})
+	if err != nil {
+		return nil, err
+	}
+	consensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{
+		StateId: []byte(fmt.Sprintf("state-%d", height)),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &elc.QueryClientResponse{
+		Found:          true,
+		ClientState:    clientStateAny,
+		ConsensusState: consensusStateAny,
+	}, nil
 }
 
 type explicitStateCanonicalRetryServer struct {
@@ -907,6 +936,7 @@ func TestUpdateELCForUpdateClientExplicitStateMatchesLegacyResults(t *testing.T)
 	lis := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
 	svc := &explicitStateParityTestServer{}
+	elc.RegisterQueryServer(server, svc)
 	elc.RegisterMsgServer(server, svc)
 	defer server.Stop()
 	go func() {
@@ -1149,8 +1179,8 @@ func TestUpdateELCForUpdateClientRetriesExplicitStateFromCanonicalBase(t *testin
 	if len(results) != 1 {
 		t.Fatalf("unexpected result count: %d", len(results))
 	}
-	if svc.queryCalls != 1 {
-		t.Fatalf("expected canonical state to be re-queried on mismatch, got %d calls", svc.queryCalls)
+	if svc.queryCalls != 2 {
+		t.Fatalf("expected canonical state to be queried before each explicit-state attempt, got %d calls", svc.queryCalls)
 	}
 	if svc.batchCalls != 2 {
 		t.Fatalf("expected speculative batch to be retried once, got %d calls", svc.batchCalls)
@@ -1158,7 +1188,7 @@ func TestUpdateELCForUpdateClientRetriesExplicitStateFromCanonicalBase(t *testin
 	if len(originProver.bases) != 2 {
 		t.Fatalf("expected two chunk provider calls, got %d", len(originProver.bases))
 	}
-	if originProver.bases[0] != nil || originProver.bases[1].Height.RevisionHeight != 7 {
+	if originProver.bases[0].Height.RevisionHeight != 7 || originProver.bases[1].Height.RevisionHeight != 8 {
 		t.Fatalf("unexpected canonical base heights: %#v", originProver.bases)
 	}
 }
@@ -1236,8 +1266,8 @@ func TestUpdateELCRetriesExplicitStateFromCanonicalBase(t *testing.T) {
 	if len(responses) != 1 {
 		t.Fatalf("unexpected response count: %d", len(responses))
 	}
-	if svc.queryCalls != 2 {
-		t.Fatalf("expected initial freshness query plus one canonical base query, got %d calls", svc.queryCalls)
+	if svc.queryCalls != 3 {
+		t.Fatalf("expected initial freshness query plus one canonical base query per explicit-state attempt, got %d calls", svc.queryCalls)
 	}
 	if svc.batchCalls != 2 {
 		t.Fatalf("expected speculative batch to be retried once, got %d calls", svc.batchCalls)
@@ -1245,7 +1275,7 @@ func TestUpdateELCRetriesExplicitStateFromCanonicalBase(t *testing.T) {
 	if len(originProver.bases) != 2 {
 		t.Fatalf("expected two chunk provider calls, got %d", len(originProver.bases))
 	}
-	if originProver.bases[0] != nil || originProver.bases[1].Height.RevisionHeight != 8 {
+	if originProver.bases[0].Height.RevisionHeight != 8 || originProver.bases[1].Height.RevisionHeight != 9 {
 		t.Fatalf("unexpected canonical base heights: %#v", originProver.bases)
 	}
 }

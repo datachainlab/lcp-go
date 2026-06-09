@@ -13,7 +13,12 @@ import (
 )
 
 func (pr *Prover) shouldUseExplicitStateUpdateClient() bool {
-	return pr.config.EnableExplicitStateUpdateClient
+	return pr.config.EnableExplicitStateUpdateClient && pr.hasExplicitStateChunkProvider()
+}
+
+func (pr *Prover) hasExplicitStateChunkProvider() bool {
+	_, ok := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider)
+	return ok
 }
 
 func isExplicitStateBaseStateMismatchError(err error) bool {

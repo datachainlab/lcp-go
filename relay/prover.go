@@ -55,9 +55,10 @@ type ExplicitStateChunkProvider interface {
 	// SetupExplicitStateChunksForUpdate returns source header units for the
 	// explicit-state update-client path. Each emitted Unit must include a non-nil
 	// AnyHeader; incomplete explicit BaseState values are rejected by the
-	// consumer instead of falling back to serial update-client. If base is non-nil,
-	// implementations must build all headers/chunks from base.Height and must use
-	// base.ClientState and base.ConsensusState as the first unit's BaseState.
+	// consumer instead of falling back to serial update-client. The caller passes
+	// the current LCP canonical base; implementations must build all
+	// headers/chunks from base.Height and must use base.ClientState and
+	// base.ConsensusState as the first unit's BaseState.
 	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header, *ExplicitStateBase) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
 }
 
@@ -295,19 +296,11 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
 	if pr.shouldUseExplicitStateUpdateClient() {
-		_, hasExplicitStateProvider := unwrapExplicitStateOriginProver(pr.originProver).(ExplicitStateChunkProvider)
-		maxExplicitStateAttempts := 1
-		if hasExplicitStateProvider {
-			maxExplicitStateAttempts = 2
-		}
+		const maxExplicitStateAttempts = 2
 		for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
-			var base *ExplicitStateBase
-			if attempt > 0 {
-				var err error
-				base, err = pr.queryLCPCanonicalExplicitStateBase(ctx, pr.config.ElcClientId)
-				if err != nil {
-					return nil, err
-				}
+			base, err := pr.queryLCPCanonicalExplicitStateBase(ctx, pr.config.ElcClientId)
+			if err != nil {
+				return nil, err
 			}
 			explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
 			sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
