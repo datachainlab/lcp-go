@@ -528,6 +528,49 @@ func (p *fakeOriginProverWithBase) SetupExplicitStateChunksForUpdate(
 	}), nil
 }
 
+type fakeOriginProverWithInitialState struct {
+	fakeOriginProver
+	requestedHeights []ibcexported.Height
+}
+
+func (p *fakeOriginProverWithInitialState) CreateInitialLightClientState(_ context.Context, height ibcexported.Height) (ibcexported.ClientState, ibcexported.ConsensusState, error) {
+	p.requestedHeights = append(p.requestedHeights, height)
+	h, ok := height.(clienttypes.Height)
+	if !ok {
+		return nil, nil, fmt.Errorf("unexpected height type: %T", height)
+	}
+	return &lcptypes.ClientState{LatestHeight: h}, &lcptypes.ConsensusState{StateId: []byte(fmt.Sprintf("elc-state-%d", h.RevisionHeight))}, nil
+}
+
+type fakeOnChainLCPChain struct {
+	core.FinalityAwareChain
+	queryHeight       ibcexported.Height
+	clientStateHeight clienttypes.Height
+	stateID           []byte
+	consensusQueries  []ibcexported.Height
+}
+
+func (c *fakeOnChainLCPChain) LatestHeight(context.Context) (ibcexported.Height, error) {
+	return c.queryHeight, nil
+}
+
+func (c *fakeOnChainLCPChain) QueryClientState(core.QueryContext) (*clienttypes.QueryClientStateResponse, error) {
+	any, err := clienttypes.PackClientState(&lcptypes.ClientState{LatestHeight: c.clientStateHeight})
+	if err != nil {
+		return nil, err
+	}
+	return &clienttypes.QueryClientStateResponse{ClientState: any}, nil
+}
+
+func (c *fakeOnChainLCPChain) QueryClientConsensusState(_ core.QueryContext, height ibcexported.Height) (*clienttypes.QueryConsensusStateResponse, error) {
+	c.consensusQueries = append(c.consensusQueries, height)
+	any, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{StateId: append([]byte(nil), c.stateID...)})
+	if err != nil {
+		return nil, err
+	}
+	return &clienttypes.QueryConsensusStateResponse{ConsensusState: any}, nil
+}
+
 func recvSpeculativeBatchStreamRequest(stream elc.Msg_SpeculativeUpdateClientBatchStreamServer) (*ExecuteSpeculativeUpdateClientBatchRequest, error) {
 	initChunk, err := stream.Recv()
 	if err != nil {
@@ -1112,6 +1155,44 @@ func TestQueryLCPCanonicalExplicitStateBase(t *testing.T) {
 	}
 	if svc.queryCalls != 1 {
 		t.Fatalf("unexpected query calls: %d", svc.queryCalls)
+	}
+}
+
+func TestQueryExplicitStateBaseUsesOnChainCommittedHeight(t *testing.T) {
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	onChainHeight := clienttypes.Height{RevisionHeight: 9}
+	originProver := &fakeOriginProverWithInitialState{}
+	chain := &fakeOnChainLCPChain{
+		queryHeight:       clienttypes.Height{RevisionHeight: 100},
+		clientStateHeight: onChainHeight,
+		stateID:           []byte("on-chain-state-9"),
+	}
+	base, err := (&Prover{
+		codec:        coreCodec,
+		originProver: originProver,
+	}).queryExplicitStateBase(context.Background(), chain, "07-tendermint-11")
+	if err != nil {
+		t.Fatalf("queryExplicitStateBase() error = %v", err)
+	}
+	if base == nil || base.Height.RevisionHeight != onChainHeight.RevisionHeight {
+		t.Fatalf("unexpected base height: %#v", base)
+	}
+	if len(originProver.requestedHeights) != 1 || originProver.requestedHeights[0].GetRevisionHeight() != onChainHeight.RevisionHeight {
+		t.Fatalf("expected origin prover to build base at on-chain height, got %#v", originProver.requestedHeights)
+	}
+	if len(chain.consensusQueries) != 1 || chain.consensusQueries[0].GetRevisionHeight() != onChainHeight.RevisionHeight {
+		t.Fatalf("expected consensus query at on-chain height, got %#v", chain.consensusQueries)
+	}
+	var clientState ibcexported.ClientState
+	if err := coreCodec.UnpackAny(base.ClientState, &clientState); err != nil {
+		t.Fatalf("failed to unpack base client_state: %v", err)
+	}
+	if got := clientState.GetLatestHeight(); got.GetRevisionHeight() != onChainHeight.RevisionHeight {
+		t.Fatalf("unexpected packed base client_state height: %v", got)
 	}
 }
 

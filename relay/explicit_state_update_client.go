@@ -8,8 +8,10 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	clienttypes "github.com/cosmos/ibc-go/v8/modules/core/02-client/types"
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
+	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	"github.com/hyperledger-labs/yui-relayer/core"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -88,6 +90,114 @@ func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcCli
 		ClientState:    cloneExplicitStateAny(res.ClientState),
 		ConsensusState: cloneExplicitStateAny(res.ConsensusState),
 	}, nil
+}
+
+func (pr *Prover) queryExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain, elcClientID string) (*ExplicitStateBase, error) {
+	switch dstChain.(type) {
+	case LCPQuerier, *LCPQuerier:
+		pr.getLogger().InfoContext(
+			ctx,
+			"using LCP canonical explicit-state base for local LCP update",
+			"elc_client_id", elcClientID,
+		)
+		return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+	}
+	base, ok, err := pr.queryOnChainCommittedExplicitStateBase(ctx, dstChain)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return base, nil
+	}
+	pr.getLogger().InfoContext(
+		ctx,
+		"on-chain LCP explicit-state base is unavailable; falling back to LCP canonical base",
+		"elc_client_id", elcClientID,
+	)
+	return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+}
+
+func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain) (*ExplicitStateBase, bool, error) {
+	if dstChain == nil {
+		return nil, false, nil
+	}
+	queryHeight, err := dstChain.LatestHeight(ctx)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query destination latest height for explicit-state base: %w", err)
+	}
+	clientRes, err := dstChain.QueryClientState(core.NewQueryContext(ctx, queryHeight))
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query on-chain LCP client_state for explicit-state base: query_height=%v %w", queryHeight, err)
+	}
+	if clientRes == nil || clientRes.ClientState == nil {
+		return nil, true, fmt.Errorf("on-chain LCP client_state is nil for explicit-state base: query_height=%v", queryHeight)
+	}
+	var clientState exported.ClientState
+	if err := pr.codec.UnpackAny(clientRes.ClientState, &clientState); err != nil {
+		return nil, true, fmt.Errorf("failed to unpack on-chain client_state for explicit-state base: query_height=%v %w", queryHeight, err)
+	}
+	lcpClientState, ok := clientState.(*lcptypes.ClientState)
+	if !ok {
+		return nil, false, nil
+	}
+	baseHeight := lcpClientState.LatestHeight
+	if baseHeight.IsZero() {
+		return nil, true, fmt.Errorf("on-chain LCP latest height is zero for explicit-state base: query_height=%v", queryHeight)
+	}
+	consensusRes, err := dstChain.QueryClientConsensusState(core.NewQueryContext(ctx, queryHeight), baseHeight)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query on-chain LCP consensus_state for explicit-state base: query_height=%v base_height=%v %w", queryHeight, baseHeight, err)
+	}
+	if consensusRes == nil || consensusRes.ConsensusState == nil {
+		return nil, true, fmt.Errorf("on-chain LCP consensus_state is nil for explicit-state base: query_height=%v base_height=%v", queryHeight, baseHeight)
+	}
+	var consensusState exported.ConsensusState
+	if err := pr.codec.UnpackAny(consensusRes.ConsensusState, &consensusState); err != nil {
+		return nil, true, fmt.Errorf("failed to unpack on-chain LCP consensus_state for explicit-state base: query_height=%v base_height=%v %w", queryHeight, baseHeight, err)
+	}
+	lcpConsensusState, ok := consensusState.(*lcptypes.ConsensusState)
+	if !ok {
+		return nil, true, fmt.Errorf("unexpected on-chain consensus_state type for explicit-state base: query_height=%v base_height=%v consensus_state_type=%T", queryHeight, baseHeight, consensusState)
+	}
+	if len(lcpConsensusState.StateId) == 0 {
+		return nil, true, fmt.Errorf("on-chain LCP consensus_state state_id is empty for explicit-state base: query_height=%v base_height=%v", queryHeight, baseHeight)
+	}
+	baseClientState, baseConsensusState, err := pr.originProver.CreateInitialLightClientState(ctx, baseHeight)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to build ELC explicit-state base from on-chain committed height: base_height=%v %w", baseHeight, err)
+	}
+	if baseClientState == nil {
+		return nil, true, fmt.Errorf("built ELC explicit-state base client_state is nil: base_height=%v", baseHeight)
+	}
+	if baseConsensusState == nil {
+		return nil, true, fmt.Errorf("built ELC explicit-state base consensus_state is nil: base_height=%v", baseHeight)
+	}
+	if latest := baseClientState.GetLatestHeight(); latest.GetRevisionNumber() != baseHeight.GetRevisionNumber() ||
+		latest.GetRevisionHeight() != baseHeight.GetRevisionHeight() {
+		return nil, true, fmt.Errorf("built ELC explicit-state base height mismatch: base_height=%v client_state_latest_height=%v", baseHeight, latest)
+	}
+	baseClientStateAny, err := clienttypes.PackClientState(baseClientState)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to pack ELC explicit-state base client_state: base_height=%v %w", baseHeight, err)
+	}
+	baseConsensusStateAny, err := clienttypes.PackConsensusState(baseConsensusState)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to pack ELC explicit-state base consensus_state: base_height=%v %w", baseHeight, err)
+	}
+	pr.getLogger().InfoContext(
+		ctx,
+		"queried on-chain committed explicit-state base",
+		"query_height", queryHeight.String(),
+		"base_height", baseHeight.String(),
+		"on_chain_state_id", fmt.Sprintf("0x%x", lcpConsensusState.StateId),
+		"client_state_type", baseClientStateAny.TypeUrl,
+		"consensus_state_type", baseConsensusStateAny.TypeUrl,
+	)
+	return &ExplicitStateBase{
+		Height:         baseHeight,
+		ClientState:    cloneExplicitStateAny(baseClientStateAny),
+		ConsensusState: cloneExplicitStateAny(baseConsensusStateAny),
+	}, true, nil
 }
 
 func cloneExplicitStateAny(any *codectypes.Any) *codectypes.Any {

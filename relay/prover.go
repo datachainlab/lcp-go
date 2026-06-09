@@ -420,7 +420,7 @@ func (pr *Prover) tryExplicitStateUpdateClient(
 	}
 	const maxExplicitStateAttempts = 2
 	for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
-		base, err := pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+		base, err := pr.queryExplicitStateBase(ctx, dstChain, elcClientID)
 		if err != nil {
 			return nil, true, err
 		}
@@ -447,7 +447,7 @@ func (pr *Prover) tryExplicitStateUpdateClient(
 			if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
 				pr.getLogger().WarnContext(
 					ctx,
-					"explicit-state update client base state mismatch; retrying from LCP canonical state",
+					"explicit-state update client base state mismatch; retrying from committed explicit-state base",
 					"client_id", elcClientID,
 					"attempt", attempt+1,
 					"max_attempts", maxExplicitStateAttempts,
