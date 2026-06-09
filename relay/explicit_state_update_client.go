@@ -107,13 +107,11 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	var results []*elcupdater_storage.UpdateClientResult
 
 	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
-	maxBatchBytes := pr.config.GetMaxSpeculativeBatchBytesPerRequest()
 	var sender *speculativeBatchStreamSender
 	closed := true
 	batchSigners := make([][]byte, 0, maxUnits)
 	batchIndex := 0
 	unitIndex := 0
-	batchBytes := 0
 	defer func() {
 		if !closed && sender != nil {
 			_ = sender.CloseSend()
@@ -170,7 +168,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		sender = nil
 		batchSigners = batchSigners[:0]
 		batchIndex++
-		batchBytes = 0
 		return nil
 	}
 
@@ -186,20 +183,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 				buildSpeculativeUnitID(unitIndex),
 			)
 		}
-		headerBytes := 0
-		if sourceUnit.AnyHeader != nil {
-			headerBytes = len(sourceUnit.AnyHeader.Value)
-		}
-		// Flush the in-flight batch before appending a unit whose header would
-		// push aggregate streamed payload past the byte cap. This keeps peak
-		// request memory bounded by batch boundary rather than
-		// maxUnits * header_size.
-		if sender != nil && headerBytes > 0 && batchBytes+headerBytes > maxBatchBytes {
-			if err := flushBatch(); err != nil {
-				return nil, err
-			}
-		}
-
 		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
 
 		unitID := buildSpeculativeUnitID(unitIndex)
@@ -227,7 +210,6 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		sourceUnit.AnyHeader = nil
 		update.Header = nil
 		batchSigners = append(batchSigners, update.Signer)
-		batchBytes += headerBytes
 		unitIndex++
 
 		if len(batchSigners) == maxUnits {

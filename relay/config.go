@@ -22,18 +22,12 @@ const (
 	// It is necessary to subtract from 4 MB to account for metadata size.
 	DefaultMaxChunkSize                = 4*1024*1024 - 1024
 	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
-	DefaultMaxSpeculativeBatchUnits    = 256
 	// MaxSpeculativeBatchUnitsLimit is the peer LCP service protocol limit, not
 	// just a relayer default. Keep it in sync with LCP's
 	// MAX_SPECULATIVE_BATCH_UNITS and raise both sides together before allowing
 	// larger requests.
-	MaxSpeculativeBatchUnitsLimit = DefaultMaxSpeculativeBatchUnits
-	// DefaultMaxSpeculativeBatchBytes caps the per-batch in-flight header
-	// payload. The streaming worker flushes the current batch whenever appending
-	// another unit would exceed this limit, which keeps peak request memory
-	// bounded even when individual upstream headers or size-capped chunks are
-	// large.
-	DefaultMaxSpeculativeBatchBytes = 192 * 1024 * 1024
+	MaxSpeculativeBatchUnitsLimit   = 256
+	DefaultMaxSpeculativeBatchUnits = MaxSpeculativeBatchUnitsLimit
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -118,24 +112,6 @@ func (pc ProverConfig) GetMaxSpeculativeBatchUnitsPerRequest() int {
 		return DefaultMaxSpeculativeBatchUnits
 	}
 	return int(pc.MaxSpeculativeBatchUnitsPerRequest)
-}
-
-// speculativeBatchBytesPerRequestOverride lets tests dial the per-batch byte
-// cap down to a value compatible with synthetic header sizes. Production code
-// must not set this; the zero value yields the production default.
-var speculativeBatchBytesPerRequestOverride int
-
-// GetMaxSpeculativeBatchBytesPerRequest returns the per-batch in-flight header
-// payload cap. The streaming worker flushes the current speculative batch
-// before adding another unit when the accumulated header bytes would exceed
-// this value, bounding request memory independent of unit count.
-func (pc ProverConfig) GetMaxSpeculativeBatchBytesPerRequest() int {
-	if speculativeBatchBytesPerRequestOverride > 0 {
-		return speculativeBatchBytesPerRequestOverride
-	}
-	// Reserved for a future proto-level setting; until then, the default
-	// captures the operational target on its own.
-	return DefaultMaxSpeculativeBatchBytes
 }
 
 func (pc ProverConfig) Validate() error {
