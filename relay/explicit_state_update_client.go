@@ -10,6 +10,8 @@ import (
 	"github.com/cosmos/ibc-go/v8/modules/core/exported"
 	"github.com/datachainlab/lcp-go/relay/elc"
 	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func (pr *Prover) shouldUseExplicitStateUpdateClient() bool {
@@ -38,6 +40,9 @@ func isExplicitStateBaseStateMismatchError(err error) bool {
 	// in LCP at the requested previous height. Keep both checks until the LCP
 	// service exposes a typed gRPC error detail or stable machine-readable error
 	// code for speculative failures.
+	if status.Code(err) != codes.Aborted {
+		return false
+	}
 	msg := err.Error()
 	return strings.Contains(msg, "BaseStateMismatch") ||
 		strings.Contains(msg, "stored speculative base")
@@ -114,7 +119,7 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 	maxUnits := pr.config.GetMaxSpeculativeBatchUnitsPerRequest()
 	var sender *speculativeBatchStreamSender
 	closed := true
-	batchSigners := make([][]byte, 0, maxUnits)
+	batchUnitCount := 0
 	batchIndex := 0
 	unitIndex := 0
 	defer func() {
@@ -157,8 +162,8 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if err != nil {
 			return fmt.Errorf("failed explicit-state update client batch: %w", err)
 		}
-		if len(resp.Units) != len(batchSigners) {
-			return fmt.Errorf("unexpected speculative batch response shape: units=%d sent=%d", len(resp.Units), len(batchSigners))
+		if len(resp.Units) != batchUnitCount {
+			return fmt.Errorf("unexpected speculative batch response shape: units=%d sent=%d", len(resp.Units), batchUnitCount)
 		}
 		for i, unit := range resp.Units {
 			if unit == nil {
@@ -167,11 +172,11 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			results = append(results, &elcupdater_storage.UpdateClientResult{
 				Message:   unit.Response.Message,
 				Signature: unit.Response.Signature,
-				Signer:    batchSigners[i],
+				Signer:    signer,
 			})
 		}
 		sender = nil
-		batchSigners = batchSigners[:0]
+		batchUnitCount = 0
 		batchIndex++
 		return nil
 	}
@@ -185,12 +190,10 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			return nil, fmt.Errorf(
 				"explicit-state source header unit missing complete base state: index=%d unit_id=%q",
 				unitIndex,
-				buildSpeculativeUnitID(unitIndex),
+				buildSpeculativeUnitID(batchIndex, batchUnitCount),
 			)
 		}
-		baseState := cloneExplicitStateRef(sourceUnit.BaseState)
-
-		unitID := buildSpeculativeUnitID(unitIndex)
+		unitID := buildSpeculativeUnitID(batchIndex, batchUnitCount)
 		update := &elc.MsgUpdateClient{
 			ClientId:     elcClientID,
 			Header:       sourceUnit.AnyHeader,
@@ -200,24 +203,24 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		if err := openBatch(); err != nil {
 			return nil, err
 		}
-		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, len(batchSigners), unitIndex, includeState, update)
+		logExplicitStateUnitSend(ctx, pr, elcClientID, unitID, batchIndex, batchUnitCount, unitIndex, includeState, update)
 		if err := sender.Send(&SpeculativeUpdateClientUnit{
 			UnitId:    unitID,
 			Update:    update,
-			BaseState: baseState,
+			BaseState: sourceUnit.BaseState,
 		}); err != nil {
 			err, _ = sender.enrichSendError(err)
-			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", len(batchSigners), unitID, err)
+			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", batchUnitCount, unitID, err)
 		}
 		// The gRPC layer has already marshalled and queued the header bytes, so
 		// release our in-process copy. Batch failures are surfaced as errors
 		// instead of draining the source stream for serial fallback.
 		sourceUnit.AnyHeader = nil
 		update.Header = nil
-		batchSigners = append(batchSigners, update.Signer)
+		batchUnitCount++
 		unitIndex++
 
-		if len(batchSigners) == maxUnits {
+		if batchUnitCount == maxUnits {
 			if err := flushBatch(); err != nil {
 				return nil, err
 			}

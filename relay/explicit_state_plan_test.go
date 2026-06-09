@@ -135,7 +135,7 @@ func (s explicitStateSourceUnitStreamingObserveServer) SpeculativeUpdateClientBa
 		switch c := chunk.GetChunk().(type) {
 		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_UnitEnd:
 			unitCount++
-			if c.UnitEnd.UnitId == "unit-0" {
+			if c.UnitEnd.UnitId == "batch-0/unit-0" {
 				close(s.firstUnitEnd)
 			}
 		case *elc.MsgSpeculativeUpdateClientBatchStreamChunk_BatchEnd:
@@ -807,7 +807,6 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 			"07-tendermint-11",
 			false,
 			[]byte("signer"),
-			nil,
 		)
 		if err != nil {
 			done <- err
@@ -915,7 +914,6 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamRejectsNilAndIncompleteBaseSt
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
-		nil,
 	)
 	if err == nil {
 		t.Fatal("expected incomplete base-state unit to fail")
@@ -1031,8 +1029,8 @@ func TestIsExplicitStateBaseStateMismatchError(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "kind",
-			err:  fmt.Errorf("failed explicit-state update client batch: rpc error: code = Aborted desc = BaseStateMismatch: invalid argument"),
+			name: "wrapped grpc status",
+			err:  fmt.Errorf("failed explicit-state update client batch: %w", status.Error(codes.Aborted, "BaseStateMismatch: invalid argument")),
 			want: true,
 		},
 		{
@@ -1041,9 +1039,9 @@ func TestIsExplicitStateBaseStateMismatchError(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "detail",
+			name: "detail without aborted status",
 			err:  fmt.Errorf("stored speculative base client_state mismatch: client_id=07-tendermint-11"),
-			want: true,
+			want: false,
 		},
 		{
 			name: "other",
@@ -1765,8 +1763,9 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamCancelsBlockedSourceProducerO
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
-		cancelAndWaitForProducer,
 	)
+	cancelAndWaitForProducer()
+	drainExplicitStateSourceHeaderUnitStreamDiscard(unitStream)
 	if err == nil {
 		t.Fatal("expected speculative batch error")
 	}

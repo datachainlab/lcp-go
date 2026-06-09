@@ -70,25 +70,14 @@ func (s *speculativeBatchStreamSender) CloseAndRecv() (*ExecuteSpeculativeUpdate
 		err, _ = s.enrichSendError(err)
 		return nil, fmt.Errorf("failed to send speculative batch end: %w", err)
 	}
-	return s.recvCloseStatus()
-}
-
-func (s *speculativeBatchStreamSender) recvCloseStatus() (*ExecuteSpeculativeUpdateClientBatchResponse, error) {
-	if s == nil || s.stream == nil {
-		return nil, fmt.Errorf("speculative batch stream is not open")
-	}
-	resp, err := s.stream.CloseAndRecv()
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return s.stream.CloseAndRecv()
 }
 
 func (s *speculativeBatchStreamSender) enrichSendError(sendErr error) (error, bool) {
 	if !errors.Is(sendErr, io.EOF) {
 		return sendErr, false
 	}
-	_, closeErr := s.recvCloseStatus()
+	_, closeErr := s.stream.CloseAndRecv()
 	if closeErr == nil {
 		return sendErr, true
 	}
@@ -213,6 +202,6 @@ func cloneAny(any *codectypes.Any) *codectypes.Any {
 	return gogoproto.Clone(any).(*codectypes.Any)
 }
 
-func buildSpeculativeUnitID(i int) string {
-	return fmt.Sprintf("unit-%d", i)
+func buildSpeculativeUnitID(batchIndex, batchUnitIndex int) string {
+	return fmt.Sprintf("batch-%d/unit-%d", batchIndex, batchUnitIndex)
 }

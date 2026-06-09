@@ -27,7 +27,7 @@ const (
 	// MAX_SPECULATIVE_BATCH_UNITS and raise both sides together before allowing
 	// larger requests.
 	MaxSpeculativeBatchUnitsLimit   = 256
-	DefaultMaxSpeculativeBatchUnits = MaxSpeculativeBatchUnitsLimit
+	DefaultMaxSpeculativeBatchUnits = 64
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -131,7 +131,7 @@ func (pc ProverConfig) Validate() error {
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
 	}
-	if pc.MaxChunkSizeForUpdateClient > MaxSpeculativeBatchHeaderChunkSize {
+	if pc.EnableExplicitStateUpdateClient && pc.MaxChunkSizeForUpdateClient > MaxSpeculativeBatchHeaderChunkSize {
 		return fmt.Errorf("MaxChunkSizeForUpdateClient must be less than or equal to %d", MaxSpeculativeBatchHeaderChunkSize)
 	}
 	if pc.MaxSpeculativeBatchUnitsPerRequest > MaxSpeculativeBatchUnitsLimit {

@@ -58,7 +58,10 @@ type ExplicitStateChunkProvider interface {
 	// consumer instead of falling back to serial update-client. The caller passes
 	// the current LCP canonical base; implementations must build all
 	// headers/chunks from base.Height and must use base.ClientState and
-	// base.ConsensusState as the first unit's BaseState.
+	// base.ConsensusState as the first unit's BaseState. Implementations must
+	// close the returned channel after emitting all units, including when ctx is
+	// cancelled or after emitting a terminal ExplicitStateSourceHeaderUnitOrError
+	// with Error set.
 	SetupExplicitStateChunksForUpdate(context.Context, core.FinalityAwareChain, core.Header, *ExplicitStateBase) (<-chan *ExplicitStateSourceHeaderUnitOrError, error)
 }
 
@@ -295,49 +298,17 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	if pr.shouldUseExplicitStateUpdateClient() {
-		const maxExplicitStateAttempts = 2
-		for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
-			base, err := pr.queryLCPCanonicalExplicitStateBase(ctx, pr.config.ElcClientId)
-			if err != nil {
-				return nil, err
-			}
-			explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
-			sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
-			if err != nil {
-				cancelExplicitState()
-				return nil, err
-			}
-			if ok {
-				signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-				results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
-					ctx,
-					sourceHeaderUnitStream,
-					pr.config.ElcClientId,
-					false,
-					signer,
-					cancelExplicitState,
-				)
-				cancelExplicitState()
-				if err != nil {
-					if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
-						pr.getLogger().WarnContext(
-							ctx,
-							"explicit-state update client base state mismatch; retrying from LCP canonical state",
-							"client_id", pr.config.ElcClientId,
-							"attempt", attempt+1,
-							"max_attempts", maxExplicitStateAttempts,
-							"error", err,
-						)
-						continue
-					}
-					return nil, err
-				}
-				return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
-			}
-			cancelExplicitState()
-			break
-		}
+	if results, ok, err := pr.tryExplicitStateUpdateClient(
+		ctx,
+		dstChain,
+		latestFinalizedHeader,
+		pr.config.ElcClientId,
+		false,
+		pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+	); err != nil {
+		return nil, err
+	} else if ok {
+		return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 	}
 
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
@@ -422,7 +393,6 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	elcClientID string,
 	includeState bool,
 	signer []byte,
-	cancelSource context.CancelFunc,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	results, err := pr.executeExplicitStateSourceHeaderUnitStreamWithResolver(
 		ctx,
@@ -434,15 +404,65 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	if err == nil {
 		return results, nil
 	}
-	// The source stream may be backed by an unbuffered producer goroutine.
-	// Cancel its context and discard the remaining stream items so that a producer
-	// blocked in send can observe cancellation or complete its send and exit. This
-	// intentionally does not retain units or run serial update-client fallback.
-	if cancelSource != nil {
-		cancelSource()
-	}
-	drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
 	return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
+}
+
+func (pr *Prover) tryExplicitStateUpdateClient(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+) ([]*elcupdater_storage.UpdateClientResult, bool, error) {
+	if !pr.shouldUseExplicitStateUpdateClient() {
+		return nil, false, nil
+	}
+	const maxExplicitStateAttempts = 2
+	for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
+		base, err := pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+		if err != nil {
+			return nil, true, err
+		}
+		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
+		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
+		if err != nil {
+			cancelExplicitState()
+			return nil, true, err
+		}
+		if !ok {
+			cancelExplicitState()
+			return nil, false, nil
+		}
+		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+			ctx,
+			sourceHeaderUnitStream,
+			elcClientID,
+			includeState,
+			signer,
+		)
+		cancelExplicitState()
+		if err != nil {
+			drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
+			if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
+				pr.getLogger().WarnContext(
+					ctx,
+					"explicit-state update client base state mismatch; retrying from LCP canonical state",
+					"client_id", elcClientID,
+					"attempt", attempt+1,
+					"max_attempts", maxExplicitStateAttempts,
+					"error", err,
+				)
+				continue
+			}
+			return nil, true, err
+		}
+		return results, true, nil
+	}
+	// Unreachable while maxExplicitStateAttempts is positive: the final attempt
+	// returns the concrete execution error instead of retrying. Keep this guard so
+	// the function still fails closed if the attempt count is changed.
+	return nil, true, fmt.Errorf("explicit-state update client exhausted retries: client_id=%s", elcClientID)
 }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(

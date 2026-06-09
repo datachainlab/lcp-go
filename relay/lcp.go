@@ -396,55 +396,24 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	if pr.shouldUseExplicitStateUpdateClient() {
-		const maxExplicitStateAttempts = 2
-		for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
-			base, err := pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
-			if err != nil {
-				return nil, err
-			}
-			explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
-			sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, sourceChain, latestHeader, base)
-			if err != nil {
-				cancelExplicitState()
-				return nil, err
-			}
-			if ok {
-				results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
-					ctx,
-					sourceHeaderUnitStream,
-					elcClientID,
-					includeState,
-					signer,
-					cancelExplicitState,
-				)
-				cancelExplicitState()
-				if err != nil {
-					if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
-						pr.getLogger().WarnContext(
-							ctx,
-							"explicit-state update client base state mismatch; retrying from LCP canonical state",
-							"client_id", elcClientID,
-							"attempt", attempt+1,
-							"max_attempts", maxExplicitStateAttempts,
-							"error", err,
-						)
-						continue
-					}
-					return nil, err
-				}
-				responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
-				for _, result := range results {
-					responses = append(responses, &elc.MsgUpdateClientResponse{
-						Message:   result.Message,
-						Signature: result.Signature,
-					})
-				}
-				return responses, nil
-			}
-			cancelExplicitState()
-			break
+	if results, ok, err := pr.tryExplicitStateUpdateClient(
+		ctx,
+		sourceChain,
+		latestHeader,
+		elcClientID,
+		includeState,
+		signer,
+	); err != nil {
+		return nil, err
+	} else if ok {
+		responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
+		for _, result := range results {
+			responses = append(responses, &elc.MsgUpdateClientResponse{
+				Message:   result.Message,
+				Signature: result.Signature,
+			})
 		}
+		return responses, nil
 	}
 
 	// 2. query the header from the upstream chain.
