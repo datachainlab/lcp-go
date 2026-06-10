@@ -1958,7 +1958,7 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 		},
 	}
 
-	unitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
+	unitStream, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
 		context.Background(),
 		elcupdater.NewMockChain("counterparty", clienttypes.Height{RevisionHeight: 7}),
 		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 12}},
@@ -1966,9 +1966,6 @@ func TestCollectExplicitStateChunkSourceHeaderUnitStreamForUpdateUsesChunkProvid
 	)
 	if err != nil {
 		t.Fatalf("collectExplicitStateChunkSourceHeaderUnitStreamForUpdate() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("expected chunk provider to be used")
 	}
 	item, ok := <-unitStream
 	if !ok {

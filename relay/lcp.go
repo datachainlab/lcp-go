@@ -396,16 +396,18 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
-	if results, ok, err := pr.tryExplicitStateUpdateClient(
-		ctx,
-		sourceChain,
-		latestHeader,
-		elcClientID,
-		includeState,
-		signer,
-	); err != nil {
-		return nil, err
-	} else if ok {
+	if pr.shouldUseExplicitStateUpdateClient() {
+		results, err := pr.executeExplicitStateUpdateClient(
+			ctx,
+			sourceChain,
+			latestHeader,
+			elcClientID,
+			includeState,
+			signer,
+		)
+		if err != nil {
+			return nil, err
+		}
 		responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
 		for _, result := range results {
 			responses = append(responses, &elc.MsgUpdateClientResponse{

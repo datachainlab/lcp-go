@@ -298,16 +298,18 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // updateELCForUpdateClient performs the initial setup and updateClient calls
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
-	if results, ok, err := pr.tryExplicitStateUpdateClient(
-		ctx,
-		dstChain,
-		latestFinalizedHeader,
-		pr.config.ElcClientId,
-		false,
-		pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
-	); err != nil {
-		return nil, err
-	} else if ok {
+	if pr.shouldUseExplicitStateUpdateClient() {
+		results, err := pr.executeExplicitStateUpdateClient(
+			ctx,
+			dstChain,
+			latestFinalizedHeader,
+			pr.config.ElcClientId,
+			false,
+			pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
+		)
+		if err != nil {
+			return nil, err
+		}
 		return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 	}
 
@@ -409,32 +411,28 @@ func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 }
 
-func (pr *Prover) tryExplicitStateUpdateClient(
+// executeExplicitStateUpdateClient runs the explicit-state update client path.
+// Callers must gate it with shouldUseExplicitStateUpdateClient; once entered,
+// failures are returned as-is and never fall back to the serial path.
+func (pr *Prover) executeExplicitStateUpdateClient(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
-) ([]*elcupdater_storage.UpdateClientResult, bool, error) {
-	if !pr.shouldUseExplicitStateUpdateClient() {
-		return nil, false, nil
-	}
+) ([]*elcupdater_storage.UpdateClientResult, error) {
 	const maxExplicitStateAttempts = 2
 	for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
 		base, err := pr.queryExplicitStateBase(ctx, dstChain, elcClientID)
 		if err != nil {
-			return nil, true, err
+			return nil, err
 		}
 		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
-		sourceHeaderUnitStream, ok, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
+		sourceHeaderUnitStream, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
 		if err != nil {
 			cancelExplicitState()
-			return nil, true, err
-		}
-		if !ok {
-			cancelExplicitState()
-			return nil, false, nil
+			return nil, err
 		}
 		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 			ctx,
@@ -464,20 +462,20 @@ func (pr *Prover) tryExplicitStateUpdateClient(
 				// previous update was executed in LCP but never landed on-chain).
 				// The explicit-state path cannot anchor at a non-latest canonical
 				// state, so it cannot heal this divergence by itself.
-				return nil, true, fmt.Errorf(
+				return nil, fmt.Errorf(
 					"explicit-state base state mismatch persisted after %d attempts; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %w",
 					maxExplicitStateAttempts,
 					err,
 				)
 			}
-			return nil, true, err
+			return nil, err
 		}
-		return results, true, nil
+		return results, nil
 	}
 	// Unreachable while maxExplicitStateAttempts is positive: the final attempt
 	// returns the concrete execution error instead of retrying. Keep this guard so
 	// the function still fails closed if the attempt count is changed.
-	return nil, true, fmt.Errorf("explicit-state update client exhausted retries: client_id=%s", elcClientID)
+	return nil, fmt.Errorf("explicit-state update client exhausted retries: client_id=%s", elcClientID)
 }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
@@ -485,19 +483,20 @@ func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
 	base *ExplicitStateBase,
-) (<-chan *ExplicitStateSourceHeaderUnitOrError, bool, error) {
+) (<-chan *ExplicitStateSourceHeaderUnitOrError, error) {
 	originProver := unwrapExplicitStateOriginProver(pr.originProver)
-	if provider, ok := originProver.(ExplicitStateChunkProvider); ok {
-		unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader, base)
-		if err != nil {
-			return nil, true, err
-		}
-		if unitStream == nil {
-			return nil, true, fmt.Errorf("explicit-state chunk provider returned nil source header unit stream")
-		}
-		return unitStream, true, nil
+	provider, ok := originProver.(ExplicitStateChunkProvider)
+	if !ok {
+		return nil, fmt.Errorf("origin prover %T does not implement ExplicitStateChunkProvider", originProver)
 	}
-	return nil, false, nil
+	unitStream, err := provider.SetupExplicitStateChunksForUpdate(ctx, dstChain, latestFinalizedHeader, base)
+	if err != nil {
+		return nil, err
+	}
+	if unitStream == nil {
+		return nil, fmt.Errorf("explicit-state chunk provider returned nil source header unit stream")
+	}
+	return unitStream, nil
 }
 
 func unwrapExplicitStateOriginProver(prover core.Prover) core.Prover {
