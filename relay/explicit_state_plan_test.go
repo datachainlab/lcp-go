@@ -312,14 +312,17 @@ func mustMakeExplicitStateTestHeaderedUpdateStateMessage(postHeight uint64, stat
 }
 
 func (s explicitStateIntegrationTestServer) Client(_ context.Context, req *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	// The canonical base height must match the first source unit's
+	// prev_height (10) used by the integration fixtures; the relayer now
+	// rejects providers whose first unit does not anchor at the queried base.
 	clientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{
-		LatestHeight: clienttypes.Height{RevisionHeight: 7},
+		LatestHeight: clienttypes.Height{RevisionHeight: 10},
 	})
 	if err != nil {
 		return nil, err
 	}
 	consensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{
-		StateId: []byte("state-7"),
+		StateId: []byte("state-10"),
 	})
 	if err != nil {
 		return nil, err
@@ -847,6 +850,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 			context.Background(),
 			unitStream,
+			nil,
 			"07-tendermint-11",
 			false,
 			[]byte("signer"),
@@ -954,6 +958,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamRejectsNilAndIncompleteBaseSt
 	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 		context.Background(),
 		unitStream,
+		nil,
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),
@@ -1841,6 +1846,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamCancelsBlockedSourceProducerO
 	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 		context.Background(),
 		unitStream,
+		nil,
 		"07-tendermint-11",
 		false,
 		[]byte("signer"),

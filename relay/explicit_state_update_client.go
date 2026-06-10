@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -197,6 +198,7 @@ func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, ds
 		Height:         baseHeight,
 		ClientState:    cloneExplicitStateAny(baseClientStateAny),
 		ConsensusState: cloneExplicitStateAny(baseConsensusStateAny),
+		StateId:        append([]byte(nil), lcpConsensusState.StateId...),
 	}, true, nil
 }
 
@@ -217,9 +219,47 @@ func hasCanonicalExplicitStatePayload(baseState *ExplicitStateRef) bool {
 		baseState.ConsensusState != nil
 }
 
-func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
+// bindFirstUnitToExplicitStateBase pins the first source unit to the queried
+// explicit-state base so a provider/base divergence fails fast in the relayer
+// with a precise error instead of a generic LCP-side BaseStateMismatch. When
+// the base carries a committed state ID, it is threaded into the unit's
+// prev_state_id so LCP additionally verifies that the enclave-observed
+// transition anchors at exactly that state.
+func bindFirstUnitToExplicitStateBase(unit *ExplicitStateSourceHeaderUnit, base *ExplicitStateBase) error {
+	if base == nil {
+		return nil
+	}
+	prevHeight := unit.BaseState.PrevHeight
+	if prevHeight == nil || *prevHeight != base.Height {
+		return fmt.Errorf(
+			"first explicit-state unit base height mismatch: unit_prev_height=%v base_height=%v",
+			prevHeight,
+			base.Height,
+		)
+	}
+	if len(base.StateId) == 0 {
+		return nil
+	}
+	if len(unit.BaseState.PrevStateId) == 0 {
+		boundBaseState := cloneExplicitStateRef(unit.BaseState)
+		boundBaseState.PrevStateId = append([]byte(nil), base.StateId...)
+		unit.BaseState = boundBaseState
+		return nil
+	}
+	if !bytes.Equal(unit.BaseState.PrevStateId, base.StateId) {
+		return fmt.Errorf(
+			"first explicit-state unit prev_state_id mismatch: unit_prev_state_id=0x%x base_state_id=0x%x",
+			unit.BaseState.PrevStateId,
+			base.StateId,
+		)
+	}
+	return nil
+}
+
+func (pr *Prover) executeExplicitStateSourceHeaderUnitStream(
 	ctx context.Context,
 	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+	base *ExplicitStateBase,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
@@ -303,6 +343,11 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 				buildSpeculativeUnitID(batchIndex, batchUnitCount),
 			)
 		}
+		if unitIndex == 0 {
+			if err := bindFirstUnitToExplicitStateBase(sourceUnit, base); err != nil {
+				return nil, err
+			}
+		}
 		unitID := buildSpeculativeUnitID(batchIndex, batchUnitCount)
 		update := &elc.MsgUpdateClient{
 			ClientId:     elcClientID,
@@ -319,7 +364,11 @@ func (pr *Prover) executeExplicitStateSourceHeaderUnitStreamWithResolver(
 			Update:    update,
 			BaseState: sourceUnit.BaseState,
 		}); err != nil {
-			err, _ = sender.enrichSendError(err)
+			var streamClosed bool
+			err, streamClosed = sender.enrichSendError(err)
+			if streamClosed {
+				closed = true
+			}
 			return nil, fmt.Errorf("failed to send speculative batch unit: index=%d unit_id=%q, %w", batchUnitCount, unitID, err)
 		}
 		// The gRPC layer has already marshalled and queued the header bytes, so

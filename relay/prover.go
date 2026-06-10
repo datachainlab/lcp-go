@@ -390,13 +390,15 @@ func (pr *Prover) executeELCUpdateHeaderStream(
 func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
 	ctx context.Context,
 	sourceHeaderUnitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
+	base *ExplicitStateBase,
 	elcClientID string,
 	includeState bool,
 	signer []byte,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
-	results, err := pr.executeExplicitStateSourceHeaderUnitStreamWithResolver(
+	results, err := pr.executeExplicitStateSourceHeaderUnitStream(
 		ctx,
 		sourceHeaderUnitStream,
+		base,
 		elcClientID,
 		includeState,
 		signer,
@@ -437,6 +439,7 @@ func (pr *Prover) tryExplicitStateUpdateClient(
 		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
 			ctx,
 			sourceHeaderUnitStream,
+			base,
 			elcClientID,
 			includeState,
 			signer,
@@ -444,16 +447,28 @@ func (pr *Prover) tryExplicitStateUpdateClient(
 		cancelExplicitState()
 		if err != nil {
 			drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
-			if isExplicitStateBaseStateMismatchError(err) && attempt+1 < maxExplicitStateAttempts {
-				pr.getLogger().WarnContext(
-					ctx,
-					"explicit-state update client base state mismatch; retrying from committed explicit-state base",
-					"client_id", elcClientID,
-					"attempt", attempt+1,
-					"max_attempts", maxExplicitStateAttempts,
-					"error", err,
+			if isExplicitStateBaseStateMismatchError(err) {
+				if attempt+1 < maxExplicitStateAttempts {
+					pr.getLogger().WarnContext(
+						ctx,
+						"explicit-state update client base state mismatch; retrying from committed explicit-state base",
+						"client_id", elcClientID,
+						"attempt", attempt+1,
+						"max_attempts", maxExplicitStateAttempts,
+						"error", err,
+					)
+					continue
+				}
+				// A mismatch that survives a fresh base query usually means the LCP
+				// canonical state is ahead of the on-chain committed state (e.g. a
+				// previous update was executed in LCP but never landed on-chain).
+				// The explicit-state path cannot anchor at a non-latest canonical
+				// state, so it cannot heal this divergence by itself.
+				return nil, true, fmt.Errorf(
+					"explicit-state base state mismatch persisted after %d attempts; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %w",
+					maxExplicitStateAttempts,
+					err,
 				)
-				continue
 			}
 			return nil, true, err
 		}

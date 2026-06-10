@@ -12,6 +12,12 @@ type ExplicitStateBase struct {
 	Height         clienttypes.Height
 	ClientState    *codectypes.Any
 	ConsensusState *codectypes.Any
+	// StateId is the state ID committed for this base when known (e.g. taken
+	// from the on-chain LCP consensus state). Empty when only the LCP canonical
+	// base is available. When set, the relayer threads it into the first unit's
+	// prev_state_id so LCP verifies the speculative chain anchors at exactly
+	// this state.
+	StateId []byte
 }
 
 type ExplicitStateSourceHeaderUnit struct {
