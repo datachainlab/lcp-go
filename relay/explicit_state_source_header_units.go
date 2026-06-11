@@ -31,17 +31,6 @@ type ExplicitStateSourceHeaderUnitOrError struct {
 	Error error
 }
 
-func makeExplicitStateSourceHeaderUnitStream(
-	units []*ExplicitStateSourceHeaderUnit,
-) <-chan *ExplicitStateSourceHeaderUnitOrError {
-	ch := make(chan *ExplicitStateSourceHeaderUnitOrError, len(units))
-	for _, unit := range units {
-		ch <- &ExplicitStateSourceHeaderUnitOrError{Unit: unit}
-	}
-	close(ch)
-	return ch
-}
-
 func drainExplicitStateSourceHeaderUnitStreamDiscard(
 	unitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
 ) {

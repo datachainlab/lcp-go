@@ -25,6 +25,7 @@ import (
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
@@ -408,14 +409,7 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 		if err != nil {
 			return nil, err
 		}
-		responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
-		for _, result := range results {
-			responses = append(responses, &elc.MsgUpdateClientResponse{
-				Message:   result.Message,
-				Signature: result.Signature,
-			})
-		}
-		return responses, nil
+		return toMsgUpdateClientResponses(results), nil
 	}
 
 	// 2. query the header from the upstream chain.
@@ -434,6 +428,10 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	if err != nil {
 		return nil, err
 	}
+	return toMsgUpdateClientResponses(results), nil
+}
+
+func toMsgUpdateClientResponses(results []*elcupdater_storage.UpdateClientResult) []*elc.MsgUpdateClientResponse {
 	responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
 	for _, result := range results {
 		responses = append(responses, &elc.MsgUpdateClientResponse{
@@ -441,8 +439,7 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 			Signature: result.Signature,
 		})
 	}
-
-	return responses, nil
+	return responses
 }
 
 func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.FinalityAwareChain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {

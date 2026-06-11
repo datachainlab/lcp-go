@@ -451,7 +451,7 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 	queryBase func(context.Context) (*ExplicitStateBase, error),
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	const maxExplicitStateAttempts = 2
-	for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
+	for attempt := 1; ; attempt++ {
 		base, err := queryBase(ctx)
 		if err != nil {
 			return nil, err
@@ -475,12 +475,12 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 			err = fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 			drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
 			if isExplicitStateBaseStateMismatchError(err) {
-				if attempt+1 < maxExplicitStateAttempts {
+				if attempt < maxExplicitStateAttempts {
 					pr.getLogger().WarnContext(
 						ctx,
 						"explicit-state update client base state mismatch; retrying from committed explicit-state base",
 						"client_id", elcClientID,
-						"attempt", attempt+1,
+						"attempt", attempt,
 						"max_attempts", maxExplicitStateAttempts,
 						"error", err,
 					)
@@ -501,10 +501,6 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 		}
 		return results, nil
 	}
-	// Unreachable while maxExplicitStateAttempts is positive: the final attempt
-	// returns the concrete execution error instead of retrying. Keep this guard so
-	// the function still fails closed if the attempt count is changed.
-	return nil, fmt.Errorf("explicit-state update client exhausted retries: client_id=%s", elcClientID)
 }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(

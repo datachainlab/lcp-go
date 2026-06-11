@@ -34,10 +34,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-type explicitStateBatchTestService interface {
-	SpeculativeUpdateClientBatchStream(elc.Msg_SpeculativeUpdateClientBatchStreamServer) error
-}
-
 type unsupportedSpeculativeBatchServer struct {
 	elc.UnimplementedQueryServer
 	elc.UnimplementedMsgServer
@@ -531,6 +527,17 @@ func (p *fakeOriginProverWithBase) SetupExplicitStateChunksForUpdate(
 	}), nil
 }
 
+func makeExplicitStateSourceHeaderUnitStream(
+	units []*ExplicitStateSourceHeaderUnit,
+) <-chan *ExplicitStateSourceHeaderUnitOrError {
+	ch := make(chan *ExplicitStateSourceHeaderUnitOrError, len(units))
+	for _, unit := range units {
+		ch <- &ExplicitStateSourceHeaderUnitOrError{Unit: unit}
+	}
+	close(ch)
+	return ch
+}
+
 type fakeOriginProverWithInitialState struct {
 	fakeOriginProver
 	requestedHeights []ibcexported.Height
@@ -766,20 +773,6 @@ func mustPackTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) *c
 		t.Fatalf("failed to pack tendermint header: %v", err)
 	}
 	return anyHeader
-}
-
-// mustBuildTMHeaderForExplicitStateTest returns both the typed header and its
-// packed Any form. Use it for tests that need both representations.
-func mustBuildTMHeaderForExplicitStateTest(t *testing.T, trustedHeight uint64) (*tmclienttypes.Header, *codectypes.Any) {
-	t.Helper()
-	header := &tmclienttypes.Header{
-		TrustedHeight: clienttypes.Height{RevisionHeight: trustedHeight},
-	}
-	anyHeader, err := codectypes.NewAnyWithValue(header)
-	if err != nil {
-		t.Fatalf("failed to pack tendermint header: %v", err)
-	}
-	return header, anyHeader
 }
 
 func (p fakeOriginProver) CheckRefreshRequired(context.Context, core.ChainInfoICS02Querier) (bool, error) {
