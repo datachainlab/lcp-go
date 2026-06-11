@@ -299,7 +299,7 @@ func (pr *Prover) SetupHeadersForUpdate(ctx context.Context, dstChain core.Final
 // Returns the processed updateClient results for aggregation
 func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.FinalityAwareChain, latestFinalizedHeader core.Header) ([]*elcupdater_storage.UpdateClientResult, error) {
 	if pr.shouldUseExplicitStateUpdateClient() {
-		results, err := pr.executeExplicitStateUpdateClient(
+		results, err := pr.executeOnChainBaseExplicitStateUpdateClient(
 			ctx,
 			dstChain,
 			latestFinalizedHeader,
@@ -389,10 +389,10 @@ func (pr *Prover) executeELCUpdateHeaderStream(
 	return results, nil
 }
 
-// executeExplicitStateUpdateClient runs the explicit-state update client path.
-// Callers must gate it with shouldUseExplicitStateUpdateClient; once entered,
-// failures are returned as-is and never fall back to the serial path.
-func (pr *Prover) executeExplicitStateUpdateClient(
+// executeOnChainBaseExplicitStateUpdateClient runs the explicit-state update
+// client path anchored at the on-chain committed base. Used by the relayer
+// path where the resulting messages must connect to the on-chain state.
+func (pr *Prover) executeOnChainBaseExplicitStateUpdateClient(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
@@ -400,9 +400,59 @@ func (pr *Prover) executeExplicitStateUpdateClient(
 	includeState bool,
 	signer []byte,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
+	return pr.executeExplicitStateUpdateClientWithBase(
+		ctx,
+		dstChain,
+		latestFinalizedHeader,
+		elcClientID,
+		includeState,
+		signer,
+		func(ctx context.Context) (*ExplicitStateBase, error) {
+			return pr.queryOnChainExplicitStateBaseWithFallback(ctx, dstChain, elcClientID)
+		},
+	)
+}
+
+// executeCanonicalBaseExplicitStateUpdateClient runs the explicit-state update
+// client path anchored at the LCP canonical base. Used by local LCP update
+// flows (updateELC) where no on-chain committed base exists.
+func (pr *Prover) executeCanonicalBaseExplicitStateUpdateClient(
+	ctx context.Context,
+	sourceChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+) ([]*elcupdater_storage.UpdateClientResult, error) {
+	return pr.executeExplicitStateUpdateClientWithBase(
+		ctx,
+		sourceChain,
+		latestFinalizedHeader,
+		elcClientID,
+		includeState,
+		signer,
+		func(ctx context.Context) (*ExplicitStateBase, error) {
+			return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
+		},
+	)
+}
+
+// executeExplicitStateUpdateClientWithBase runs the explicit-state update
+// client path with the injected base query. Callers must gate it with
+// shouldUseExplicitStateUpdateClient; once entered, failures are returned
+// as-is and never fall back to the serial path.
+func (pr *Prover) executeExplicitStateUpdateClientWithBase(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	latestFinalizedHeader core.Header,
+	elcClientID string,
+	includeState bool,
+	signer []byte,
+	queryBase func(context.Context) (*ExplicitStateBase, error),
+) ([]*elcupdater_storage.UpdateClientResult, error) {
 	const maxExplicitStateAttempts = 2
 	for attempt := 0; attempt < maxExplicitStateAttempts; attempt++ {
-		base, err := pr.queryExplicitStateBase(ctx, dstChain, elcClientID)
+		base, err := queryBase(ctx)
 		if err != nil {
 			return nil, err
 		}

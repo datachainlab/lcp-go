@@ -93,16 +93,11 @@ func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcCli
 	}, nil
 }
 
-func (pr *Prover) queryExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain, elcClientID string) (*ExplicitStateBase, error) {
-	switch dstChain.(type) {
-	case LCPQuerier, *LCPQuerier:
-		pr.getLogger().InfoContext(
-			ctx,
-			"using LCP canonical explicit-state base for local LCP update",
-			"elc_client_id", elcClientID,
-		)
-		return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
-	}
+// queryOnChainExplicitStateBaseWithFallback prefers the on-chain committed
+// base. It falls back to the LCP canonical base only when the destination
+// does not host an LCP client (e.g. test/mock configurations); query
+// failures are returned as errors instead of silently weakening the base.
+func (pr *Prover) queryOnChainExplicitStateBaseWithFallback(ctx context.Context, dstChain core.FinalityAwareChain, elcClientID string) (*ExplicitStateBase, error) {
 	base, ok, err := pr.queryOnChainCommittedExplicitStateBase(ctx, dstChain)
 	if err != nil {
 		return nil, err

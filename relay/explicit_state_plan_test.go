@@ -1163,7 +1163,7 @@ func TestQueryLCPCanonicalExplicitStateBase(t *testing.T) {
 	}
 }
 
-func TestQueryExplicitStateBaseUsesOnChainCommittedHeight(t *testing.T) {
+func TestQueryOnChainExplicitStateBaseWithFallbackUsesOnChainCommittedHeight(t *testing.T) {
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
 	std.RegisterInterfaces(interfaceRegistry)
 	lcptypes.RegisterInterfaces(interfaceRegistry)
@@ -1179,9 +1179,9 @@ func TestQueryExplicitStateBaseUsesOnChainCommittedHeight(t *testing.T) {
 	base, err := (&Prover{
 		codec:        coreCodec,
 		originProver: originProver,
-	}).queryExplicitStateBase(context.Background(), chain, "07-tendermint-11")
+	}).queryOnChainExplicitStateBaseWithFallback(context.Background(), chain, "07-tendermint-11")
 	if err != nil {
-		t.Fatalf("queryExplicitStateBase() error = %v", err)
+		t.Fatalf("queryOnChainExplicitStateBaseWithFallback() error = %v", err)
 	}
 	if base == nil || base.Height.RevisionHeight != onChainHeight.RevisionHeight {
 		t.Fatalf("unexpected base height: %#v", base)

@@ -397,7 +397,7 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
 	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
 	if pr.shouldUseExplicitStateUpdateClient() {
-		results, err := pr.executeExplicitStateUpdateClient(
+		results, err := pr.executeCanonicalBaseExplicitStateUpdateClient(
 			ctx,
 			sourceChain,
 			latestHeader,
