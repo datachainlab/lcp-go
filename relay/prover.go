@@ -304,7 +304,6 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 			dstChain,
 			latestFinalizedHeader,
 			pr.config.ElcClientId,
-			false,
 			pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
 		)
 		if err != nil {
@@ -392,12 +391,13 @@ func (pr *Prover) executeELCUpdateHeaderStream(
 // executeOnChainBaseExplicitStateUpdateClient runs the explicit-state update
 // client path anchored at the on-chain committed base. Used by the relayer
 // path where the resulting messages must connect to the on-chain state.
+// include_state is always false here: this path only runs against an
+// already-activated on-chain client, which never needs emitted states.
 func (pr *Prover) executeOnChainBaseExplicitStateUpdateClient(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
 	latestFinalizedHeader core.Header,
 	elcClientID string,
-	includeState bool,
 	signer []byte,
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	return pr.executeExplicitStateUpdateClientWithBase(
@@ -405,7 +405,7 @@ func (pr *Prover) executeOnChainBaseExplicitStateUpdateClient(
 		dstChain,
 		latestFinalizedHeader,
 		elcClientID,
-		includeState,
+		false,
 		signer,
 		func(ctx context.Context) (*ExplicitStateBase, error) {
 			return pr.queryOnChainExplicitStateBaseWithFallback(ctx, dstChain, elcClientID)
