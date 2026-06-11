@@ -847,7 +847,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 		lcpServiceClient: NewLCPServiceClient(conn),
 	}
 	go func() {
-		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+		results, err := pr.executeExplicitStateSourceHeaderUnitStream(
 			context.Background(),
 			unitStream,
 			nil,
@@ -890,7 +890,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamSendsUnitBeforeReceivingAllUn
 	close(unitStream)
 
 	if err := <-done; err != nil {
-		t.Fatalf("executeExplicitStateELCUpdateSourceHeaderUnitStream() error = %v", err)
+		t.Fatalf("executeExplicitStateSourceHeaderUnitStream() error = %v", err)
 	}
 }
 
@@ -955,7 +955,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamRejectsNilAndIncompleteBaseSt
 		config:           ProverConfig{ElcClientId: "07-tendermint-11"},
 		lcpServiceClient: NewLCPServiceClient(conn),
 	}
-	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+	results, err := pr.executeExplicitStateSourceHeaderUnitStream(
 		context.Background(),
 		unitStream,
 		nil,
@@ -1843,7 +1843,7 @@ func TestExecuteExplicitStateSourceHeaderUnitStreamCancelsBlockedSourceProducerO
 		},
 		lcpServiceClient: NewLCPServiceClient(conn),
 	}
-	results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+	results, err := pr.executeExplicitStateSourceHeaderUnitStream(
 		context.Background(),
 		unitStream,
 		nil,

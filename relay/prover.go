@@ -389,28 +389,6 @@ func (pr *Prover) executeELCUpdateHeaderStream(
 	return results, nil
 }
 
-func (pr *Prover) executeExplicitStateELCUpdateSourceHeaderUnitStream(
-	ctx context.Context,
-	sourceHeaderUnitStream <-chan *ExplicitStateSourceHeaderUnitOrError,
-	base *ExplicitStateBase,
-	elcClientID string,
-	includeState bool,
-	signer []byte,
-) ([]*elcupdater_storage.UpdateClientResult, error) {
-	results, err := pr.executeExplicitStateSourceHeaderUnitStream(
-		ctx,
-		sourceHeaderUnitStream,
-		base,
-		elcClientID,
-		includeState,
-		signer,
-	)
-	if err == nil {
-		return results, nil
-	}
-	return nil, fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
-}
-
 // executeExplicitStateUpdateClient runs the explicit-state update client path.
 // Callers must gate it with shouldUseExplicitStateUpdateClient; once entered,
 // failures are returned as-is and never fall back to the serial path.
@@ -434,7 +412,7 @@ func (pr *Prover) executeExplicitStateUpdateClient(
 			cancelExplicitState()
 			return nil, err
 		}
-		results, err := pr.executeExplicitStateELCUpdateSourceHeaderUnitStream(
+		results, err := pr.executeExplicitStateSourceHeaderUnitStream(
 			ctx,
 			sourceHeaderUnitStream,
 			base,
@@ -444,6 +422,7 @@ func (pr *Prover) executeExplicitStateUpdateClient(
 		)
 		cancelExplicitState()
 		if err != nil {
+			err = fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 			drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
 			if isExplicitStateBaseStateMismatchError(err) {
 				if attempt+1 < maxExplicitStateAttempts {
