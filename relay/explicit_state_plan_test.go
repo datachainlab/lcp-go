@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -536,20 +537,6 @@ func makeExplicitStateSourceHeaderUnitStream(
 	}
 	close(ch)
 	return ch
-}
-
-type fakeOriginProverWithInitialState struct {
-	fakeOriginProver
-	requestedHeights []ibcexported.Height
-}
-
-func (p *fakeOriginProverWithInitialState) CreateInitialLightClientState(_ context.Context, height ibcexported.Height) (ibcexported.ClientState, ibcexported.ConsensusState, error) {
-	p.requestedHeights = append(p.requestedHeights, height)
-	h, ok := height.(clienttypes.Height)
-	if !ok {
-		return nil, nil, fmt.Errorf("unexpected height type: %T", height)
-	}
-	return &lcptypes.ClientState{LatestHeight: h}, &lcptypes.ConsensusState{StateId: []byte(fmt.Sprintf("elc-state-%d", h.RevisionHeight))}, nil
 }
 
 type fakeOnChainLCPChain struct {
@@ -1156,22 +1143,82 @@ func TestQueryLCPCanonicalExplicitStateBase(t *testing.T) {
 	}
 }
 
-func TestQueryOnChainExplicitStateBaseWithFallbackUsesOnChainCommittedHeight(t *testing.T) {
+func newCanonicalQueryConn(t *testing.T, svc elc.QueryServer) *grpc.ClientConn {
+	t.Helper()
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	elc.RegisterQueryServer(server, svc)
+	t.Cleanup(server.Stop)
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
+}
+
+// explicitStateFixedCanonicalServer serves a canonical state pinned at a fixed
+// height, with payload bytes that are distinguishable from anything the
+// relayer could rebuild locally.
+type explicitStateFixedCanonicalServer struct {
+	elc.UnimplementedQueryServer
+	clientID       string
+	clientState    *codectypes.Any
+	consensusState *codectypes.Any
+}
+
+func (s *explicitStateFixedCanonicalServer) Client(_ context.Context, req *elc.QueryClientRequest) (*elc.QueryClientResponse, error) {
+	if req.ClientId != s.clientID {
+		return &elc.QueryClientResponse{Found: false}, nil
+	}
+	return &elc.QueryClientResponse{
+		Found:          true,
+		ClientState:    s.clientState,
+		ConsensusState: s.consensusState,
+	}, nil
+}
+
+func TestQueryOnChainExplicitStateBaseWithFallbackUsesCanonicalPayloadAtOnChainHeight(t *testing.T) {
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
 	std.RegisterInterfaces(interfaceRegistry)
 	lcptypes.RegisterInterfaces(interfaceRegistry)
 	coreCodec := codec.NewProtoCodec(interfaceRegistry)
 
 	onChainHeight := clienttypes.Height{RevisionHeight: 9}
-	originProver := &fakeOriginProverWithInitialState{}
+	canonicalClientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{LatestHeight: onChainHeight})
+	if err != nil {
+		t.Fatalf("PackClientState() error = %v", err)
+	}
+	canonicalConsensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{StateId: []byte("canonical-state-9")})
+	if err != nil {
+		t.Fatalf("PackConsensusState() error = %v", err)
+	}
+	conn := newCanonicalQueryConn(t, &explicitStateFixedCanonicalServer{
+		clientID:       "07-tendermint-11",
+		clientState:    canonicalClientStateAny,
+		consensusState: canonicalConsensusStateAny,
+	})
+
 	chain := &fakeOnChainLCPChain{
 		queryHeight:       clienttypes.Height{RevisionHeight: 100},
 		clientStateHeight: onChainHeight,
 		stateID:           []byte("on-chain-state-9"),
 	}
 	base, err := (&Prover{
-		codec:        coreCodec,
-		originProver: originProver,
+		codec:            coreCodec,
+		lcpServiceClient: NewLCPServiceClient(conn),
 	}).queryOnChainExplicitStateBaseWithFallback(context.Background(), chain, "07-tendermint-11")
 	if err != nil {
 		t.Fatalf("queryOnChainExplicitStateBaseWithFallback() error = %v", err)
@@ -1179,18 +1226,57 @@ func TestQueryOnChainExplicitStateBaseWithFallbackUsesOnChainCommittedHeight(t *
 	if base == nil || base.Height.RevisionHeight != onChainHeight.RevisionHeight {
 		t.Fatalf("unexpected base height: %#v", base)
 	}
-	if len(originProver.requestedHeights) != 1 || originProver.requestedHeights[0].GetRevisionHeight() != onChainHeight.RevisionHeight {
-		t.Fatalf("expected origin prover to build base at on-chain height, got %#v", originProver.requestedHeights)
-	}
 	if len(chain.consensusQueries) != 1 || chain.consensusQueries[0].GetRevisionHeight() != onChainHeight.RevisionHeight {
 		t.Fatalf("expected consensus query at on-chain height, got %#v", chain.consensusQueries)
 	}
-	var clientState ibcexported.ClientState
-	if err := coreCodec.UnpackAny(base.ClientState, &clientState); err != nil {
-		t.Fatalf("failed to unpack base client_state: %v", err)
+	if base.ClientState.TypeUrl != canonicalClientStateAny.TypeUrl ||
+		!bytes.Equal(base.ClientState.Value, canonicalClientStateAny.Value) {
+		t.Fatalf("base client_state must be the canonical payload verbatim: %#v", base.ClientState)
 	}
-	if got := clientState.GetLatestHeight(); got.GetRevisionHeight() != onChainHeight.RevisionHeight {
-		t.Fatalf("unexpected packed base client_state height: %v", got)
+	if base.ConsensusState.TypeUrl != canonicalConsensusStateAny.TypeUrl ||
+		!bytes.Equal(base.ConsensusState.Value, canonicalConsensusStateAny.Value) {
+		t.Fatalf("base consensus_state must be the canonical payload verbatim: %#v", base.ConsensusState)
+	}
+	if !bytes.Equal(base.StateId, []byte("on-chain-state-9")) {
+		t.Fatalf("base state_id must come from the on-chain commitment: %#v", base.StateId)
+	}
+}
+
+func TestQueryOnChainExplicitStateBaseWithFallbackRejectsCanonicalHeightDrift(t *testing.T) {
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	canonicalHeight := clienttypes.Height{RevisionHeight: 12}
+	canonicalClientStateAny, err := clienttypes.PackClientState(&lcptypes.ClientState{LatestHeight: canonicalHeight})
+	if err != nil {
+		t.Fatalf("PackClientState() error = %v", err)
+	}
+	canonicalConsensusStateAny, err := clienttypes.PackConsensusState(&lcptypes.ConsensusState{StateId: []byte("canonical-state-12")})
+	if err != nil {
+		t.Fatalf("PackConsensusState() error = %v", err)
+	}
+	conn := newCanonicalQueryConn(t, &explicitStateFixedCanonicalServer{
+		clientID:       "07-tendermint-11",
+		clientState:    canonicalClientStateAny,
+		consensusState: canonicalConsensusStateAny,
+	})
+
+	chain := &fakeOnChainLCPChain{
+		queryHeight:       clienttypes.Height{RevisionHeight: 100},
+		clientStateHeight: clienttypes.Height{RevisionHeight: 9},
+		stateID:           []byte("on-chain-state-9"),
+	}
+	_, err = (&Prover{
+		codec:            coreCodec,
+		lcpServiceClient: NewLCPServiceClient(conn),
+	}).queryOnChainExplicitStateBaseWithFallback(context.Background(), chain, "07-tendermint-11")
+	if err == nil {
+		t.Fatalf("expected drift between on-chain and canonical heights to be rejected")
+	}
+	if !strings.Contains(err.Error(), "on_chain_height=0-9") || !strings.Contains(err.Error(), "lcp_canonical_height=0-12") {
+		t.Fatalf("expected error to carry both heights, got: %v", err)
 	}
 }
 

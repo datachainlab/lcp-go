@@ -98,7 +98,7 @@ func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcCli
 // does not host an LCP client (e.g. test/mock configurations); query
 // failures are returned as errors instead of silently weakening the base.
 func (pr *Prover) queryOnChainExplicitStateBaseWithFallback(ctx context.Context, dstChain core.FinalityAwareChain, elcClientID string) (*ExplicitStateBase, error) {
-	base, ok, err := pr.queryOnChainCommittedExplicitStateBase(ctx, dstChain)
+	base, ok, err := pr.queryOnChainCommittedExplicitStateBase(ctx, dstChain, elcClientID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,15 @@ func (pr *Prover) queryOnChainExplicitStateBaseWithFallback(ctx context.Context,
 	return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
 }
 
-func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain) (*ExplicitStateBase, bool, error) {
+// queryOnChainCommittedExplicitStateBase anchors the explicit-state base at
+// the on-chain committed (height, state_id) and sources the base payload
+// bytes from the LCP canonical store. The payload must be the canonical
+// bytes verbatim: LCP's stitch-phase verification compares the supplied
+// base against the stored canonical state byte-for-byte, and any payload
+// re-encoded outside the enclave (e.g. rebuilt from chain queries) diverges
+// from the enclave round-trip encoding. The on-chain state_id is kept as
+// the witness binding the canonical payload to the committed state.
+func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain, elcClientID string) (*ExplicitStateBase, bool, error) {
 	if dstChain == nil {
 		return nil, false, nil
 	}
@@ -158,27 +166,21 @@ func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, ds
 	if len(lcpConsensusState.StateId) == 0 {
 		return nil, true, fmt.Errorf("on-chain LCP consensus_state state_id is empty for explicit-state base: query_height=%v base_height=%v", queryHeight, baseHeight)
 	}
-	baseClientState, baseConsensusState, err := pr.originProver.CreateInitialLightClientState(ctx, baseHeight)
+	canonicalBase, err := pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
 	if err != nil {
-		return nil, true, fmt.Errorf("failed to build ELC explicit-state base from on-chain committed height: base_height=%v %w", baseHeight, err)
+		return nil, true, fmt.Errorf("failed to query LCP canonical payload for on-chain committed explicit-state base: base_height=%v %w", baseHeight, err)
 	}
-	if baseClientState == nil {
-		return nil, true, fmt.Errorf("built ELC explicit-state base client_state is nil: base_height=%v", baseHeight)
-	}
-	if baseConsensusState == nil {
-		return nil, true, fmt.Errorf("built ELC explicit-state base consensus_state is nil: base_height=%v", baseHeight)
-	}
-	if latest := baseClientState.GetLatestHeight(); latest.GetRevisionNumber() != baseHeight.GetRevisionNumber() ||
-		latest.GetRevisionHeight() != baseHeight.GetRevisionHeight() {
-		return nil, true, fmt.Errorf("built ELC explicit-state base height mismatch: base_height=%v client_state_latest_height=%v", baseHeight, latest)
-	}
-	baseClientStateAny, err := clienttypes.PackClientState(baseClientState)
-	if err != nil {
-		return nil, true, fmt.Errorf("failed to pack ELC explicit-state base client_state: base_height=%v %w", baseHeight, err)
-	}
-	baseConsensusStateAny, err := clienttypes.PackConsensusState(baseConsensusState)
-	if err != nil {
-		return nil, true, fmt.Errorf("failed to pack ELC explicit-state base consensus_state: base_height=%v %w", baseHeight, err)
+	if canonicalBase.Height.GetRevisionNumber() != baseHeight.GetRevisionNumber() ||
+		canonicalBase.Height.GetRevisionHeight() != baseHeight.GetRevisionHeight() {
+		// The canonical store only serves the latest payload, so a base at an
+		// earlier committed height (canonical drifted ahead of the on-chain
+		// commitment) cannot be materialized yet. Fail fast with the height
+		// pair instead of letting LCP reject the batch with a byte-level
+		// BaseStateMismatch.
+		return nil, true, fmt.Errorf(
+			"explicit-state rebase from an earlier on-chain committed height is not supported: on_chain_height=%v lcp_canonical_height=%v",
+			baseHeight, canonicalBase.Height,
+		)
 	}
 	pr.getLogger().InfoContext(
 		ctx,
@@ -186,13 +188,13 @@ func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, ds
 		"query_height", queryHeight.String(),
 		"base_height", baseHeight.String(),
 		"on_chain_state_id", fmt.Sprintf("0x%x", lcpConsensusState.StateId),
-		"client_state_type", baseClientStateAny.TypeUrl,
-		"consensus_state_type", baseConsensusStateAny.TypeUrl,
+		"client_state_type", canonicalBase.ClientState.TypeUrl,
+		"consensus_state_type", canonicalBase.ConsensusState.TypeUrl,
 	)
 	return &ExplicitStateBase{
 		Height:         baseHeight,
-		ClientState:    cloneExplicitStateAny(baseClientStateAny),
-		ConsensusState: cloneExplicitStateAny(baseConsensusStateAny),
+		ClientState:    canonicalBase.ClientState,
+		ConsensusState: canonicalBase.ConsensusState,
 		StateId:        append([]byte(nil), lcpConsensusState.StateId...),
 	}, true, nil
 }
