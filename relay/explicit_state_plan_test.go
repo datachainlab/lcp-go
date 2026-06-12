@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -1191,6 +1192,9 @@ func (s *explicitStateFixedCanonicalServer) Client(_ context.Context, req *elc.Q
 }
 
 func TestQueryOnChainExplicitStateBaseWithFallbackUsesCanonicalPayloadAtOnChainHeight(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
 	std.RegisterInterfaces(interfaceRegistry)
 	lcptypes.RegisterInterfaces(interfaceRegistry)
@@ -1243,6 +1247,9 @@ func TestQueryOnChainExplicitStateBaseWithFallbackUsesCanonicalPayloadAtOnChainH
 }
 
 func TestQueryOnChainExplicitStateBaseWithFallbackRejectsCanonicalHeightDrift(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
 	std.RegisterInterfaces(interfaceRegistry)
 	lcptypes.RegisterInterfaces(interfaceRegistry)
@@ -1275,8 +1282,100 @@ func TestQueryOnChainExplicitStateBaseWithFallbackRejectsCanonicalHeightDrift(t 
 	if err == nil {
 		t.Fatalf("expected drift between on-chain and canonical heights to be rejected")
 	}
+	var driftErr *ExplicitStateBaseDriftError
+	if !errors.As(err, &driftErr) {
+		t.Fatalf("expected ExplicitStateBaseDriftError, got: %v", err)
+	}
+	if driftErr.OnChainHeight.RevisionHeight != 9 || driftErr.CanonicalHeight.RevisionHeight != 12 {
+		t.Fatalf("unexpected drift heights: %#v", driftErr)
+	}
 	if !strings.Contains(err.Error(), "on_chain_height=0-9") || !strings.Contains(err.Error(), "lcp_canonical_height=0-12") {
 		t.Fatalf("expected error to carry both heights, got: %v", err)
+	}
+}
+
+func TestUpdateELCForUpdateClientFallsBackToSerialOnExplicitStateBaseDrift(t *testing.T) {
+	if err := ylog.InitLogger("error", "text", "null", false); err != nil {
+		t.Fatalf("InitLogger() error = %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	server := grpc.NewServer()
+	svc := &explicitStateParityTestServer{}
+	elc.RegisterQueryServer(server, svc)
+	elc.RegisterMsgServer(server, svc)
+	defer server.Stop()
+	go func() {
+		if err := server.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+
+	conn, err := grpc.DialContext(
+		context.Background(),
+		"bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.DialContext() error = %v", err)
+	}
+	defer conn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	lcptypes.RegisterInterfaces(interfaceRegistry)
+	coreCodec := codec.NewProtoCodec(interfaceRegistry)
+
+	headers := []core.Header{
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 10}},
+		&tmclienttypes.Header{TrustedHeight: clienttypes.Height{RevisionHeight: 11}},
+	}
+	// On-chain LCP client at 9 while the canonical query (parity server)
+	// reports 10 — a canonical-ahead drift the speculative path cannot
+	// anchor at.
+	driftChain := &fakeOnChainLCPChain{
+		queryHeight:       clienttypes.Height{RevisionHeight: 100},
+		clientStateHeight: clienttypes.Height{RevisionHeight: 9},
+		stateID:           []byte("on-chain-state-9"),
+	}
+
+	results, err := (&Prover{
+		config: ProverConfig{
+			ElcClientId:                     "07-tendermint-11",
+			EnableExplicitStateUpdateClient: true,
+		},
+		codec: coreCodec,
+		originProver: fakeOriginProver{
+			headers:             headers,
+			explicitStateChunks: mustExplicitStateSourceUnitsWithBaseStatesFromHeaders(t, headers...),
+		},
+		lcpServiceClient: NewLCPServiceClient(conn),
+		activeEnclaveKey: &enclave.EnclaveKeyInfo{
+			KeyInfo: &enclave.EnclaveKeyInfo_Ias{
+				Ias: &enclave.IASEnclaveKeyInfo{
+					EnclaveKeyAddress: common.HexToAddress("0x1111111111111111111111111111111111111111").Bytes(),
+				},
+			},
+		},
+	}).updateELCForUpdateClient(
+		context.Background(),
+		driftChain,
+		headers[len(headers)-1],
+	)
+	if err != nil {
+		t.Fatalf("updateELCForUpdateClient() error = %v", err)
+	}
+	if svc.batchCalls != 0 {
+		t.Fatalf("expected no speculative batch on drift, got %d", svc.batchCalls)
+	}
+	if svc.updateCalls != len(headers) {
+		t.Fatalf("expected serial fallback to update per header, got %d calls", svc.updateCalls)
+	}
+	if len(results) != len(headers) {
+		t.Fatalf("unexpected result count: %d", len(results))
 	}
 }
 

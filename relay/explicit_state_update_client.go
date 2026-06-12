@@ -51,6 +51,21 @@ func isExplicitStateBaseStateMismatchError(err error) bool {
 		strings.Contains(msg, "stored speculative base")
 }
 
+// ExplicitStateBaseDriftError indicates that the LCP canonical state has
+// advanced past the on-chain committed state, so the explicit-state path
+// cannot anchor a speculative batch at the on-chain base.
+type ExplicitStateBaseDriftError struct {
+	OnChainHeight   clienttypes.Height
+	CanonicalHeight clienttypes.Height
+}
+
+func (e *ExplicitStateBaseDriftError) Error() string {
+	return fmt.Sprintf(
+		"LCP canonical state is ahead of the on-chain committed state: on_chain_height=%v lcp_canonical_height=%v",
+		e.OnChainHeight, e.CanonicalHeight,
+	)
+}
+
 func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcClientID string) (*ExplicitStateBase, error) {
 	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
 		ClientId: elcClientID,
@@ -172,15 +187,17 @@ func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, ds
 	}
 	if canonicalBase.Height.GetRevisionNumber() != baseHeight.GetRevisionNumber() ||
 		canonicalBase.Height.GetRevisionHeight() != baseHeight.GetRevisionHeight() {
-		// The canonical store only serves the latest payload, so a base at an
-		// earlier committed height (canonical drifted ahead of the on-chain
-		// commitment) cannot be materialized yet. Fail fast with the height
-		// pair instead of letting LCP reject the batch with a byte-level
-		// BaseStateMismatch.
-		return nil, true, fmt.Errorf(
-			"explicit-state rebase from an earlier on-chain committed height is not supported: on_chain_height=%v lcp_canonical_height=%v",
-			baseHeight, canonicalBase.Height,
-		)
+		// The canonical store only serves the latest payload, so a speculative
+		// batch cannot be anchored at an earlier committed height (canonical
+		// drifted ahead of the on-chain commitment, e.g. a prior updateELC
+		// committed at the stitch but its UpdateClient message was never
+		// submitted). Return a typed error so the caller can recover via the
+		// serial path, which the enclave anchors at its stored consensus for
+		// the on-chain height.
+		return nil, true, &ExplicitStateBaseDriftError{
+			OnChainHeight:   baseHeight,
+			CanonicalHeight: canonicalBase.Height,
+		}
 	}
 	pr.getLogger().InfoContext(
 		ctx,

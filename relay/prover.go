@@ -3,6 +3,7 @@ package relay
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -306,10 +307,28 @@ func (pr *Prover) updateELCForUpdateClient(ctx context.Context, dstChain core.Fi
 			pr.config.ElcClientId,
 			pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes(),
 		)
-		if err != nil {
+		var driftErr *ExplicitStateBaseDriftError
+		switch {
+		case errors.As(err, &driftErr):
+			// The canonical store has advanced past the on-chain commitment
+			// (e.g. a prior updateELC committed at the stitch but its message
+			// was never submitted), so the speculative path cannot anchor at
+			// the on-chain base. Recover via the serial path below: the origin
+			// prover builds headers trusted at the on-chain client state, and
+			// the enclave anchors each serial update at its stored consensus
+			// for that height, producing messages that reconnect the on-chain
+			// client regardless of how far the canonical state has advanced.
+			pr.getLogger().WarnContext(
+				ctx,
+				"explicit-state base drifted; falling back to serial ELC update anchored at the on-chain committed state",
+				"on_chain_height", driftErr.OnChainHeight.String(),
+				"lcp_canonical_height", driftErr.CanonicalHeight.String(),
+			)
+		case err != nil:
 			return nil, err
+		default:
+			return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 		}
-		return pr.validateUpdateELCResults(ctx, latestFinalizedHeader, results)
 	}
 
 	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, dstChain, latestFinalizedHeader)
