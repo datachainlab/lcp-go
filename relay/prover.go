@@ -410,6 +410,18 @@ func (pr *Prover) executeOnChainBaseExplicitStateUpdateClient(
 		func(ctx context.Context) (*ExplicitStateBase, error) {
 			return pr.queryOnChainExplicitStateBaseWithFallback(ctx, dstChain, elcClientID)
 		},
+		// Drift recovery (per-height client_state design): when the standard
+		// on-chain base query keeps producing a base that does not
+		// byte-match LCP's stored canonical at the on-chain height,
+		// re-anchor at the same height using LCP's per-height
+		// canonical payload. The on-chain submission constraint
+		// (constraint 2 of the §Base strategy matrix) still holds
+		// — the state_id witness comes from the on-chain commitment
+		// — but the payload bytes now come from a source that is
+		// byte-faithful to LCP's stitch-phase view.
+		func(ctx context.Context) (*ExplicitStateBase, bool, error) {
+			return pr.queryOnChainAnchoredPerHeightBase(ctx, dstChain, elcClientID)
+		},
 	)
 }
 
@@ -434,6 +446,10 @@ func (pr *Prover) executeCanonicalBaseExplicitStateUpdateClient(
 		func(ctx context.Context) (*ExplicitStateBase, error) {
 			return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
 		},
+		// Canonical-base flow has no on-chain witness to anchor recovery
+		// against (the resulting proof is not destined for on-chain
+		// submission), so drift recovery is not meaningful here.
+		nil,
 	)
 }
 
@@ -441,6 +457,14 @@ func (pr *Prover) executeCanonicalBaseExplicitStateUpdateClient(
 // client path with the injected base query. Callers must gate it with
 // shouldUseExplicitStateUpdateClient; once entered, failures are returned
 // as-is and never fall back to the serial path.
+//
+// `recoverBase` is optional drift recovery (per-height client_state design). When
+// set and the standard base query produces a persistent BaseStateMismatch
+// across `maxExplicitStateAttempts`, the loop invokes `recoverBase` to
+// obtain a base sourced from LCP's per-height canonical store and retries
+// once more. When `ok=false` from `recoverBase`, recovery is not available
+// (pre-D LCP image, height predates per-height schema, or no destination
+// chain) and the loop falls through to the operator hint as before.
 func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 	ctx context.Context,
 	dstChain core.FinalityAwareChain,
@@ -449,12 +473,42 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 	includeState bool,
 	signer []byte,
 	queryBase func(context.Context) (*ExplicitStateBase, error),
+	recoverBase func(context.Context) (*ExplicitStateBase, bool, error),
 ) ([]*elcupdater_storage.UpdateClientResult, error) {
 	const maxExplicitStateAttempts = 2
+	driftRecoveryAttempted := false
 	for attempt := 1; ; attempt++ {
-		base, err := queryBase(ctx)
-		if err != nil {
-			return nil, err
+		var (
+			base *ExplicitStateBase
+			err  error
+		)
+		// Once the standard retry budget is exhausted, switch the base
+		// source to drift recovery for one additional attempt (if
+		// available). The recovered base anchors at the same on-chain
+		// committed height but pulls payload bytes from LCP's per-height
+		// canonical store rather than rebuilding them locally.
+		if attempt > maxExplicitStateAttempts && recoverBase != nil && !driftRecoveryAttempted {
+			recovered, ok, recErr := recoverBase(ctx)
+			if recErr != nil {
+				return nil, recErr
+			}
+			if !ok {
+				return nil, errExplicitStateBaseDriftUnrecoverable(elcClientID, maxExplicitStateAttempts)
+			}
+			driftRecoveryAttempted = true
+			base = recovered
+			pr.getLogger().WarnContext(
+				ctx,
+				"explicit-state update client base state mismatch persisted; attempting drift recovery via LCP per-height payload",
+				"client_id", elcClientID,
+				"base_height", base.Height.String(),
+				"resolved_state_id", fmt.Sprintf("0x%x", base.StateId),
+			)
+		} else {
+			base, err = queryBase(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 		explicitStateCtx, cancelExplicitState := context.WithCancel(ctx)
 		sourceHeaderUnitStream, err := pr.collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(explicitStateCtx, dstChain, latestFinalizedHeader, base)
@@ -486,22 +540,56 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 					)
 					continue
 				}
-				// A mismatch that survives a fresh base query usually means the LCP
-				// canonical state is ahead of the on-chain committed state (e.g. a
-				// previous update was executed in LCP but never landed on-chain).
-				// The explicit-state path cannot anchor at a non-latest canonical
-				// state, so it cannot heal this divergence by itself.
-				return nil, fmt.Errorf(
-					"explicit-state base state mismatch persisted after %d attempts; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %w",
-					maxExplicitStateAttempts,
-					err,
-				)
+				if recoverBase != nil && !driftRecoveryAttempted {
+					// The next iteration switches to the recovery
+					// path; continue.
+					continue
+				}
+				// Recovery either was not configured or also failed.
+				return nil, errExplicitStateBaseDriftUnrecoverable(elcClientID, maxExplicitStateAttempts).withCause(err)
 			}
 			return nil, err
+		}
+		if driftRecoveryAttempted {
+			pr.getLogger().InfoContext(
+				ctx,
+				"explicit-state update client recovered via LCP per-height payload",
+				"client_id", elcClientID,
+			)
 		}
 		return results, nil
 	}
 }
+
+type explicitStateBaseDriftUnrecoverableError struct {
+	clientID string
+	attempts int
+	cause    error
+}
+
+func errExplicitStateBaseDriftUnrecoverable(clientID string, attempts int) *explicitStateBaseDriftUnrecoverableError {
+	return &explicitStateBaseDriftUnrecoverableError{clientID: clientID, attempts: attempts}
+}
+
+func (e *explicitStateBaseDriftUnrecoverableError) withCause(cause error) *explicitStateBaseDriftUnrecoverableError {
+	e.cause = cause
+	return e
+}
+
+func (e *explicitStateBaseDriftUnrecoverableError) Error() string {
+	if e.cause == nil {
+		return fmt.Sprintf(
+			"explicit-state base state mismatch persisted after %d attempts and drift recovery via LCP per-height payload was not available: client_id=%s; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap",
+			e.attempts, e.clientID,
+		)
+	}
+	return fmt.Sprintf(
+		"explicit-state base state mismatch persisted after %d attempts and drift recovery via LCP per-height payload was not available: client_id=%s; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %v",
+		e.attempts, e.clientID, e.cause,
+	)
+}
+
+func (e *explicitStateBaseDriftUnrecoverableError) Unwrap() error { return e.cause }
 
 func (pr *Prover) collectExplicitStateChunkSourceHeaderUnitStreamForUpdate(
 	ctx context.Context,

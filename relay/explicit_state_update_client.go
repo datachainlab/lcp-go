@@ -113,6 +113,172 @@ func (pr *Prover) queryOnChainExplicitStateBaseWithFallback(ctx context.Context,
 	return pr.queryLCPCanonicalExplicitStateBase(ctx, elcClientID)
 }
 
+// queryLCPClientStateAtHeight resolves the canonical (client_state,
+// consensus_state, state_id) tuple stored inside LCP at the supplied height
+// via the per-height Client RPC contract added in per-height client_state design
+// phase 2. Unlike [queryLCPCanonicalExplicitStateBase], the result is
+// byte-faithful to *that height's* committed canonical entry rather than to
+// the current latest tip, which is what lets drift recovery re-anchor a
+// fresh explicit-state stream at a past committed height (typically the
+// on-chain committed height when the LCP canonical tip has drifted ahead).
+//
+// Returns `ok=false` when the LCP service did not surface a per-height
+// entry — e.g. running against a pre-D LCP image or against a client whose
+// canonical history at this height was never recorded under the per-height
+// layout. Callers MUST treat that as "no recovery payload available" rather
+// than silently degrade to the singleton.
+func (pr *Prover) queryLCPClientStateAtHeight(
+	ctx context.Context,
+	elcClientID string,
+	height clienttypes.Height,
+) (*ExplicitStateBase, bool, error) {
+	res, err := pr.lcpServiceClient.Client(ctx, &elc.QueryClientRequest{
+		ClientId: elcClientID,
+		Height:   &height,
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf(
+			"failed to query LCP ELC client_state at height: client_id=%s height=%v %w",
+			elcClientID, height, err,
+		)
+	}
+	if res == nil || !res.Found {
+		return nil, false, nil
+	}
+	if res.ClientState == nil || res.ConsensusState == nil {
+		return nil, false, fmt.Errorf(
+			"LCP query_client_at_height returned partial response: client_id=%s height=%v",
+			elcClientID, height,
+		)
+	}
+	// Defence in depth: a pre-D server happily echoes the singleton entry
+	// regardless of the request height (it ignores the new field). In that
+	// case the response carries no resolved height or the resolved height
+	// differs from what we asked for; treat as "no per-height entry" so
+	// drift recovery does not anchor at the wrong bytes.
+	if res.Height == nil ||
+		res.Height.RevisionNumber != height.RevisionNumber ||
+		res.Height.RevisionHeight != height.RevisionHeight {
+		return nil, false, nil
+	}
+	base := &ExplicitStateBase{
+		Height:         height,
+		ClientState:    cloneExplicitStateAny(res.ClientState),
+		ConsensusState: cloneExplicitStateAny(res.ConsensusState),
+	}
+	if len(res.StateId) > 0 {
+		base.StateId = append([]byte(nil), res.StateId...)
+	}
+	pr.getLogger().InfoContext(
+		ctx,
+		"queried LCP per-height explicit-state base",
+		"elc_client_id", elcClientID,
+		"base_height", height.String(),
+		"client_state_type", res.ClientState.TypeUrl,
+		"consensus_state_type", res.ConsensusState.TypeUrl,
+		"state_id_len", len(res.StateId),
+	)
+	return base, true, nil
+}
+
+// queryOnChainAnchoredPerHeightBase resolves an explicit-state base anchored
+// at the on-chain committed (height, state_id) while sourcing the
+// client_state / consensus_state bytes from LCP's per-height canonical
+// store (per-height client_state design). This is the drift-recovery counterpart
+// of [queryOnChainCommittedExplicitStateBase]: instead of rebuilding the
+// payload via [originProver.CreateInitialLightClientState] (which is the
+// source of the encoding drift this issue tracks), it pulls the bytes that
+// LCP itself signed at that committed height, so the commit-time CAS in
+// LCP's stitch phase passes byte-for-byte by construction.
+//
+// Returns `ok=false` when the destination chain has no LCP client (test /
+// mock configurations) or when LCP cannot serve a per-height entry for the
+// on-chain committed height (pre-D LCP image, or a height that predates
+// the per-height schema rollout). In either case the caller should fall
+// through to the existing remediation surface — there is no recovery
+// payload that can heal the divergence locally.
+func (pr *Prover) queryOnChainAnchoredPerHeightBase(
+	ctx context.Context,
+	dstChain core.FinalityAwareChain,
+	elcClientID string,
+) (*ExplicitStateBase, bool, error) {
+	if dstChain == nil {
+		return nil, false, nil
+	}
+	queryHeight, err := dstChain.LatestHeight(ctx)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query destination latest height for explicit-state base: %w", err)
+	}
+	clientRes, err := dstChain.QueryClientState(core.NewQueryContext(ctx, queryHeight))
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query on-chain LCP client_state for explicit-state base: query_height=%v %w", queryHeight, err)
+	}
+	if clientRes == nil || clientRes.ClientState == nil {
+		return nil, true, fmt.Errorf("on-chain LCP client_state is nil for explicit-state base: query_height=%v", queryHeight)
+	}
+	var clientState exported.ClientState
+	if err := pr.codec.UnpackAny(clientRes.ClientState, &clientState); err != nil {
+		return nil, true, fmt.Errorf("failed to unpack on-chain client_state for explicit-state base: query_height=%v %w", queryHeight, err)
+	}
+	lcpClientState, ok := clientState.(*lcptypes.ClientState)
+	if !ok {
+		return nil, false, nil
+	}
+	baseHeight := lcpClientState.LatestHeight
+	if baseHeight.IsZero() {
+		return nil, true, fmt.Errorf("on-chain LCP latest height is zero for explicit-state base: query_height=%v", queryHeight)
+	}
+	consensusRes, err := dstChain.QueryClientConsensusState(core.NewQueryContext(ctx, queryHeight), baseHeight)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query on-chain LCP consensus_state for explicit-state base: query_height=%v base_height=%v %w", queryHeight, baseHeight, err)
+	}
+	if consensusRes == nil || consensusRes.ConsensusState == nil {
+		return nil, true, fmt.Errorf("on-chain LCP consensus_state is nil for explicit-state base: query_height=%v base_height=%v", queryHeight, baseHeight)
+	}
+	var consensusState exported.ConsensusState
+	if err := pr.codec.UnpackAny(consensusRes.ConsensusState, &consensusState); err != nil {
+		return nil, true, fmt.Errorf("failed to unpack on-chain LCP consensus_state for explicit-state base: query_height=%v base_height=%v %w", queryHeight, baseHeight, err)
+	}
+	lcpConsensusState, ok := consensusState.(*lcptypes.ConsensusState)
+	if !ok {
+		return nil, true, fmt.Errorf("unexpected on-chain consensus_state type for explicit-state base: query_height=%v base_height=%v consensus_state_type=%T", queryHeight, baseHeight, consensusState)
+	}
+	if len(lcpConsensusState.StateId) == 0 {
+		return nil, true, fmt.Errorf("on-chain LCP consensus_state state_id is empty for explicit-state base: query_height=%v base_height=%v", queryHeight, baseHeight)
+	}
+	perHeightBase, ok, err := pr.queryLCPClientStateAtHeight(ctx, elcClientID, baseHeight)
+	if err != nil {
+		return nil, true, fmt.Errorf("failed to query LCP per-height payload for on-chain anchor: base_height=%v %w", baseHeight, err)
+	}
+	if !ok {
+		pr.getLogger().InfoContext(
+			ctx,
+			"LCP per-height entry not available for on-chain anchor; drift recovery skipped",
+			"elc_client_id", elcClientID,
+			"base_height", baseHeight.String(),
+		)
+		return nil, true, nil
+	}
+	// Thread the on-chain state_id through perHeightBase: the at-height
+	// response may carry the LCP-computed state_id (preferred), or be empty
+	// for legacy entries — in the empty case fall back to the on-chain
+	// state_id witness so [bindFirstUnitToExplicitStateBase] still has a
+	// value to pin the first unit's prev_state_id against.
+	if len(perHeightBase.StateId) == 0 {
+		perHeightBase.StateId = append([]byte(nil), lcpConsensusState.StateId...)
+	}
+	pr.getLogger().InfoContext(
+		ctx,
+		"resolved on-chain anchored explicit-state base via LCP per-height payload",
+		"elc_client_id", elcClientID,
+		"query_height", queryHeight.String(),
+		"base_height", baseHeight.String(),
+		"on_chain_state_id", fmt.Sprintf("0x%x", lcpConsensusState.StateId),
+		"resolved_state_id", fmt.Sprintf("0x%x", perHeightBase.StateId),
+	)
+	return perHeightBase, true, nil
+}
+
 func (pr *Prover) queryOnChainCommittedExplicitStateBase(ctx context.Context, dstChain core.FinalityAwareChain) (*ExplicitStateBase, bool, error) {
 	if dstChain == nil {
 		return nil, false, nil
