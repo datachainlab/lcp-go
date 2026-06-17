@@ -20,7 +20,14 @@ const (
 	DefaultDialTimeout                 = 20 // seconds
 	DefaultMessageAggregationBatchSize = 8
 	// It is necessary to subtract from 4 MB to account for metadata size.
-	DefaultMaxChunkSize = 4*1024*1024 - 1024
+	DefaultMaxChunkSize                = 4*1024*1024 - 1024
+	MaxSpeculativeBatchHeaderChunkSize = DefaultMaxChunkSize
+	// MaxSpeculativeBatchUnitsLimit is the peer LCP service protocol limit, not
+	// just a relayer default. Keep it in sync with LCP's
+	// MAX_SPECULATIVE_BATCH_UNITS and raise both sides together before allowing
+	// larger requests.
+	MaxSpeculativeBatchUnitsLimit   = 256
+	DefaultMaxSpeculativeBatchUnits = 64
 )
 
 var _ core.ProverConfig = (*ProverConfig)(nil)
@@ -100,6 +107,13 @@ func (pc ProverConfig) GetMaxChunkSizeForUpdateClient() uint32 {
 	}
 }
 
+func (pc ProverConfig) GetMaxSpeculativeBatchUnitsPerRequest() int {
+	if pc.MaxSpeculativeBatchUnitsPerRequest == 0 {
+		return DefaultMaxSpeculativeBatchUnits
+	}
+	return int(pc.MaxSpeculativeBatchUnitsPerRequest)
+}
+
 func (pc ProverConfig) Validate() error {
 	// origin prover config validation
 	if err := pc.OriginProver.GetCachedValue().(core.ProverConfig).Validate(); err != nil {
@@ -116,6 +130,12 @@ func (pc ProverConfig) Validate() error {
 	}
 	if pc.MessageAggregation && pc.MessageAggregationBatchSize == 1 {
 		return fmt.Errorf("MessageAggregationBatchSize must be greater than 1 if MessageAggregation is true and MessageAggregationBatchSize is set")
+	}
+	if pc.EnableExplicitStateUpdateClient && pc.MaxChunkSizeForUpdateClient > MaxSpeculativeBatchHeaderChunkSize {
+		return fmt.Errorf("MaxChunkSizeForUpdateClient must be less than or equal to %d", MaxSpeculativeBatchHeaderChunkSize)
+	}
+	if pc.MaxSpeculativeBatchUnitsPerRequest > MaxSpeculativeBatchUnitsLimit {
+		return fmt.Errorf("MaxSpeculativeBatchUnitsPerRequest must be less than or equal to %d", MaxSpeculativeBatchUnitsLimit)
 	}
 	if pc.KeyUpdateBufferTime == 0 {
 		return fmt.Errorf("KeyUpdateBufferTime must be greater than 0")

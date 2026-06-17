@@ -25,6 +25,7 @@ import (
 
 	lcptypes "github.com/datachainlab/lcp-go/light-clients/lcp/types"
 	"github.com/datachainlab/lcp-go/relay/elc"
+	elcupdater_storage "github.com/datachainlab/lcp-go/relay/elcupdater/storage"
 	"github.com/datachainlab/lcp-go/relay/enclave"
 	"github.com/datachainlab/lcp-go/sgx"
 	"github.com/datachainlab/lcp-go/sgx/dcap"
@@ -394,33 +395,51 @@ func (pr *Prover) updateELC(ctx context.Context, elcClientID string, includeStat
 
 	pr.getLogger().InfoContext(ctx, "try to setup headers", "elc_client_id", elcClientID, "client_state.latest_height", clientState.GetLatestHeight(), "latest", latestHeader.GetHeight())
 
-	// 2. query the header from the upstream chain
+	sourceChain := NewLCPQuerier(pr.lcpServiceClient, elcClientID)
+	signer := pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes()
+	if pr.shouldUseExplicitStateUpdateClient() {
+		results, err := pr.executeCanonicalBaseExplicitStateUpdateClient(
+			ctx,
+			sourceChain,
+			latestHeader,
+			elcClientID,
+			includeState,
+			signer,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return toMsgUpdateClientResponses(results), nil
+	}
 
-	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, NewLCPQuerier(pr.lcpServiceClient, elcClientID), latestHeader)
+	// 2. query the header from the upstream chain.
+	headerStream, err := pr.originProver.SetupHeadersForUpdate(ctx, sourceChain, latestHeader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to setup headers for update: header=%v %w", latestHeader, err)
+	}
+
+	results, err := pr.executeELCUpdateHeaderStream(
+		ctx,
+		headerStream,
+		elcClientID,
+		includeState,
+		signer,
+	)
 	if err != nil {
 		return nil, err
 	}
+	return toMsgUpdateClientResponses(results), nil
+}
 
-	// 3. send a request that contains a header from 2 to update the client in ELC
-	var responses []*elc.MsgUpdateClientResponse
-	i := 0
-	for h := range headerStream {
-		if h.Error != nil {
-			return nil, fmt.Errorf("failed to setup a header for update: i=%v %w", i, h.Error)
-		}
-		anyHeader, err := clienttypes.PackClientMessage(h.Header)
-		if err != nil {
-			return nil, fmt.Errorf("failed to pack header: i=%v header=%v %w", i, h.Header, err)
-		}
-		res, err := updateClient(ctx, pr.config.GetMaxChunkSizeForUpdateClient(), pr.lcpServiceClient, anyHeader, elcClientID, includeState, pr.activeEnclaveKey.GetEnclaveKeyAddress().Bytes())
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ELC: i=%v elc_client_id=%v %w", i, pr.config.ElcClientId, err)
-		}
-		responses = append(responses, res)
-		i += 1
+func toMsgUpdateClientResponses(results []*elcupdater_storage.UpdateClientResult) []*elc.MsgUpdateClientResponse {
+	responses := make([]*elc.MsgUpdateClientResponse, 0, len(results))
+	for _, result := range results {
+		responses = append(responses, &elc.MsgUpdateClientResponse{
+			Message:   result.Message,
+			Signature: result.Signature,
+		})
 	}
-
-	return responses, nil
+	return responses
 }
 
 func (pr *Prover) registerEnclaveKey(ctx context.Context, counterparty core.FinalityAwareChain, eki *enclave.EnclaveKeyInfo) (core.MsgID, error) {
