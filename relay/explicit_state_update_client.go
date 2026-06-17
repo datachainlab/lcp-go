@@ -3,7 +3,9 @@ package relay
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -49,6 +51,27 @@ func isExplicitStateBaseStateMismatchError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "BaseStateMismatch") ||
 		strings.Contains(msg, "stored speculative base")
+}
+
+// isStreamTransientError reports whether a speculative batch stream error
+// looks like a transient transport / upstream-pacing failure that can be
+// recovered by re-sending the batch on a new stream.
+func isStreamTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if s, ok := status.FromError(err); ok {
+		switch s.Code() {
+		case codes.DeadlineExceeded, codes.Unavailable:
+			return true
+		}
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "stream idle timeout") ||
+		strings.Contains(msg, "speculative header memory budget")
 }
 
 func (pr *Prover) queryLCPCanonicalExplicitStateBase(ctx context.Context, elcClientID string) (*ExplicitStateBase, error) {

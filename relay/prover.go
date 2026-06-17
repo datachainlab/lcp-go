@@ -474,25 +474,34 @@ func (pr *Prover) executeExplicitStateUpdateClientWithBase(
 		if err != nil {
 			err = fmt.Errorf("failed to update ELC: elc_client_id=%v %w", elcClientID, err)
 			drainExplicitStateSourceHeaderUnitStreamDiscard(sourceHeaderUnitStream)
-			if isExplicitStateBaseStateMismatchError(err) {
+			isBSM := isExplicitStateBaseStateMismatchError(err)
+			isTransient := !isBSM && isStreamTransientError(err)
+			if isBSM || isTransient {
 				if attempt < maxExplicitStateAttempts {
+					kind := "stream_transient"
+					if isBSM {
+						kind = "base_state_mismatch"
+					}
 					pr.getLogger().WarnContext(
 						ctx,
-						"explicit-state update client base state mismatch; retrying from committed explicit-state base",
+						"explicit-state update client batch failed transiently; retrying",
 						"client_id", elcClientID,
 						"attempt", attempt,
 						"max_attempts", maxExplicitStateAttempts,
+						"kind", kind,
 						"error", err,
 					)
 					continue
 				}
-				// A mismatch that survives a fresh base query usually means the LCP
-				// canonical state is ahead of the on-chain committed state (e.g. a
-				// previous update was executed in LCP but never landed on-chain).
-				// The explicit-state path cannot anchor at a non-latest canonical
-				// state, so it cannot heal this divergence by itself.
+				if isBSM {
+					return nil, fmt.Errorf(
+						"explicit-state base state mismatch persisted after %d attempts; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %w",
+						maxExplicitStateAttempts,
+						err,
+					)
+				}
 				return nil, fmt.Errorf(
-					"explicit-state base state mismatch persisted after %d attempts; if the LCP canonical state is ahead of the on-chain committed state, disable enable_explicit_state_update_client for one update cycle so the serial path can heal the gap: %w",
+					"explicit-state batch failed after %d attempts due to transient stream errors: %w",
 					maxExplicitStateAttempts,
 					err,
 				)
